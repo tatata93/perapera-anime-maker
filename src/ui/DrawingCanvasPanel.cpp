@@ -255,98 +255,110 @@ namespace perapera
     }
 
     void DrawingCanvasPanel::drawLayerPanel()
+{
+    ImGui::Begin("レイヤー");
+
+    ImGui::Text("描き込み先レイヤーを選びます。");
+    ImGui::Text("上のレイヤーほど手前に表示されます。");
+
+    ImGui::Separator();
+
+    if (ImGui::Button("レイヤー追加"))
     {
-        ImGui::Begin("レイヤー");
-
-        ImGui::Text("描き込み先レイヤーを選びます。");
-        ImGui::Text("上のレイヤーほど手前に表示されます。");
-
-        ImGui::Separator();
-
-        if (ImGui::Button("レイヤー追加"))
-        {
-            addLayer();
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("削除"))
-        {
-            deleteActiveLayer();
-        }
-
-        if (ImGui::Button("上へ"))
-        {
-            moveActiveLayerUp();
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("下へ"))
-        {
-            moveActiveLayerDown();
-        }
-
-        ImGui::Separator();
-
-        // UI上では手前のレイヤーを上に表示したいので、
-        // 配列の後ろから順に表示する。
-        for (int index = static_cast<int>(layers_.size()) - 1; index >= 0; --index)
-        {
-            DrawingLayer& layer = layers_[static_cast<std::size_t>(index)];
-
-            ImGui::PushID(index);
-
-            const bool isActive = (index == activeLayerIndex_);
-
-            if (ImGui::Selectable(layer.name.c_str(), isActive))
-            {
-                activeLayerIndex_ = index;
-            }
-
-            ImGui::SameLine();
-
-            ImGui::Checkbox("表示", &layer.visible);
-
-            ImGui::SameLine();
-
-            ImGui::SetNextItemWidth(100.0f);
-            ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f);
-
-            ImGui::Text("ストローク数: %d", static_cast<int>(layer.strokes.size()));
-
-            ImGui::PopID();
-        }
-
-        ImGui::Separator();
-
-        DrawingLayer* layer = activeLayer();
-
-        if (layer != nullptr)
-        {
-            ImGui::Text("現在の描き込み先: %s", layer->name.c_str());
-
-            if (!layer->visible)
-            {
-                ImGui::TextColored(
-                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-                    "注意: このレイヤーは非表示なので描き込みできません。"
-                );
-            }
-
-            if (ImGui::Button("アクティブレイヤーを消去"))
-            {
-                layer->clear();
-            }
-        }
-
-        if (ImGui::Button("全レイヤー消去"))
-        {
-            clearAllLayers();
-        }
-
-        ImGui::End();
+        addLayer();
     }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("削除"))
+    {
+        deleteActiveLayer();
+    }
+
+    if (ImGui::Button("上へ"))
+    {
+        moveActiveLayerUp();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("下へ"))
+    {
+        moveActiveLayerDown();
+    }
+
+    ImGui::Separator();
+
+    // UI上では手前のレイヤーを上に表示したいので、
+    // 配列の後ろから順に表示する。
+    //
+    // 以前は Selectable / Checkbox / SliderFloat を横並びにしていた。
+    // しかし Selectable のクリック範囲が広くなり、表示切替や不透明度操作とぶつかることがあった。
+    // そのため、Phase 3B修正版では、各操作を縦に分けて確実に押せるようにする。
+    for (int index = static_cast<int>(layers_.size()) - 1; index >= 0; --index)
+    {
+        DrawingLayer& layer = layers_[static_cast<std::size_t>(index)];
+
+        ImGui::PushID(index);
+
+        const bool isActive = (index == activeLayerIndex_);
+
+        ImGui::Separator();
+
+        ImGui::Text("%s", layer.name.c_str());
+
+        if (ImGui::RadioButton("このレイヤーに描く", isActive))
+        {
+            activeLayerIndex_ = index;
+        }
+
+        ImGui::Checkbox("表示する", &layer.visible);
+
+        ImGui::SetNextItemWidth(180.0f);
+        ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f);
+
+        ImGui::Text("ストローク数: %d", static_cast<int>(layer.strokes.size()));
+
+        if (isActive)
+        {
+            ImGui::TextColored(
+                ImVec4(0.45f, 0.80f, 1.0f, 1.0f),
+                "現在の描き込み先"
+            );
+        }
+
+        ImGui::PopID();
+    }
+
+    ImGui::Separator();
+
+    DrawingLayer* layer = activeLayer();
+
+    if (layer != nullptr)
+    {
+        ImGui::Text("現在の描き込み先: %s", layer->name.c_str());
+
+        if (!layer->visible)
+        {
+            ImGui::TextColored(
+                ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                "注意: このレイヤーは非表示なので描き込みできません。"
+            );
+        }
+
+        if (ImGui::Button("アクティブレイヤーを消去"))
+        {
+            layer->clear();
+        }
+    }
+
+    if (ImGui::Button("全レイヤー消去"))
+    {
+        clearAllLayers();
+    }
+
+    ImGui::End();
+}
 
     void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, const RenderFormat& renderFormat)
     {
