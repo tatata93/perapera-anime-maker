@@ -22,6 +22,7 @@
 #include "drawing/WorkCanvas.h"
 #include "project/RenderFormat.h"
 #include "ui/CanvasPreview.h"
+#include "ui/DrawingCanvasPanel.h"
 
 namespace
 {
@@ -29,7 +30,7 @@ namespace
     constexpr int InitialWindowHeight = 720;
 
     constexpr const char* AppDisplayName = "ぺらぺらアニメ作り機";
-    constexpr const char* CurrentPhaseName = "Phase 2: Work canvas and render frame foundation";
+    constexpr const char* CurrentPhaseName = "Phase 3A: Simple pen drawing foundation";
 
     void printSdlError(const std::string& message)
     {
