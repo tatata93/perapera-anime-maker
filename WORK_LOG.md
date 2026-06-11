@@ -82,3 +82,61 @@ perapera-anime-maker/
     └── app/
         └── main.cpp
 
+## 2026-06-12
+
+### 作業概要
+
+- Phase 2として、任意サイズ作画キャンバスと撮影フレームの土台を追加した。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── .gitignore
+├── CMakeLists.txt
+├── DECISIONS.md
+├── WORK_LOG.md
+└── src/
+    ├── app/
+    │   └── main.cpp
+    ├── drawing/
+    │   ├── WorkCanvas.h
+    │   └── WorkCanvas.cpp
+    ├── project/
+    │   ├── RenderFormat.h
+    │   └── RenderFormat.cpp
+    └── ui/
+        ├── CanvasPreview.h
+        └── CanvasPreview.cpp
+```
+
+### 実装内容
+
+- `WorkCanvas` を追加した。
+- `RenderFormat` を追加した。
+- `CanvasPreview` を追加した。
+- ImGui上で作画キャンバスと撮影フレームを仮表示できるようにした。
+- キャンバス設定パネルを追加した。
+- 作画キャンバスサイズ、出力フレームサイズ、FPS、ピクセル縦横比を変更できるようにした。
+- 撮影フレームが作画キャンバスより大きい場合に警告を出すようにした。
+- `imgui.ini` をGit管理しないように `.gitignore` に追加した。
+
+### 未完了
+
+- ペン描画は未実装。
+- レイヤーは未実装。
+- オニオンスキンは未実装。
+- カメラ移動は未実装。
+- ズーム、ドリー、ドーリーズームは未実装。
+- 背景画角キャリブレーションは未実装。
+- 簡易物理は未実装。
+
+### 次にやること
+
+- Phase 3として、撮影フレームの切り出し処理または簡易作画キャンバスのどちらを先に作るか判断する。
+- 候補A: 作画キャンバスに簡易ペン描画を追加する。
+- 候補B: 撮影フレームの切り出しとPNG出力を先に作る。
+
+### 判断待ち
+
+- 次に、簡易ペン描画を先に作るか、撮影フレーム切り出しを先に作るか確認する。

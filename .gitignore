@@ -23,6 +23,11 @@ cmake_install.cmake
 .vscode/.cache/
 .vscode/ipch/
 
+# Dear ImGui local layout file
+# Dear ImGui stores window positions and sizes here.
+# This is user-local state, so it should not be committed.
+imgui.ini
+
 # OS files
 .DS_Store
 Thumbs.db

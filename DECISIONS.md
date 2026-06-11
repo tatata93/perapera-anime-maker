@@ -81,3 +81,16 @@ Names
 
 - READMEやUI表示では「ぺらぺらアニメ作り機」を使う。
 - CMakeやGitHubでは `PeraperaAnimeMaker`、`perapera_anime_maker`、`perapera-anime-maker` を使う。
+
+## Decision 007: Separate WorkCanvas and RenderFormat
+
+### 決定
+
+Phase 2では、作画キャンバスと最終出力形式を別のデータとして扱う。
+
+```text
+Phase2DataModel
+├── WorkCanvas
+│   └── 実際に絵を描く広い紙
+└── RenderFormat
+    └── 撮影で切り出して最終的に出力する映像形式
