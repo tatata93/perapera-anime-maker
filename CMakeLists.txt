@@ -59,27 +59,26 @@ add_executable(perapera_anime_maker
     src/drawing/Stroke.cpp
     src/drawing/DrawingLayer.h
     src/drawing/DrawingLayer.cpp
+    src/drawing/AnimationFrame.h
+    src/drawing/AnimationFrame.cpp
     src/drawing/WorkCanvas.h
     src/drawing/WorkCanvas.cpp
 
     src/project/RenderFormat.h
     src/project/RenderFormat.cpp
 
+    src/export/PngExporter.h
+    src/export/PngExporter.cpp
+
     src/ui/CanvasPreview.h
     src/ui/CanvasPreview.cpp
     src/ui/DrawingCanvasPanel.h
     src/ui/DrawingCanvasPanel.cpp
-    src/export/PngExporter.h
-    src/export/PngExporter.cpp
 )
 
 target_include_directories(perapera_anime_maker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb
-)
-
-target_sources(perapera_anime_maker PRIVATE
-    src/export/PngExporter.cpp
 )
 
 target_link_libraries(perapera_anime_maker PRIVATE

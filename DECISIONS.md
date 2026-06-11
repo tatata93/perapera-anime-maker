@@ -160,3 +160,17 @@ PNGExport
 │   └── RGBA画像としてPNG保存する
 └── Output
     └── exports/frame_0001.png
+    ## Decision 011: Add frame management before timeline playback
+
+### 決定
+
+Phase 3Dでは、再生タイムラインより先に、複数フレームを持てるデータ構造を追加する。
+
+```text
+AnimationData
+├── AnimationFrame[]
+│   ├── name
+│   ├── durationFrames
+│   └── DrawingLayer[]
+└── DrawingLayer[]
+    └── Stroke[]

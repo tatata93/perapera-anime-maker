@@ -207,6 +207,7 @@ namespace
     ImGui::BulletText("複数レイヤーを追加・削除する");
     ImGui::BulletText("レイヤー表示/非表示と不透明度を変更する");
     ImGui::BulletText("現在の撮影フレームをPNG保存する");
+    ImGui::BulletText("複数フレームを追加・選択・複製・削除する");
 
     ImGui::Separator();
 

@@ -216,4 +216,24 @@ perapera-anime-maker/
         ├── DrawingCanvasPanel.h
         └── DrawingCanvasPanel.cpp        
 
+## 2026-06-12
+
+### 作業概要
+
+- Phase 3Dとして、フレーム管理を追加した。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── CMakeLists.txt
+├── DECISIONS.md
+├── WORK_LOG.md
+└── src/
+    ├── drawing/
+    │   ├── AnimationFrame.h
+    │   └── AnimationFrame.cpp
+    └── ui/
+        ├── DrawingCanvasPanel.h
+        └── DrawingCanvasPanel.cpp
         

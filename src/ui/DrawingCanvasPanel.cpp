@@ -1,24 +1,23 @@
 // src/ui/DrawingCanvasPanel.cpp
 //
 // DrawingCanvasPanelの実装です。
-// ImGuiのDrawListを使って、作画キャンバス、撮影フレーム、ユーザーの線を描きます。
 //
-// Phase 3Bでは、複数レイヤーを扱います。
-// レイヤーごとに表示/非表示、不透明度、描き込み先を管理します。
+// Phase 3Dでは、フレーム管理に対応します。
+// frames_ がAnimationFrameの配列を持ち、
+// 各AnimationFrameがDrawingLayerの配列を持ちます。
 
 #include "ui/DrawingCanvasPanel.h"
 
 #include "drawing/WorkCanvas.h"
 #include "project/RenderFormat.h"
 
-#include <filesystem>
-#include <iomanip>
-#include <sstream>
-
 #include "imgui.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -33,6 +32,34 @@ namespace perapera
         constexpr ImU32 RenderFrameColor = IM_COL32(255, 220, 80, 255);
         constexpr ImU32 WarningColor = IM_COL32(255, 120, 80, 255);
 
+        std::string makeDefaultFrameName(int frameNumber)
+        {
+            return "Frame " + std::to_string(frameNumber);
+        }
+
+        std::string makeDefaultLayerName(int layerNumber)
+        {
+            return "Layer " + std::to_string(layerNumber);
+        }
+
+        DrawingLayer makeDefaultLayer(const std::string& name)
+        {
+            DrawingLayer layer;
+            layer.name = name;
+            layer.visible = true;
+            layer.opacity = 1.0f;
+            return layer;
+        }
+
+        AnimationFrame makeDefaultFrame(int frameNumber)
+        {
+            AnimationFrame frame;
+            frame.name = makeDefaultFrameName(frameNumber);
+            frame.durationFrames = 1;
+            frame.layers.push_back(makeDefaultLayer("Layer 1"));
+            return frame;
+        }
+
         float distanceSquared(CanvasPoint a, CanvasPoint b)
         {
             const float dx = a.x - b.x;
@@ -42,8 +69,6 @@ namespace perapera
 
         ImU32 toImGuiColor(ColorRgba color, float layerOpacity)
         {
-            // レイヤーの不透明度をストロークのアルファに掛ける。
-            // これにより、レイヤー全体を薄く表示できる。
             const float finalAlpha = std::clamp(color.a * layerOpacity, 0.0f, 1.0f);
 
             const int r = static_cast<int>(std::clamp(color.r, 0.0f, 1.0f) * 255.0f);
@@ -60,11 +85,6 @@ namespace perapera
             float scale
         )
         {
-            // 画面上のマウス座標を、WorkCanvas上の座標に変換する。
-            //
-            // 例:
-            // 表示上では300pxに縮小されていても、
-            // 実際のキャンバスが3000pxなら、scaleで割って実寸に戻す。
             return CanvasPoint{
                 (screenPoint.x - canvasMin.x) / scale,
                 (screenPoint.y - canvasMin.y) / scale
@@ -77,7 +97,6 @@ namespace perapera
             float scale
         )
         {
-            // WorkCanvas上の座標を、画面表示用の座標に変換する。
             return ImVec2(
                 canvasMin.x + canvasPoint.x * scale,
                 canvasMin.y + canvasPoint.y * scale
@@ -106,9 +125,6 @@ namespace perapera
             }
 
             const ImU32 color = toImGuiColor(stroke.color, layerOpacity);
-
-            // キャンバスが縮小表示されているときは、線の太さも縮小する。
-            // ただし細すぎると見えないので、最低1.0pxは確保する。
             const float thickness = std::max(1.0f, stroke.radiusPx * 2.0f * scale);
 
             if (stroke.points.size() == 1)
@@ -126,28 +142,38 @@ namespace perapera
                 drawList->AddLine(a, b, color, thickness);
             }
         }
-
-        std::string makeDefaultLayerName(int layerNumber)
-        {
-            return "Layer " + std::to_string(layerNumber);
-        }
     }
 
     DrawingCanvasPanel::DrawingCanvasPanel()
     {
-        DrawingLayer firstLayer;
-        firstLayer.name = "Layer 1";
-        firstLayer.visible = true;
-        firstLayer.opacity = 1.0f;
+        frames_.push_back(makeDefaultFrame(1));
 
-        layers_.push_back(firstLayer);
+        activeFrameIndex_ = 0;
         activeLayerIndex_ = 0;
+        nextFrameNumber_ = 2;
         nextLayerNumber_ = 2;
+    }
+
+    void DrawingCanvasPanel::clampActiveFrameIndex()
+    {
+        if (frames_.empty())
+        {
+            activeFrameIndex_ = -1;
+            return;
+        }
+
+        activeFrameIndex_ = std::clamp(
+            activeFrameIndex_,
+            0,
+            static_cast<int>(frames_.size()) - 1
+        );
     }
 
     void DrawingCanvasPanel::clampActiveLayerIndex()
     {
-        if (layers_.empty())
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr || frame->layers.empty())
         {
             activeLayerIndex_ = -1;
             return;
@@ -156,34 +182,160 @@ namespace perapera
         activeLayerIndex_ = std::clamp(
             activeLayerIndex_,
             0,
-            static_cast<int>(layers_.size()) - 1
+            static_cast<int>(frame->layers.size()) - 1
         );
+    }
+
+    AnimationFrame* DrawingCanvasPanel::activeFrame()
+    {
+        if (frames_.empty())
+        {
+            return nullptr;
+        }
+
+        clampActiveFrameIndex();
+
+        if (activeFrameIndex_ < 0 || activeFrameIndex_ >= static_cast<int>(frames_.size()))
+        {
+            return nullptr;
+        }
+
+        return &frames_[static_cast<std::size_t>(activeFrameIndex_)];
+    }
+
+    const AnimationFrame* DrawingCanvasPanel::activeFrame() const
+    {
+        if (activeFrameIndex_ < 0 || activeFrameIndex_ >= static_cast<int>(frames_.size()))
+        {
+            return nullptr;
+        }
+
+        return &frames_[static_cast<std::size_t>(activeFrameIndex_)];
     }
 
     DrawingLayer* DrawingCanvasPanel::activeLayer()
     {
-        clampActiveLayerIndex();
+        AnimationFrame* frame = activeFrame();
 
-        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(layers_.size()))
+        if (frame == nullptr || frame->layers.empty())
         {
             return nullptr;
         }
 
-        return &layers_[static_cast<std::size_t>(activeLayerIndex_)];
+        clampActiveLayerIndex();
+
+        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(frame->layers.size()))
+        {
+            return nullptr;
+        }
+
+        return &frame->layers[static_cast<std::size_t>(activeLayerIndex_)];
     }
 
     const DrawingLayer* DrawingCanvasPanel::activeLayer() const
     {
-        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(layers_.size()))
+        const AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr || frame->layers.empty())
         {
             return nullptr;
         }
 
-        return &layers_[static_cast<std::size_t>(activeLayerIndex_)];
+        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(frame->layers.size()))
+        {
+            return nullptr;
+        }
+
+        return &frame->layers[static_cast<std::size_t>(activeLayerIndex_)];
+    }
+
+    void DrawingCanvasPanel::addFrame()
+    {
+        frames_.push_back(makeDefaultFrame(nextFrameNumber_));
+        ++nextFrameNumber_;
+
+        activeFrameIndex_ = static_cast<int>(frames_.size()) - 1;
+        activeLayerIndex_ = 0;
+
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+    }
+
+    void DrawingCanvasPanel::duplicateActiveFrame()
+    {
+        const AnimationFrame* currentFrame = activeFrame();
+
+        if (currentFrame == nullptr)
+        {
+            return;
+        }
+
+        AnimationFrame copiedFrame = *currentFrame;
+        copiedFrame.name = makeDefaultFrameName(nextFrameNumber_);
+
+        ++nextFrameNumber_;
+
+        frames_.insert(
+            frames_.begin() + activeFrameIndex_ + 1,
+            copiedFrame
+        );
+
+        ++activeFrameIndex_;
+        activeLayerIndex_ = 0;
+
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+    }
+
+    void DrawingCanvasPanel::deleteActiveFrame()
+    {
+        if (frames_.size() <= 1)
+        {
+            return;
+        }
+
+        clampActiveFrameIndex();
+
+        frames_.erase(frames_.begin() + activeFrameIndex_);
+        clampActiveFrameIndex();
+
+        activeLayerIndex_ = 0;
+
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+    }
+
+    void DrawingCanvasPanel::moveToPreviousFrame()
+    {
+        if (activeFrameIndex_ > 0)
+        {
+            --activeFrameIndex_;
+            activeLayerIndex_ = 0;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+        }
+    }
+
+    void DrawingCanvasPanel::moveToNextFrame()
+    {
+        if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
+        {
+            ++activeFrameIndex_;
+            activeLayerIndex_ = 0;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+        }
     }
 
     void DrawingCanvasPanel::addLayer()
     {
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr)
+        {
+            return;
+        }
+
         DrawingLayer layer;
         layer.name = makeDefaultLayerName(nextLayerNumber_);
         layer.visible = true;
@@ -191,39 +343,44 @@ namespace perapera
 
         ++nextLayerNumber_;
 
-        // 新しいレイヤーは一番手前に追加する。
-        layers_.push_back(layer);
-        activeLayerIndex_ = static_cast<int>(layers_.size()) - 1;
+        frame->layers.push_back(layer);
+        activeLayerIndex_ = static_cast<int>(frame->layers.size()) - 1;
     }
 
     void DrawingCanvasPanel::deleteActiveLayer()
     {
-        // 最低1枚は残す。
-        // 0枚になると描き込み先がなくなって扱いづらいため。
-        if (layers_.size() <= 1)
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr || frame->layers.size() <= 1)
         {
             return;
         }
 
         clampActiveLayerIndex();
 
-        layers_.erase(layers_.begin() + activeLayerIndex_);
+        frame->layers.erase(frame->layers.begin() + activeLayerIndex_);
         clampActiveLayerIndex();
     }
 
     void DrawingCanvasPanel::moveActiveLayerUp()
     {
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr)
+        {
+            return;
+        }
+
         clampActiveLayerIndex();
 
-        // 上へ移動 = 画面上で手前にする。
-        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(layers_.size()) - 1)
+        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(frame->layers.size()) - 1)
         {
             return;
         }
 
         std::swap(
-            layers_[static_cast<std::size_t>(activeLayerIndex_)],
-            layers_[static_cast<std::size_t>(activeLayerIndex_ + 1)]
+            frame->layers[static_cast<std::size_t>(activeLayerIndex_)],
+            frame->layers[static_cast<std::size_t>(activeLayerIndex_ + 1)]
         );
 
         ++activeLayerIndex_;
@@ -231,190 +388,293 @@ namespace perapera
 
     void DrawingCanvasPanel::moveActiveLayerDown()
     {
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr)
+        {
+            return;
+        }
+
         clampActiveLayerIndex();
 
-        // 下へ移動 = 画面上で奥にする。
         if (activeLayerIndex_ <= 0)
         {
             return;
         }
 
         std::swap(
-            layers_[static_cast<std::size_t>(activeLayerIndex_)],
-            layers_[static_cast<std::size_t>(activeLayerIndex_ - 1)]
+            frame->layers[static_cast<std::size_t>(activeLayerIndex_)],
+            frame->layers[static_cast<std::size_t>(activeLayerIndex_ - 1)]
         );
 
         --activeLayerIndex_;
     }
 
-    void DrawingCanvasPanel::clearAllLayers()
+    void DrawingCanvasPanel::clearCurrentFrameLayers()
     {
-        for (DrawingLayer& layer : layers_)
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr)
         {
-            layer.clear();
+            return;
         }
 
+        frame->clearAllLayers();
         currentStroke_.points.clear();
         isDrawing_ = false;
     }
 
     void DrawingCanvasPanel::exportCurrentRenderFramePng(
-    const WorkCanvas& workCanvas,
-    const RenderFormat& renderFormat
-)
-{
-    std::ostringstream fileNameStream;
-
-    fileNameStream
-        << "frame_"
-        << std::setw(4)
-        << std::setfill('0')
-        << nextPngExportNumber_
-        << ".png";
-
-    const std::filesystem::path outputPath =
-        std::filesystem::path("exports") / fileNameStream.str();
-
-    PngExportOptions options;
-    options.transparentBackground = pngTransparentBackground_;
-
-    std::string errorMessage;
-
-    const bool succeeded = PngExporter::exportCenteredRenderFrame(
-        outputPath,
-        workCanvas,
-        renderFormat,
-        layers_,
-        options,
-        errorMessage
-    );
-
-    if (succeeded)
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat
+    )
     {
-        lastPngExportSucceeded_ = true;
-        lastPngExportMessage_ = "PNG保存成功: " + outputPath.string();
-        ++nextPngExportNumber_;
-    }
-    else
-    {
-        lastPngExportSucceeded_ = false;
-        lastPngExportMessage_ = "PNG保存失敗: " + errorMessage;
-    }
-}
+        const AnimationFrame* frame = activeFrame();
 
-    void DrawingCanvasPanel::drawLayerPanel()
-{
-    ImGui::Begin("レイヤー");
+        if (frame == nullptr)
+        {
+            lastPngExportSucceeded_ = false;
+            lastPngExportMessage_ = "PNG保存失敗: 現在フレームがありません。";
+            return;
+        }
 
-    ImGui::Text("描き込み先レイヤーを選びます。");
-    ImGui::Text("上のレイヤーほど手前に表示されます。");
+        std::ostringstream fileNameStream;
 
-    ImGui::Separator();
+        fileNameStream
+            << "frame_"
+            << std::setw(4)
+            << std::setfill('0')
+            << nextPngExportNumber_
+            << ".png";
 
-    if (ImGui::Button("レイヤー追加"))
-    {
-        addLayer();
+        const std::filesystem::path outputPath =
+            std::filesystem::path("exports") / fileNameStream.str();
+
+        PngExportOptions options;
+        options.transparentBackground = pngTransparentBackground_;
+
+        std::string errorMessage;
+
+        const bool succeeded = PngExporter::exportCenteredRenderFrame(
+            outputPath,
+            workCanvas,
+            renderFormat,
+            frame->layers,
+            options,
+            errorMessage
+        );
+
+        if (succeeded)
+        {
+            lastPngExportSucceeded_ = true;
+            lastPngExportMessage_ = "PNG保存成功: " + outputPath.string();
+            ++nextPngExportNumber_;
+        }
+        else
+        {
+            lastPngExportSucceeded_ = false;
+            lastPngExportMessage_ = "PNG保存失敗: " + errorMessage;
+        }
     }
 
-    ImGui::SameLine();
-
-    if (ImGui::Button("削除"))
+    void DrawingCanvasPanel::drawFramePanel()
     {
-        deleteActiveLayer();
-    }
+        ImGui::Begin("フレーム");
 
-    if (ImGui::Button("上へ"))
-    {
-        moveActiveLayerUp();
-    }
-
-    ImGui::SameLine();
-
-    if (ImGui::Button("下へ"))
-    {
-        moveActiveLayerDown();
-    }
-
-    ImGui::Separator();
-
-    // UI上では手前のレイヤーを上に表示したいので、
-    // 配列の後ろから順に表示する。
-    //
-    // 以前は Selectable / Checkbox / SliderFloat を横並びにしていた。
-    // しかし Selectable のクリック範囲が広くなり、表示切替や不透明度操作とぶつかることがあった。
-    // そのため、Phase 3B修正版では、各操作を縦に分けて確実に押せるようにする。
-    for (int index = static_cast<int>(layers_.size()) - 1; index >= 0; --index)
-    {
-        DrawingLayer& layer = layers_[static_cast<std::size_t>(index)];
-
-        ImGui::PushID(index);
-
-        const bool isActive = (index == activeLayerIndex_);
+        ImGui::Text("現在のフレームを選びます。");
+        ImGui::Text("Phase 3Dでは再生はまだ行いません。");
 
         ImGui::Separator();
 
-        ImGui::Text("%s", layer.name.c_str());
-
-        if (ImGui::RadioButton("このレイヤーに描く", isActive))
+        if (ImGui::Button("前のフレーム"))
         {
-            activeLayerIndex_ = index;
+            moveToPreviousFrame();
         }
 
-        ImGui::Checkbox("表示する", &layer.visible);
+        ImGui::SameLine();
 
-        ImGui::SetNextItemWidth(180.0f);
-        ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f);
-
-        ImGui::Text("ストローク数: %d", static_cast<int>(layer.strokes.size()));
-
-        if (isActive)
+        if (ImGui::Button("次のフレーム"))
         {
-            ImGui::TextColored(
-                ImVec4(0.45f, 0.80f, 1.0f, 1.0f),
-                "現在の描き込み先"
-            );
+            moveToNextFrame();
         }
 
-        ImGui::PopID();
+        if (ImGui::Button("空フレーム追加"))
+        {
+            addFrame();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("現在フレームを複製"))
+        {
+            duplicateActiveFrame();
+        }
+
+        if (ImGui::Button("現在フレームを削除"))
+        {
+            deleteActiveFrame();
+        }
+
+        ImGui::Separator();
+
+        for (int index = 0; index < static_cast<int>(frames_.size()); ++index)
+        {
+            AnimationFrame& frame = frames_[static_cast<std::size_t>(index)];
+
+            ImGui::PushID(index);
+
+            const bool isActive = (index == activeFrameIndex_);
+
+            if (ImGui::RadioButton(frame.name.c_str(), isActive))
+            {
+                activeFrameIndex_ = index;
+                activeLayerIndex_ = 0;
+                currentStroke_.points.clear();
+                isDrawing_ = false;
+            }
+
+            ImGui::Text("ストローク数: %d", frame.strokeCount());
+
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::SliderInt("保持コマ数", &frame.durationFrames, 1, 24);
+
+            ImGui::Separator();
+
+            ImGui::PopID();
+        }
+
+        const AnimationFrame* frame = activeFrame();
+
+        if (frame != nullptr)
+        {
+            ImGui::Text("現在フレーム: %s", frame->name.c_str());
+        }
+
+        ImGui::End();
     }
 
-    ImGui::Separator();
-
-    DrawingLayer* layer = activeLayer();
-
-    if (layer != nullptr)
+    void DrawingCanvasPanel::drawLayerPanel()
     {
-        ImGui::Text("現在の描き込み先: %s", layer->name.c_str());
+        ImGui::Begin("レイヤー");
 
-        if (!layer->visible)
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr)
         {
-            ImGui::TextColored(
-                ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-                "注意: このレイヤーは非表示なので描き込みできません。"
-            );
+            ImGui::Text("現在フレームがありません。");
+            ImGui::End();
+            return;
         }
 
-        if (ImGui::Button("アクティブレイヤーを消去"))
+        ImGui::Text("現在フレーム内のレイヤーを管理します。");
+        ImGui::Text("上のレイヤーほど手前に表示されます。");
+
+        ImGui::Separator();
+
+        if (ImGui::Button("レイヤー追加"))
         {
-            layer->clear();
+            addLayer();
         }
-    }
 
-    if (ImGui::Button("全レイヤー消去"))
-    {
-        clearAllLayers();
-    }
+        ImGui::SameLine();
 
-    ImGui::End();
-}
+        if (ImGui::Button("削除"))
+        {
+            deleteActiveLayer();
+        }
+
+        if (ImGui::Button("上へ"))
+        {
+            moveActiveLayerUp();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("下へ"))
+        {
+            moveActiveLayerDown();
+        }
+
+        ImGui::Separator();
+
+        for (int index = static_cast<int>(frame->layers.size()) - 1; index >= 0; --index)
+        {
+            DrawingLayer& layer = frame->layers[static_cast<std::size_t>(index)];
+
+            ImGui::PushID(index);
+
+            const bool isActive = (index == activeLayerIndex_);
+
+            ImGui::Text("%s", layer.name.c_str());
+
+            if (ImGui::RadioButton("このレイヤーに描く", isActive))
+            {
+                activeLayerIndex_ = index;
+            }
+
+            ImGui::Checkbox("表示する", &layer.visible);
+
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f);
+
+            ImGui::Text("ストローク数: %d", static_cast<int>(layer.strokes.size()));
+
+            if (isActive)
+            {
+                ImGui::TextColored(
+                    ImVec4(0.45f, 0.80f, 1.0f, 1.0f),
+                    "現在の描き込み先"
+                );
+            }
+
+            ImGui::Separator();
+
+            ImGui::PopID();
+        }
+
+        DrawingLayer* layer = activeLayer();
+
+        if (layer != nullptr)
+        {
+            ImGui::Text("現在の描き込み先: %s", layer->name.c_str());
+
+            if (!layer->visible)
+            {
+                ImGui::TextColored(
+                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                    "注意: このレイヤーは非表示なので描き込みできません。"
+                );
+            }
+
+            if (ImGui::Button("アクティブレイヤーを消去"))
+            {
+                layer->clear();
+            }
+        }
+
+        if (ImGui::Button("現在フレームの全レイヤー消去"))
+        {
+            clearCurrentFrameLayers();
+        }
+
+        ImGui::End();
+    }
 
     void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, const RenderFormat& renderFormat)
     {
+        drawFramePanel();
         drawLayerPanel();
 
         ImGui::Begin("簡易作画キャンバス");
 
-        ImGui::Text("左ドラッグで、選択中の表示レイヤーに線を描けます。");
+        const AnimationFrame* currentFrame = activeFrame();
+
+        if (currentFrame != nullptr)
+        {
+            ImGui::Text("現在フレーム: %s", currentFrame->name.c_str());
+        }
+
+        ImGui::Text("左ドラッグで、選択中フレームの選択中レイヤーに線を描けます。");
 
         ImGui::SliderFloat("ペン半径 px", &brush_.radiusPx, 1.0f, 40.0f);
 
@@ -425,48 +685,48 @@ namespace perapera
             brush_.color.a
         };
 
-if (ImGui::ColorEdit4("ペン色", color))
-{
-    brush_.color.r = color[0];
-    brush_.color.g = color[1];
-    brush_.color.b = color[2];
-    brush_.color.a = color[3];
-}
+        if (ImGui::ColorEdit4("ペン色", color))
+        {
+            brush_.color.r = color[0];
+            brush_.color.g = color[1];
+            brush_.color.b = color[2];
+            brush_.color.a = color[3];
+        }
 
-ImGui::Separator();
+        ImGui::Separator();
 
-ImGui::Text("PNG保存");
+        ImGui::Text("PNG保存");
 
-ImGui::Checkbox("透明背景で保存", &pngTransparentBackground_);
+        ImGui::Checkbox("透明背景で保存", &pngTransparentBackground_);
 
-if (ImGui::Button("現在の撮影フレームをPNG保存"))
-{
-    exportCurrentRenderFramePng(workCanvas, renderFormat);
-}
+        if (ImGui::Button("現在の撮影フレームをPNG保存"))
+        {
+            exportCurrentRenderFramePng(workCanvas, renderFormat);
+        }
 
-if (!lastPngExportMessage_.empty())
-{
-    if (lastPngExportSucceeded_)
-    {
-        ImGui::TextColored(
-            ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
-            "%s",
-            lastPngExportMessage_.c_str()
-        );
-    }
-    else
-    {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-            "%s",
-            lastPngExportMessage_.c_str()
-        );
-    }
-}
+        if (!lastPngExportMessage_.empty())
+        {
+            if (lastPngExportSucceeded_)
+            {
+                ImGui::TextColored(
+                    ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+                    "%s",
+                    lastPngExportMessage_.c_str()
+                );
+            }
+            else
+            {
+                ImGui::TextColored(
+                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                    "%s",
+                    lastPngExportMessage_.c_str()
+                );
+            }
+        }
 
-ImGui::Separator();
+        ImGui::Separator();
 
-DrawingLayer* currentLayer = activeLayer();
+        DrawingLayer* currentLayer = activeLayer();
 
         if (currentLayer != nullptr)
         {
@@ -494,8 +754,6 @@ DrawingLayer* currentLayer = activeLayer();
             previewMin.y + previewSize.y
         );
 
-        // InvisibleButtonは見えないボタンです。
-        // これを置くことで、ImGuiに「この領域でマウス操作を受け取る」と伝えます。
         ImGui::InvisibleButton(
             "DrawingCanvasInput",
             previewSize,
@@ -531,7 +789,6 @@ DrawingLayer* currentLayer = activeLayer();
         drawList->AddRectFilled(canvasMin, canvasMax, CanvasFillColor);
         drawList->AddRect(canvasMin, canvasMax, CanvasBorderColor, 0.0f, 0, 2.0f);
 
-        // グリッド表示。
         constexpr int GridSpacingCanvasPx = 200;
 
         for (int x = 0; x <= workCanvas.widthPx; x += GridSpacingCanvasPx)
@@ -554,24 +811,24 @@ DrawingLayer* currentLayer = activeLayer();
             );
         }
 
-        // 線がキャンバス外にはみ出して見えないように、描画範囲をキャンバス内に制限する。
         drawList->PushClipRect(canvasMin, canvasMax, true);
 
-        // レイヤーを奥から手前へ描く。
-        for (const DrawingLayer& layer : layers_)
+        if (currentFrame != nullptr)
         {
-            if (!layer.visible)
+            for (const DrawingLayer& layer : currentFrame->layers)
             {
-                continue;
-            }
+                if (!layer.visible)
+                {
+                    continue;
+                }
 
-            for (const Stroke& stroke : layer.strokes)
-            {
-                drawStroke(drawList, stroke, canvasMin, scale, layer.opacity);
+                for (const Stroke& stroke : layer.strokes)
+                {
+                    drawStroke(drawList, stroke, canvasMin, scale, layer.opacity);
+                }
             }
         }
 
-        // 描画中のストロークも表示する。
         if (isDrawing_ && currentLayer != nullptr && currentLayer->visible)
         {
             drawStroke(drawList, currentStroke_, canvasMin, scale, currentLayer->opacity);
@@ -579,7 +836,6 @@ DrawingLayer* currentLayer = activeLayer();
 
         drawList->PopClipRect();
 
-        // 撮影フレームを中央に仮表示する。
         const float renderFramePreviewWidth =
             static_cast<float>(renderFormat.outputWidthPx) * scale;
 
@@ -617,7 +873,6 @@ DrawingLayer* currentLayer = activeLayer();
             "撮影フレーム"
         );
 
-        // マウス入力を作画キャンバス座標に変換して、Strokeとして保存する。
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
         const bool mouseInsideCanvas = isInsideRect(mousePosition, canvasMin, canvasMax);
 
@@ -644,8 +899,6 @@ DrawingLayer* currentLayer = activeLayer();
                 const CanvasPoint nextPoint =
                     screenToCanvasPoint(mousePosition, canvasMin, scale);
 
-                // 同じような点を大量に保存しすぎると重くなるので、
-                // 前の点から少し離れたときだけ追加する。
                 constexpr float MinimumPointDistancePx = 2.0f;
 
                 if (currentStroke_.points.empty()

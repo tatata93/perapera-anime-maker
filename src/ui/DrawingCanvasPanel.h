@@ -2,12 +2,13 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Cでは、複数レイヤーに加えてPNG保存に対応します。
-// まだ本物の画像バッファには常時描きません。
-// 保存時にStroke配列を一時的にPNG画像へ変換します。
+// Phase 3Dでは、フレーム管理に対応します。
+// 1つのAnimationFrameが複数のDrawingLayerを持ち、
+// 現在選択中のフレームに描き込みます。
 
 #pragma once
 
+#include "drawing/AnimationFrame.h"
 #include "drawing/Brush.h"
 #include "drawing/DrawingLayer.h"
 #include "drawing/Stroke.h"
@@ -31,32 +32,53 @@ namespace perapera
     private:
         Brush brush_;
 
-        std::vector<DrawingLayer> layers_;
+        // アニメーションのフレーム一覧。
+        // 各フレームが自分専用のレイヤーを持つ。
+        std::vector<AnimationFrame> frames_;
 
+        // 現在選択中のフレーム番号。
+        int activeFrameIndex_ = 0;
+
+        // 現在選択中のレイヤー番号。
         int activeLayerIndex_ = 0;
 
         Stroke currentStroke_;
 
         bool isDrawing_ = false;
 
+        int nextFrameNumber_ = 2;
+
         int nextLayerNumber_ = 2;
 
-        // PNG保存時の連番。
         int nextPngExportNumber_ = 1;
 
-        // trueなら透明背景PNG、falseなら確認しやすい濃い背景つきPNG。
         bool pngTransparentBackground_ = false;
 
-        // 最後のPNG保存結果をUIに表示する。
         std::string lastPngExportMessage_;
 
         bool lastPngExportSucceeded_ = false;
 
+        void clampActiveFrameIndex();
+
         void clampActiveLayerIndex();
+
+        AnimationFrame* activeFrame();
+
+        const AnimationFrame* activeFrame() const;
 
         DrawingLayer* activeLayer();
 
         const DrawingLayer* activeLayer() const;
+
+        void addFrame();
+
+        void duplicateActiveFrame();
+
+        void deleteActiveFrame();
+
+        void moveToPreviousFrame();
+
+        void moveToNextFrame();
 
         void addLayer();
 
@@ -66,11 +88,12 @@ namespace perapera
 
         void moveActiveLayerDown();
 
+        void drawFramePanel();
+
         void drawLayerPanel();
 
-        void clearAllLayers();
+        void clearCurrentFrameLayers();
 
-        // 現在の撮影フレーム範囲をPNGとして保存する。
         void exportCurrentRenderFramePng(
             const WorkCanvas& workCanvas,
             const RenderFormat& renderFormat
