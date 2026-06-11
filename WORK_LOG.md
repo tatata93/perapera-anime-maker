@@ -190,4 +190,30 @@ perapera-anime-maker/
         ├── DrawingCanvasPanel.h
         └── DrawingCanvasPanel.cpp
 
+## 2026-06-12
+
+### 作業概要
+
+- Phase 3Cとして、現在の撮影フレームをPNG保存できるようにした。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── CMakeLists.txt
+├── DECISIONS.md
+├── DEPENDENCIES.md
+├── LICENSE_POLICY.md
+├── WORK_LOG.md
+├── vendor/
+│   └── stb/
+│       └── stb_image_write.h
+└── src/
+    ├── export/
+    │   ├── PngExporter.h
+    │   └── PngExporter.cpp
+    └── ui/
+        ├── DrawingCanvasPanel.h
+        └── DrawingCanvasPanel.cpp        
+
         

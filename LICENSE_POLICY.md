@@ -66,3 +66,18 @@ Required Information
 ├── Free release considerations
 └── How it is used in this project
 ```
+
+## stb_image_write.h
+
+Phase 3CでPNG保存用に `stb_image_write.h` を追加した。
+
+```text
+Policy
+├── ライセンス系統
+│   └── Public domain / MIT style option
+├── 使用範囲
+│   └── PNG画像の書き出しのみ
+├── 配布時の扱い
+│   └── vendor/stb/stb_image_write.h を同梱する
+└── 注意
+    └── 将来、商用/配布形態を変える場合も、依存関係一覧で明示する

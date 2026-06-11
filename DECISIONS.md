@@ -129,3 +129,34 @@ Phase3B_LayerModel
     ├── deleteActiveLayer
     ├── moveActiveLayerUp
     └── moveActiveLayerDown
+
+    ## stb_image_write
+
+```text
+Dependency
+├── Name: stb_image_write.h
+├── Purpose: PNG画像を書き出すため
+├── Used in: src/export/PngExporter.cpp
+├── License: Public domain / MIT style option
+├── Added in: Phase 3C
+└── Scope: 画像書き出しのみ
+
+## Decision 010: Add PNG export using stb_image_write
+
+### 決定
+
+Phase 3Cでは、PNG保存のために `stb_image_write.h` を追加する。
+
+```text
+PNGExport
+├── Input
+│   ├── WorkCanvas
+│   ├── RenderFormat
+│   └── DrawingLayer[]
+├── Process
+│   ├── WorkCanvas中央の撮影フレームを切り出す
+│   ├── 表示中レイヤーのみ合成する
+│   ├── レイヤー不透明度を反映する
+│   └── RGBA画像としてPNG保存する
+└── Output
+    └── exports/frame_0001.png

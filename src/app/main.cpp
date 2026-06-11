@@ -206,11 +206,11 @@ namespace
     ImGui::BulletText("ペン半径と色を変更する");
     ImGui::BulletText("複数レイヤーを追加・削除する");
     ImGui::BulletText("レイヤー表示/非表示と不透明度を変更する");
+    ImGui::BulletText("現在の撮影フレームをPNG保存する");
 
     ImGui::Separator();
 
     ImGui::Text("まだ未実装:");
-    ImGui::BulletText("画像としての保存");
     ImGui::BulletText("レイヤー名変更");
     ImGui::BulletText("消しゴム");
     ImGui::BulletText("オニオンスキン");

@@ -11,6 +11,10 @@
 #include "drawing/WorkCanvas.h"
 #include "project/RenderFormat.h"
 
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
+
 #include "imgui.h"
 
 #include <algorithm>
@@ -254,6 +258,50 @@ namespace perapera
         isDrawing_ = false;
     }
 
+    void DrawingCanvasPanel::exportCurrentRenderFramePng(
+    const WorkCanvas& workCanvas,
+    const RenderFormat& renderFormat
+)
+{
+    std::ostringstream fileNameStream;
+
+    fileNameStream
+        << "frame_"
+        << std::setw(4)
+        << std::setfill('0')
+        << nextPngExportNumber_
+        << ".png";
+
+    const std::filesystem::path outputPath =
+        std::filesystem::path("exports") / fileNameStream.str();
+
+    PngExportOptions options;
+    options.transparentBackground = pngTransparentBackground_;
+
+    std::string errorMessage;
+
+    const bool succeeded = PngExporter::exportCenteredRenderFrame(
+        outputPath,
+        workCanvas,
+        renderFormat,
+        layers_,
+        options,
+        errorMessage
+    );
+
+    if (succeeded)
+    {
+        lastPngExportSucceeded_ = true;
+        lastPngExportMessage_ = "PNG保存成功: " + outputPath.string();
+        ++nextPngExportNumber_;
+    }
+    else
+    {
+        lastPngExportSucceeded_ = false;
+        lastPngExportMessage_ = "PNG保存失敗: " + errorMessage;
+    }
+}
+
     void DrawingCanvasPanel::drawLayerPanel()
 {
     ImGui::Begin("レイヤー");
@@ -377,15 +425,48 @@ namespace perapera
             brush_.color.a
         };
 
-        if (ImGui::ColorEdit4("ペン色", color))
-        {
-            brush_.color.r = color[0];
-            brush_.color.g = color[1];
-            brush_.color.b = color[2];
-            brush_.color.a = color[3];
-        }
+if (ImGui::ColorEdit4("ペン色", color))
+{
+    brush_.color.r = color[0];
+    brush_.color.g = color[1];
+    brush_.color.b = color[2];
+    brush_.color.a = color[3];
+}
 
-        DrawingLayer* currentLayer = activeLayer();
+ImGui::Separator();
+
+ImGui::Text("PNG保存");
+
+ImGui::Checkbox("透明背景で保存", &pngTransparentBackground_);
+
+if (ImGui::Button("現在の撮影フレームをPNG保存"))
+{
+    exportCurrentRenderFramePng(workCanvas, renderFormat);
+}
+
+if (!lastPngExportMessage_.empty())
+{
+    if (lastPngExportSucceeded_)
+    {
+        ImGui::TextColored(
+            ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+            "%s",
+            lastPngExportMessage_.c_str()
+        );
+    }
+    else
+    {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+            "%s",
+            lastPngExportMessage_.c_str()
+        );
+    }
+}
+
+ImGui::Separator();
+
+DrawingLayer* currentLayer = activeLayer();
 
         if (currentLayer != nullptr)
         {

@@ -69,10 +69,17 @@ add_executable(perapera_anime_maker
     src/ui/CanvasPreview.cpp
     src/ui/DrawingCanvasPanel.h
     src/ui/DrawingCanvasPanel.cpp
+    src/export/PngExporter.h
+    src/export/PngExporter.cpp
 )
 
 target_include_directories(perapera_anime_maker PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb
+)
+
+target_sources(perapera_anime_maker PRIVATE
+    src/export/PngExporter.cpp
 )
 
 target_link_libraries(perapera_anime_maker PRIVATE
