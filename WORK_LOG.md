@@ -166,3 +166,28 @@ perapera-anime-maker/
     └── ui/
         ├── DrawingCanvasPanel.h
         └── DrawingCanvasPanel.cpp
+
+## 2026-06-12
+
+### 作業概要
+
+- Phase 3Bとして、簡易レイヤー構造を追加した。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── CMakeLists.txt
+├── DECISIONS.md
+├── WORK_LOG.md
+└── src/
+    ├── app/
+    │   └── main.cpp
+    ├── drawing/
+    │   ├── DrawingLayer.h
+    │   └── DrawingLayer.cpp
+    └── ui/
+        ├── DrawingCanvasPanel.h
+        └── DrawingCanvasPanel.cpp
+
+        

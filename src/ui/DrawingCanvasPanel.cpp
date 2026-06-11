@@ -1,8 +1,10 @@
-
 // src/ui/DrawingCanvasPanel.cpp
 //
 // DrawingCanvasPanelの実装です。
 // ImGuiのDrawListを使って、作画キャンバス、撮影フレーム、ユーザーの線を描きます。
+//
+// Phase 3Bでは、複数レイヤーを扱います。
+// レイヤーごとに表示/非表示、不透明度、描き込み先を管理します。
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -13,6 +15,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
+#include <utility>
 
 namespace perapera
 {
@@ -32,12 +36,16 @@ namespace perapera
             return dx * dx + dy * dy;
         }
 
-        ImU32 toImGuiColor(ColorRgba color)
+        ImU32 toImGuiColor(ColorRgba color, float layerOpacity)
         {
+            // レイヤーの不透明度をストロークのアルファに掛ける。
+            // これにより、レイヤー全体を薄く表示できる。
+            const float finalAlpha = std::clamp(color.a * layerOpacity, 0.0f, 1.0f);
+
             const int r = static_cast<int>(std::clamp(color.r, 0.0f, 1.0f) * 255.0f);
             const int g = static_cast<int>(std::clamp(color.g, 0.0f, 1.0f) * 255.0f);
             const int b = static_cast<int>(std::clamp(color.b, 0.0f, 1.0f) * 255.0f);
-            const int a = static_cast<int>(std::clamp(color.a, 0.0f, 1.0f) * 255.0f);
+            const int a = static_cast<int>(finalAlpha * 255.0f);
 
             return IM_COL32(r, g, b, a);
         }
@@ -84,7 +92,8 @@ namespace perapera
             ImDrawList* drawList,
             const Stroke& stroke,
             ImVec2 canvasMin,
-            float scale
+            float scale,
+            float layerOpacity
         )
         {
             if (!stroke.hasDrawablePoints())
@@ -92,7 +101,7 @@ namespace perapera
                 return;
             }
 
-            const ImU32 color = toImGuiColor(stroke.color);
+            const ImU32 color = toImGuiColor(stroke.color, layerOpacity);
 
             // キャンバスが縮小表示されているときは、線の太さも縮小する。
             // ただし細すぎると見えないので、最低1.0pxは確保する。
@@ -113,20 +122,239 @@ namespace perapera
                 drawList->AddLine(a, b, color, thickness);
             }
         }
+
+        std::string makeDefaultLayerName(int layerNumber)
+        {
+            return "Layer " + std::to_string(layerNumber);
+        }
     }
 
-    void DrawingCanvasPanel::clearAllStrokes()
+    DrawingCanvasPanel::DrawingCanvasPanel()
     {
-        strokes_.clear();
+        DrawingLayer firstLayer;
+        firstLayer.name = "Layer 1";
+        firstLayer.visible = true;
+        firstLayer.opacity = 1.0f;
+
+        layers_.push_back(firstLayer);
+        activeLayerIndex_ = 0;
+        nextLayerNumber_ = 2;
+    }
+
+    void DrawingCanvasPanel::clampActiveLayerIndex()
+    {
+        if (layers_.empty())
+        {
+            activeLayerIndex_ = -1;
+            return;
+        }
+
+        activeLayerIndex_ = std::clamp(
+            activeLayerIndex_,
+            0,
+            static_cast<int>(layers_.size()) - 1
+        );
+    }
+
+    DrawingLayer* DrawingCanvasPanel::activeLayer()
+    {
+        clampActiveLayerIndex();
+
+        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(layers_.size()))
+        {
+            return nullptr;
+        }
+
+        return &layers_[static_cast<std::size_t>(activeLayerIndex_)];
+    }
+
+    const DrawingLayer* DrawingCanvasPanel::activeLayer() const
+    {
+        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(layers_.size()))
+        {
+            return nullptr;
+        }
+
+        return &layers_[static_cast<std::size_t>(activeLayerIndex_)];
+    }
+
+    void DrawingCanvasPanel::addLayer()
+    {
+        DrawingLayer layer;
+        layer.name = makeDefaultLayerName(nextLayerNumber_);
+        layer.visible = true;
+        layer.opacity = 1.0f;
+
+        ++nextLayerNumber_;
+
+        // 新しいレイヤーは一番手前に追加する。
+        layers_.push_back(layer);
+        activeLayerIndex_ = static_cast<int>(layers_.size()) - 1;
+    }
+
+    void DrawingCanvasPanel::deleteActiveLayer()
+    {
+        // 最低1枚は残す。
+        // 0枚になると描き込み先がなくなって扱いづらいため。
+        if (layers_.size() <= 1)
+        {
+            return;
+        }
+
+        clampActiveLayerIndex();
+
+        layers_.erase(layers_.begin() + activeLayerIndex_);
+        clampActiveLayerIndex();
+    }
+
+    void DrawingCanvasPanel::moveActiveLayerUp()
+    {
+        clampActiveLayerIndex();
+
+        // 上へ移動 = 画面上で手前にする。
+        if (activeLayerIndex_ < 0 || activeLayerIndex_ >= static_cast<int>(layers_.size()) - 1)
+        {
+            return;
+        }
+
+        std::swap(
+            layers_[static_cast<std::size_t>(activeLayerIndex_)],
+            layers_[static_cast<std::size_t>(activeLayerIndex_ + 1)]
+        );
+
+        ++activeLayerIndex_;
+    }
+
+    void DrawingCanvasPanel::moveActiveLayerDown()
+    {
+        clampActiveLayerIndex();
+
+        // 下へ移動 = 画面上で奥にする。
+        if (activeLayerIndex_ <= 0)
+        {
+            return;
+        }
+
+        std::swap(
+            layers_[static_cast<std::size_t>(activeLayerIndex_)],
+            layers_[static_cast<std::size_t>(activeLayerIndex_ - 1)]
+        );
+
+        --activeLayerIndex_;
+    }
+
+    void DrawingCanvasPanel::clearAllLayers()
+    {
+        for (DrawingLayer& layer : layers_)
+        {
+            layer.clear();
+        }
+
         currentStroke_.points.clear();
         isDrawing_ = false;
     }
 
+    void DrawingCanvasPanel::drawLayerPanel()
+    {
+        ImGui::Begin("レイヤー");
+
+        ImGui::Text("描き込み先レイヤーを選びます。");
+        ImGui::Text("上のレイヤーほど手前に表示されます。");
+
+        ImGui::Separator();
+
+        if (ImGui::Button("レイヤー追加"))
+        {
+            addLayer();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("削除"))
+        {
+            deleteActiveLayer();
+        }
+
+        if (ImGui::Button("上へ"))
+        {
+            moveActiveLayerUp();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("下へ"))
+        {
+            moveActiveLayerDown();
+        }
+
+        ImGui::Separator();
+
+        // UI上では手前のレイヤーを上に表示したいので、
+        // 配列の後ろから順に表示する。
+        for (int index = static_cast<int>(layers_.size()) - 1; index >= 0; --index)
+        {
+            DrawingLayer& layer = layers_[static_cast<std::size_t>(index)];
+
+            ImGui::PushID(index);
+
+            const bool isActive = (index == activeLayerIndex_);
+
+            if (ImGui::Selectable(layer.name.c_str(), isActive))
+            {
+                activeLayerIndex_ = index;
+            }
+
+            ImGui::SameLine();
+
+            ImGui::Checkbox("表示", &layer.visible);
+
+            ImGui::SameLine();
+
+            ImGui::SetNextItemWidth(100.0f);
+            ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f);
+
+            ImGui::Text("ストローク数: %d", static_cast<int>(layer.strokes.size()));
+
+            ImGui::PopID();
+        }
+
+        ImGui::Separator();
+
+        DrawingLayer* layer = activeLayer();
+
+        if (layer != nullptr)
+        {
+            ImGui::Text("現在の描き込み先: %s", layer->name.c_str());
+
+            if (!layer->visible)
+            {
+                ImGui::TextColored(
+                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                    "注意: このレイヤーは非表示なので描き込みできません。"
+                );
+            }
+
+            if (ImGui::Button("アクティブレイヤーを消去"))
+            {
+                layer->clear();
+            }
+        }
+
+        if (ImGui::Button("全レイヤー消去"))
+        {
+            clearAllLayers();
+        }
+
+        ImGui::End();
+    }
+
     void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, const RenderFormat& renderFormat)
     {
+        drawLayerPanel();
+
         ImGui::Begin("簡易作画キャンバス");
 
-        ImGui::Text("左ドラッグで線を描けます。まだ保存・レイヤー・消しゴムはありません。");
+        ImGui::Text("左ドラッグで、選択中の表示レイヤーに線を描けます。");
 
         ImGui::SliderFloat("ペン半径 px", &brush_.radiusPx, 1.0f, 40.0f);
 
@@ -145,13 +373,12 @@ namespace perapera
             brush_.color.a = color[3];
         }
 
-        if (ImGui::Button("全消去"))
-        {
-            clearAllStrokes();
-        }
+        DrawingLayer* currentLayer = activeLayer();
 
-        ImGui::SameLine();
-        ImGui::Text("ストローク数: %d", static_cast<int>(strokes_.size()));
+        if (currentLayer != nullptr)
+        {
+            ImGui::Text("描き込み先: %s", currentLayer->name.c_str());
+        }
 
         ImGui::Separator();
 
@@ -234,17 +461,30 @@ namespace perapera
             );
         }
 
-        // 既存のストロークを描く。
-        for (const Stroke& stroke : strokes_)
+        // 線がキャンバス外にはみ出して見えないように、描画範囲をキャンバス内に制限する。
+        drawList->PushClipRect(canvasMin, canvasMax, true);
+
+        // レイヤーを奥から手前へ描く。
+        for (const DrawingLayer& layer : layers_)
         {
-            drawStroke(drawList, stroke, canvasMin, scale);
+            if (!layer.visible)
+            {
+                continue;
+            }
+
+            for (const Stroke& stroke : layer.strokes)
+            {
+                drawStroke(drawList, stroke, canvasMin, scale, layer.opacity);
+            }
         }
 
         // 描画中のストロークも表示する。
-        if (isDrawing_)
+        if (isDrawing_ && currentLayer != nullptr && currentLayer->visible)
         {
-            drawStroke(drawList, currentStroke_, canvasMin, scale);
+            drawStroke(drawList, currentStroke_, canvasMin, scale, currentLayer->opacity);
         }
+
+        drawList->PopClipRect();
 
         // 撮影フレームを中央に仮表示する。
         const float renderFramePreviewWidth =
@@ -288,7 +528,12 @@ namespace perapera
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
         const bool mouseInsideCanvas = isInsideRect(mousePosition, canvasMin, canvasMax);
 
-        if (isInputAreaHovered
+        const bool canDraw =
+            currentLayer != nullptr
+            && currentLayer->visible;
+
+        if (canDraw
+            && isInputAreaHovered
             && mouseInsideCanvas
             && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
@@ -299,7 +544,7 @@ namespace perapera
             isDrawing_ = true;
         }
 
-        if (isDrawing_ && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        if (canDraw && isDrawing_ && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             if (mouseInsideCanvas)
             {
@@ -321,9 +566,9 @@ namespace perapera
 
         if (isDrawing_ && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
-            if (currentStroke_.hasDrawablePoints())
+            if (canDraw && currentStroke_.hasDrawablePoints())
             {
-                strokes_.push_back(currentStroke_);
+                currentLayer->strokes.push_back(currentStroke_);
             }
 
             currentStroke_.points.clear();

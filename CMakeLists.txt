@@ -1,15 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-# ぺらぺらアニメ作り機
-# C++で手描き2Dアニメ制作ソフトを作るためのプロジェクト。
-#
-# Phase 3Aでは、簡易ペン描画の土台を追加する。
-# まだ画像保存やレイヤーは実装せず、ImGui上にStrokeを描く。
-
-project(PeraperaAnimeMaker
-    VERSION 0.3.0
-    LANGUAGES CXX
-)
+project(PeraperaAnimeMaker VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -42,7 +33,6 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
-
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
 )
@@ -67,6 +57,8 @@ add_executable(perapera_anime_maker
     src/drawing/Brush.cpp
     src/drawing/Stroke.h
     src/drawing/Stroke.cpp
+    src/drawing/DrawingLayer.h
+    src/drawing/DrawingLayer.cpp
     src/drawing/WorkCanvas.h
     src/drawing/WorkCanvas.cpp
 

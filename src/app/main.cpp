@@ -200,23 +200,22 @@ namespace
         ImGui::Separator();
 
         ImGui::Text("この段階でできること:");
-        ImGui::BulletText("作画キャンバスサイズを変更する");
-        ImGui::BulletText("撮影フレームサイズを変更する");
-        ImGui::BulletText("簡易作画キャンバスに左ドラッグで線を描く");
-        ImGui::BulletText("ペン半径と色を変更する");
-        ImGui::BulletText("全消去ボタンでストロークを消す");
+    ImGui::BulletText("作画キャンバスサイズを変更する");
+    ImGui::BulletText("撮影フレームサイズを変更する");
+    ImGui::BulletText("簡易作画キャンバスに左ドラッグで線を描く");
+    ImGui::BulletText("ペン半径と色を変更する");
+    ImGui::BulletText("複数レイヤーを追加・削除する");
+    ImGui::BulletText("レイヤー表示/非表示と不透明度を変更する");
 
-        ImGui::Separator();
+    ImGui::Separator();
 
-        ImGui::Text("まだ未実装:");
-        ImGui::BulletText("画像としての保存");
-        ImGui::BulletText("レイヤー");
-        ImGui::BulletText("消しゴム");
-        ImGui::BulletText("オニオンスキン");
-        ImGui::BulletText("カメラとレンズ");
-        ImGui::BulletText("3D作画補助");
-        ImGui::BulletText("背景画角キャリブレーション");
-        ImGui::BulletText("簡易物理");
+    ImGui::Text("まだ未実装:");
+    ImGui::BulletText("画像としての保存");
+    ImGui::BulletText("レイヤー名変更");
+    ImGui::BulletText("消しゴム");
+    ImGui::BulletText("オニオンスキン");
+    ImGui::BulletText("カメラとレンズ");
+    ImGui::BulletText("3D作画補助");
 
         ImGui::End();
     }

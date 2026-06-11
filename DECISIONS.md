@@ -109,3 +109,23 @@ Phase3A_DrawingModel
 │   └── キャンバス座標上の点の列
 └── DrawingCanvasPanel
     └── ImGui上でStrokeを仮描画する
+
+    ## Decision 009: Add basic drawing layers before PNG export
+
+### 決定
+
+Phase 3Bでは、PNG保存より先に簡易レイヤー構造を追加する。
+
+```text
+Phase3B_LayerModel
+├── DrawingLayer
+│   ├── name
+│   ├── visible
+│   ├── opacity
+│   └── strokes
+└── DrawingCanvasPanel
+    ├── activeLayerIndex
+    ├── addLayer
+    ├── deleteActiveLayer
+    ├── moveActiveLayerUp
+    └── moveActiveLayerDown
