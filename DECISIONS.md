@@ -1,0 +1,83 @@
+# DECISIONS
+
+This file records important project decisions.
+
+## Decision 001: Use C++20
+
+### 理由
+
+- 現代的なC++機能を使える。
+- CMakeと組み合わせて複数環境でビルドしやすい。
+- 将来的な大規模化に対応しやすい。
+
+### 影響
+
+- 古いコンパイラは対象外になる。
+- Visual Studio 2022、最近のClang、最近のGCCを想定する。
+
+## Decision 002: Do not use Qt in the initial phase
+
+### 理由
+
+- Qtは便利だが、LGPL/GPLモジュール管理に注意が必要。
+- 初期段階ではライセンス安全寄りの構成を優先する。
+
+### 影響
+
+- 初期UIはSDL3 + Dear ImGuiを候補にする。
+- 本格的な商用アプリ風UIは後回しにする。
+
+## Decision 003: Do not integrate FFmpeg at Step 0
+
+### 理由
+
+- FFmpegはLGPL/GPL/nonfreeのビルド設定に注意が必要。
+- 初期段階では動画コーデックを本体に組み込まない方が安全。
+
+### 影響
+
+- まずはPNG連番とWAV出力を優先する。
+- MP4化は将来的に外部FFmpegをユーザー指定で呼び出す設計にする。
+
+## Decision 004: Keep 3D as drawing guide only
+
+### 理由
+
+- このソフトの最終表現は手描き2Dアニメである。
+- 3Dは完成映像ではなく、構図、パース、カメラ、動きの補助に使う。
+
+### 影響
+
+- 3Dガイドは最終レンダリングに出さない。
+- 3Dモデルの写実レンダリングは初期実装しない。
+
+## Decision 005: Use Japanese display name and ASCII technical names
+
+### 決定
+
+ソフトの正式な表示名は「ぺらぺらアニメ作り機」とする。
+
+ただし、GitHubリポジトリ名、CMakeプロジェクト名、実行ファイル名は、環境差や文字化けを避けるためASCII名を使う。
+
+```text
+Names
+├── Display name
+│   └── ぺらぺらアニメ作り機
+├── Repository name
+│   └── perapera-anime-maker
+├── CMake project name
+│   └── PeraperaAnimeMaker
+└── Executable name
+    └── perapera_anime_maker
+```
+
+### 理由
+
+- 日本語名を正式名称として扱いたい。
+- しかし、ビルドツール、シェル、GitHub、実行ファイル名では日本語が原因で問題が出る可能性がある。
+- そのため、ユーザーに見える名前と内部技術名を分ける。
+
+### 影響
+
+- READMEやUI表示では「ぺらぺらアニメ作り機」を使う。
+- CMakeやGitHubでは `PeraperaAnimeMaker`、`perapera_anime_maker`、`perapera-anime-maker` を使う。
