@@ -2,9 +2,9 @@
 //
 // このファイルは「ぺらぺらアニメ作り機」のアプリ本体です。
 //
-// Phase 2では、任意サイズの作画キャンバスと撮影フレームの土台を追加します。
-// まだ本格的なペン描画は実装しません。
-// まず「作画キャンバス」と「最終出力フレーム」を別々に管理できるようにします。
+// Phase 3Aでは、簡易ペン描画の土台を追加します。
+// ここでは、DrawingCanvasPanelを画面に表示し、
+// 左ドラッグで仮の作画キャンバス上に線を描けるようにします。
 
 #include <iostream>
 #include <string>
@@ -21,7 +21,6 @@
 
 #include "drawing/WorkCanvas.h"
 #include "project/RenderFormat.h"
-#include "ui/CanvasPreview.h"
 #include "ui/DrawingCanvasPanel.h"
 
 namespace
@@ -72,8 +71,11 @@ namespace
 
     // キャンバス設定用のImGuiパネルを描く。
     //
-    // Phase 2では、このパネルで作画キャンバスの大きさと
-    // 最終出力フレームの大きさを変更できるようにする。
+    // WorkCanvas:
+    // 実際に絵を描く広い紙。
+    //
+    // RenderFormat:
+    // 撮影で切り出して最終出力する映像サイズ。
     void drawCanvasSettingsPanel(
         perapera::WorkCanvas& workCanvas,
         perapera::RenderFormat& renderFormat
@@ -154,14 +156,17 @@ namespace
         ImGui::Text("この段階でできること:");
         ImGui::BulletText("作画キャンバスサイズを変更する");
         ImGui::BulletText("撮影フレームサイズを変更する");
-        ImGui::BulletText("作画キャンバスと撮影フレームを仮表示する");
-        ImGui::BulletText("出力フレームがキャンバスからはみ出す場合に警告する");
+        ImGui::BulletText("簡易作画キャンバスに左ドラッグで線を描く");
+        ImGui::BulletText("ペン半径と色を変更する");
+        ImGui::BulletText("全消去ボタンでストロークを消す");
 
         ImGui::Separator();
 
         ImGui::Text("まだ未実装:");
-        ImGui::BulletText("ペン描画");
+        ImGui::BulletText("画像としての保存");
         ImGui::BulletText("レイヤー");
+        ImGui::BulletText("消しゴム");
+        ImGui::BulletText("オニオンスキン");
         ImGui::BulletText("カメラとレンズ");
         ImGui::BulletText("3D作画補助");
         ImGui::BulletText("背景画角キャリブレーション");
@@ -228,7 +233,11 @@ int main()
 
     perapera::WorkCanvas workCanvas;
     perapera::RenderFormat renderFormat;
-    perapera::CanvasPreview canvasPreview;
+
+    // ここが重要。
+    // Phase 2のCanvasPreviewではなく、
+    // Phase 3AのDrawingCanvasPanelを画面に表示する。
+    perapera::DrawingCanvasPanel drawingCanvasPanel;
 
     while (!shouldQuit)
     {
@@ -282,7 +291,9 @@ int main()
 
         drawDevelopmentStatusPanel();
         drawCanvasSettingsPanel(workCanvas, renderFormat);
-        canvasPreview.draw(workCanvas, renderFormat);
+
+        // ここで簡易作画キャンバスを表示する。
+        drawingCanvasPanel.draw(workCanvas, renderFormat);
 
         if (showDemoWindow)
         {

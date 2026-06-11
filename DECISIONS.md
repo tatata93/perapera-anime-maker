@@ -94,3 +94,18 @@ Phase2DataModel
 │   └── 実際に絵を描く広い紙
 └── RenderFormat
     └── 撮影で切り出して最終的に出力する映像形式
+    ## Decision 008: Store early pen drawing as strokes
+
+### 決定
+
+Phase 3Aでは、簡易ペン描画を画像バッファではなくStrokeの配列として保存する。
+
+```text
+Phase3A_DrawingModel
+├── Brush
+│   ├── ペン半径
+│   └── 色
+├── Stroke
+│   └── キャンバス座標上の点の列
+└── DrawingCanvasPanel
+    └── ImGui上でStrokeを仮描画する

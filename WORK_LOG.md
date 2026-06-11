@@ -140,3 +140,29 @@ perapera-anime-maker/
 ### 判断待ち
 
 - 次に、簡易ペン描画を先に作るか、撮影フレーム切り出しを先に作るか確認する。
+
+
+## 2026-06-12
+
+### 作業概要
+
+- Phase 3Aとして、簡易ペン描画の土台を追加した。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── CMakeLists.txt
+├── DECISIONS.md
+├── WORK_LOG.md
+└── src/
+    ├── app/
+    │   └── main.cpp
+    ├── drawing/
+    │   ├── Brush.h
+    │   ├── Brush.cpp
+    │   ├── Stroke.h
+    │   └── Stroke.cpp
+    └── ui/
+        ├── DrawingCanvasPanel.h
+        └── DrawingCanvasPanel.cpp
