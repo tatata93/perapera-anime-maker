@@ -30,7 +30,11 @@ Status
 │   ├── documentation files
 │   ├── license policy
 │   └── work log
-└── No external libraries yet
+├── Phase 1
+│   ├── SDL3 window
+│   ├── Dear ImGui menu
+│   └── minimal editor status panel
+└── Drawing features are not implemented yet
 ```
 
 ## Build

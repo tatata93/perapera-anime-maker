@@ -63,3 +63,22 @@ perapera-anime-maker/
 
 - 指示者がPhase 1に進むか判断する。
 - MIT Licenseのままでよいか確認する。
+## 2026-06-12
+
+### 作業概要
+
+- Phase 1として、SDL3とDear ImGuiを追加した。
+- SDL3でウィンドウを作成し、Dear ImGuiで最小UIを表示する構成にした。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── CMakeLists.txt
+├── DECISIONS.md
+├── DEPENDENCIES.md
+├── WORK_LOG.md
+└── src/
+    └── app/
+        └── main.cpp
+
