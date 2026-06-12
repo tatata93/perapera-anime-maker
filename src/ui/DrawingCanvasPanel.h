@@ -2,9 +2,9 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Jでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Kでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
-// Undo/Redo、消しゴムに対応します。
+// Undo/Redo、消しゴム、タイムラインUIに対応します。
 
 #pragma once
 
@@ -201,6 +201,8 @@ namespace perapera
         void moveActiveLayerDown();
 
         void drawFramePanel(const RenderFormat& renderFormat);
+
+        void drawTimelinePanel(const RenderFormat& renderFormat);
 
         void drawLayerPanel();
 

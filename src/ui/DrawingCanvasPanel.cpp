@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Jでは、消しゴムに対応します。
+// Phase 3Kでは、タイムラインUIに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -18,6 +18,7 @@
 // - 作業内容をプロジェクトファイルとして保存/読み込みする
 // - 描画、フレーム操作、レイヤー操作をUndo/Redoする
 // - 消しゴムで選択中レイヤー上の線を消す
+// - タイムラインでフレーム・保持コマ数・再生位置を確認する
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -1684,7 +1685,7 @@ namespace perapera
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3IではUndo/Redoができます。");
+        ImGui::Text("Phase 3KではタイムラインUIで流れを確認できます。");
 
         ImGui::Separator();
 
@@ -1824,6 +1825,223 @@ namespace perapera
         ImGui::End();
     }
 
+    void DrawingCanvasPanel::drawTimelinePanel(const RenderFormat& renderFormat)
+    {
+        ImGui::Begin("タイムライン");
+
+        if (frames_.empty())
+        {
+            ImGui::Text("フレームがありません。");
+            ImGui::End();
+            return;
+        }
+
+        const int totalTimelineFrames = calculatePngSequenceImageCount(frames_);
+        const int playbackFps = std::clamp(renderFormat.framesPerSecond, 1, 240);
+        const float totalSeconds =
+            static_cast<float>(totalTimelineFrames) / static_cast<float>(playbackFps);
+
+        ImGui::Text(
+            "合計: %dコマ / %.2f秒 / %d fps",
+            totalTimelineFrames,
+            totalSeconds,
+            playbackFps
+        );
+
+        ImGui::Text(
+            "現在: Frame %d / %d",
+            activeFrameIndex_ + 1,
+            static_cast<int>(frames_.size())
+        );
+
+        if (ImGui::Button("先頭"))
+        {
+            stopPlayback();
+            activeFrameIndex_ = 0;
+            activeLayerIndex_ = 0;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+            isErasing_ = false;
+            hasPreviousEraserPoint_ = false;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("前"))
+        {
+            moveToPreviousFrame();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("次"))
+        {
+            moveToNextFrame();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button(isPlaybackPlaying_ ? "停止" : "再生"))
+        {
+            if (isPlaybackPlaying_)
+            {
+                stopPlayback();
+            }
+            else
+            {
+                resetPlaybackProgress();
+                currentStroke_.points.clear();
+                isDrawing_ = false;
+                isErasing_ = false;
+                hasPreviousEraserPoint_ = false;
+                isPlaybackPlaying_ = true;
+            }
+        }
+
+        ImGui::SameLine();
+        ImGui::Checkbox("ループ", &playbackLoopEnabled_);
+
+        AnimationFrame* currentFrame = activeFrame();
+
+        if (currentFrame != nullptr)
+        {
+            int editedDurationFrames = currentFrame->durationFrames;
+            ImGui::SetNextItemWidth(180.0f);
+
+            if (ImGui::SliderInt("選択フレームの保持コマ数", &editedDurationFrames, 1, 24)
+                && editedDurationFrames != currentFrame->durationFrames)
+            {
+                pushUndoSnapshot("タイムライン保持コマ数変更");
+                currentFrame->durationFrames = editedDurationFrames;
+            }
+        }
+
+        ImGui::Separator();
+
+        ImGui::Text("横長の箱がフレームです。箱の幅が保持コマ数を表します。");
+
+        const ImVec2 childSize(0.0f, 140.0f);
+
+        ImGui::BeginChild(
+            "TimelineScrollArea",
+            childSize,
+            true,
+            ImGuiWindowFlags_HorizontalScrollbar
+        );
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        constexpr float PixelsPerHeldFrame = 28.0f;
+        constexpr float MinimumFrameBlockWidth = 56.0f;
+        constexpr float FrameBlockHeight = 52.0f;
+        constexpr float FrameBlockGap = 6.0f;
+
+        for (int index = 0; index < static_cast<int>(frames_.size()); ++index)
+        {
+            AnimationFrame& frame = frames_[static_cast<std::size_t>(index)];
+            const int holdFrames = std::max(1, frame.durationFrames);
+            const float blockWidth = std::max(
+                MinimumFrameBlockWidth,
+                static_cast<float>(holdFrames) * PixelsPerHeldFrame
+            );
+
+            ImGui::PushID(index);
+
+            ImGui::InvisibleButton(
+                "TimelineFrameBlock",
+                ImVec2(blockWidth, FrameBlockHeight)
+            );
+
+            const ImVec2 blockMin = ImGui::GetItemRectMin();
+            const ImVec2 blockMax = ImGui::GetItemRectMax();
+            const bool isHovered = ImGui::IsItemHovered();
+            const bool isActive = (index == activeFrameIndex_);
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+            {
+                stopPlayback();
+                activeFrameIndex_ = index;
+                activeLayerIndex_ = 0;
+                currentStroke_.points.clear();
+                isDrawing_ = false;
+                isErasing_ = false;
+                hasPreviousEraserPoint_ = false;
+            }
+
+            const ImU32 fillColor = isActive
+                ? IM_COL32(70, 120, 190, 255)
+                : IM_COL32(50, 54, 64, 255);
+
+            const ImU32 borderColor = isActive
+                ? IM_COL32(255, 220, 80, 255)
+                : IM_COL32(130, 140, 160, 255);
+
+            const ImU32 hoveredBorderColor = IM_COL32(230, 240, 255, 255);
+
+            drawList->AddRectFilled(blockMin, blockMax, fillColor, 6.0f);
+            drawList->AddRect(
+                blockMin,
+                blockMax,
+                isHovered ? hoveredBorderColor : borderColor,
+                6.0f,
+                0,
+                isActive ? 3.0f : 1.5f
+            );
+
+            const std::string frameLabel =
+                std::to_string(index + 1) + ": " + frame.name;
+
+            const std::string durationLabel =
+                std::to_string(holdFrames) + "コマ";
+
+            drawList->AddText(
+                ImVec2(blockMin.x + 8.0f, blockMin.y + 8.0f),
+                IM_COL32(255, 255, 255, 255),
+                frameLabel.c_str()
+            );
+
+            drawList->AddText(
+                ImVec2(blockMin.x + 8.0f, blockMin.y + 28.0f),
+                IM_COL32(210, 220, 235, 255),
+                durationLabel.c_str()
+            );
+
+            if (isActive)
+            {
+                float markerRatio = 0.0f;
+
+                if (isPlaybackPlaying_)
+                {
+                    markerRatio = std::clamp(
+                        static_cast<float>(playbackSubFrameCounter_) /
+                            static_cast<float>(holdFrames),
+                        0.0f,
+                        1.0f
+                    );
+                }
+
+                const float markerX = blockMin.x + blockWidth * markerRatio;
+
+                drawList->AddLine(
+                    ImVec2(markerX, blockMin.y - 8.0f),
+                    ImVec2(markerX, blockMax.y + 8.0f),
+                    IM_COL32(255, 80, 80, 255),
+                    3.0f
+                );
+            }
+
+            ImGui::PopID();
+
+            if (index + 1 < static_cast<int>(frames_.size()))
+            {
+                ImGui::SameLine(0.0f, FrameBlockGap);
+            }
+        }
+
+        ImGui::EndChild();
+        ImGui::End();
+    }
+
     void DrawingCanvasPanel::drawLayerPanel()
     {
         ImGui::Begin("レイヤー");
@@ -1953,6 +2171,7 @@ namespace perapera
         updatePlayback(renderFormat);
 
         drawFramePanel(renderFormat);
+        drawTimelinePanel(renderFormat);
         drawLayerPanel();
 
         ImGui::Begin("簡易作画キャンバス");
