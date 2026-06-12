@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Gでは、PNG連番保存に対応します。
+// Phase 3Hでは、プロジェクト保存/読み込みに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -15,6 +15,7 @@
 // - 現在フレームをPNG保存する
 // - FPSと保持コマ数に従って再生プレビューする
 // - 全フレームをdurationFrames込みでPNG連番保存する
+// - 作業内容をプロジェクトファイルとして保存/読み込みする
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -26,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -81,6 +83,422 @@ namespace perapera
             }
 
             return imageCount;
+        }
+
+        std::filesystem::path findProjectRootFromCurrentPath()
+        {
+            std::error_code currentPathError;
+            std::filesystem::path currentPath =
+                std::filesystem::current_path(currentPathError);
+
+            if (currentPathError)
+            {
+                return std::filesystem::path(".");
+            }
+
+            std::filesystem::path candidate = currentPath;
+
+            while (!candidate.empty())
+            {
+                std::error_code existsError;
+
+                const bool hasCMakeLists =
+                    std::filesystem::exists(candidate / "CMakeLists.txt", existsError);
+
+                existsError.clear();
+
+                const bool hasSrcDirectory =
+                    std::filesystem::exists(candidate / "src", existsError);
+
+                if (hasCMakeLists && hasSrcDirectory)
+                {
+                    return candidate;
+                }
+
+                const std::filesystem::path parent = candidate.parent_path();
+
+                if (parent == candidate)
+                {
+                    break;
+                }
+
+                candidate = parent;
+            }
+
+            return currentPath;
+        }
+
+        std::filesystem::path makeProjectFilePathFromProjectRoot(
+            const std::string& projectFilePath
+        )
+        {
+            const std::filesystem::path path(projectFilePath);
+
+            if (path.is_absolute())
+            {
+                return path;
+            }
+
+            return findProjectRootFromCurrentPath() / path;
+        }
+
+
+        bool readExpectedKeyword(
+            std::istream& input,
+            const std::string& expectedKeyword,
+            std::string& errorMessage
+        )
+        {
+            std::string actualKeyword;
+
+            if (!(input >> actualKeyword))
+            {
+                errorMessage = "プロジェクト読み込み失敗: "
+                    + expectedKeyword
+                    + " を読む前にファイル終端に到達しました。";
+                return false;
+            }
+
+            if (actualKeyword != expectedKeyword)
+            {
+                errorMessage = "プロジェクト読み込み失敗: "
+                    + expectedKeyword
+                    + " が必要な場所で "
+                    + actualKeyword
+                    + " を読みました。";
+                return false;
+            }
+
+            return true;
+        }
+
+        void writeProjectFileToStream(
+            std::ostream& output,
+            const WorkCanvas& workCanvas,
+            const RenderFormat& renderFormat,
+            const Brush& brush,
+            const std::vector<AnimationFrame>& frames
+        )
+        {
+            output << "PERAPERA_ANIME_MAKER_PROJECT_V1\n";
+
+            output
+                << "WORK_CANVAS "
+                << workCanvas.widthPx
+                << ' '
+                << workCanvas.heightPx
+                << "\n";
+
+            output
+                << "RENDER_FORMAT "
+                << renderFormat.outputWidthPx
+                << ' '
+                << renderFormat.outputHeightPx
+                << ' '
+                << renderFormat.framesPerSecond
+                << ' '
+                << renderFormat.pixelAspectRatio
+                << "\n";
+
+            output
+                << "BRUSH "
+                << brush.radiusPx
+                << ' '
+                << brush.color.r
+                << ' '
+                << brush.color.g
+                << ' '
+                << brush.color.b
+                << ' '
+                << brush.color.a
+                << "\n";
+
+            output << "FRAMES " << frames.size() << "\n";
+
+            for (const AnimationFrame& frame : frames)
+            {
+                output
+                    << "FRAME "
+                    << std::quoted(frame.name)
+                    << ' '
+                    << frame.durationFrames
+                    << ' '
+                    << frame.layers.size()
+                    << "\n";
+
+                for (const DrawingLayer& layer : frame.layers)
+                {
+                    output
+                        << "LAYER "
+                        << std::quoted(layer.name)
+                        << ' '
+                        << (layer.visible ? 1 : 0)
+                        << ' '
+                        << layer.opacity
+                        << ' '
+                        << layer.strokes.size()
+                        << "\n";
+
+                    for (const Stroke& stroke : layer.strokes)
+                    {
+                        output
+                            << "STROKE "
+                            << stroke.radiusPx
+                            << ' '
+                            << stroke.color.r
+                            << ' '
+                            << stroke.color.g
+                            << ' '
+                            << stroke.color.b
+                            << ' '
+                            << stroke.color.a
+                            << ' '
+                            << stroke.points.size()
+                            << "\n";
+
+                        for (const CanvasPoint& point : stroke.points)
+                        {
+                            output
+                                << "POINT "
+                                << point.x
+                                << ' '
+                                << point.y
+                                << "\n";
+                        }
+
+                        output << "END_STROKE\n";
+                    }
+
+                    output << "END_LAYER\n";
+                }
+
+                output << "END_FRAME\n";
+            }
+
+            output << "END_PROJECT\n";
+        }
+
+        bool readProjectFileFromStream(
+            std::istream& input,
+            WorkCanvas& workCanvas,
+            RenderFormat& renderFormat,
+            Brush& brush,
+            std::vector<AnimationFrame>& frames,
+            std::string& errorMessage
+        )
+        {
+            if (!readExpectedKeyword(input, "PERAPERA_ANIME_MAKER_PROJECT_V1", errorMessage))
+            {
+                return false;
+            }
+
+            int loadedCanvasWidth = 0;
+            int loadedCanvasHeight = 0;
+
+            if (!readExpectedKeyword(input, "WORK_CANVAS", errorMessage))
+            {
+                return false;
+            }
+
+            if (!(input >> loadedCanvasWidth >> loadedCanvasHeight))
+            {
+                errorMessage = "プロジェクト読み込み失敗: 作画キャンバス設定を読めません。";
+                return false;
+            }
+
+            int loadedOutputWidth = 0;
+            int loadedOutputHeight = 0;
+            int loadedFps = 0;
+            float loadedPixelAspectRatio = 1.0f;
+
+            if (!readExpectedKeyword(input, "RENDER_FORMAT", errorMessage))
+            {
+                return false;
+            }
+
+            if (!(input >> loadedOutputWidth >> loadedOutputHeight >> loadedFps >> loadedPixelAspectRatio))
+            {
+                errorMessage = "プロジェクト読み込み失敗: 撮影フレーム設定を読めません。";
+                return false;
+            }
+
+            Brush loadedBrush;
+
+            if (!readExpectedKeyword(input, "BRUSH", errorMessage))
+            {
+                return false;
+            }
+
+            if (!(input
+                >> loadedBrush.radiusPx
+                >> loadedBrush.color.r
+                >> loadedBrush.color.g
+                >> loadedBrush.color.b
+                >> loadedBrush.color.a))
+            {
+                errorMessage = "プロジェクト読み込み失敗: ブラシ設定を読めません。";
+                return false;
+            }
+
+            int frameCount = 0;
+
+            if (!readExpectedKeyword(input, "FRAMES", errorMessage))
+            {
+                return false;
+            }
+
+            if (!(input >> frameCount) || frameCount <= 0)
+            {
+                errorMessage = "プロジェクト読み込み失敗: フレーム数が不正です。";
+                return false;
+            }
+
+            std::vector<AnimationFrame> loadedFrames;
+            loadedFrames.reserve(static_cast<std::size_t>(frameCount));
+
+            for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex)
+            {
+                if (!readExpectedKeyword(input, "FRAME", errorMessage))
+                {
+                    return false;
+                }
+
+                AnimationFrame frame;
+                int layerCount = 0;
+
+                if (!(input >> std::quoted(frame.name) >> frame.durationFrames >> layerCount)
+                    || layerCount <= 0)
+                {
+                    errorMessage = "プロジェクト読み込み失敗: フレーム情報が不正です。";
+                    return false;
+                }
+
+                frame.durationFrames = std::clamp(frame.durationFrames, 1, 240);
+                frame.layers.clear();
+                frame.layers.reserve(static_cast<std::size_t>(layerCount));
+
+                for (int layerIndex = 0; layerIndex < layerCount; ++layerIndex)
+                {
+                    if (!readExpectedKeyword(input, "LAYER", errorMessage))
+                    {
+                        return false;
+                    }
+
+                    DrawingLayer layer;
+                    int visibleValue = 1;
+                    int strokeCount = 0;
+
+                    if (!(input
+                        >> std::quoted(layer.name)
+                        >> visibleValue
+                        >> layer.opacity
+                        >> strokeCount)
+                        || strokeCount < 0)
+                    {
+                        errorMessage = "プロジェクト読み込み失敗: レイヤー情報が不正です。";
+                        return false;
+                    }
+
+                    layer.visible = (visibleValue != 0);
+                    layer.opacity = std::clamp(layer.opacity, 0.0f, 1.0f);
+                    layer.strokes.clear();
+                    layer.strokes.reserve(static_cast<std::size_t>(strokeCount));
+
+                    for (int strokeIndex = 0; strokeIndex < strokeCount; ++strokeIndex)
+                    {
+                        if (!readExpectedKeyword(input, "STROKE", errorMessage))
+                        {
+                            return false;
+                        }
+
+                        Stroke stroke;
+                        int pointCount = 0;
+
+                        if (!(input
+                            >> stroke.radiusPx
+                            >> stroke.color.r
+                            >> stroke.color.g
+                            >> stroke.color.b
+                            >> stroke.color.a
+                            >> pointCount)
+                            || pointCount < 0)
+                        {
+                            errorMessage = "プロジェクト読み込み失敗: ストローク情報が不正です。";
+                            return false;
+                        }
+
+                        stroke.radiusPx = std::clamp(stroke.radiusPx, 0.1f, 512.0f);
+                        stroke.color.r = std::clamp(stroke.color.r, 0.0f, 1.0f);
+                        stroke.color.g = std::clamp(stroke.color.g, 0.0f, 1.0f);
+                        stroke.color.b = std::clamp(stroke.color.b, 0.0f, 1.0f);
+                        stroke.color.a = std::clamp(stroke.color.a, 0.0f, 1.0f);
+                        stroke.points.reserve(static_cast<std::size_t>(pointCount));
+
+                        for (int pointIndex = 0; pointIndex < pointCount; ++pointIndex)
+                        {
+                            if (!readExpectedKeyword(input, "POINT", errorMessage))
+                            {
+                                return false;
+                            }
+
+                            CanvasPoint point;
+
+                            if (!(input >> point.x >> point.y))
+                            {
+                                errorMessage = "プロジェクト読み込み失敗: 点情報が不正です。";
+                                return false;
+                            }
+
+                            stroke.points.push_back(point);
+                        }
+
+                        if (!readExpectedKeyword(input, "END_STROKE", errorMessage))
+                        {
+                            return false;
+                        }
+
+                        layer.strokes.push_back(stroke);
+                    }
+
+                    if (!readExpectedKeyword(input, "END_LAYER", errorMessage))
+                    {
+                        return false;
+                    }
+
+                    frame.layers.push_back(layer);
+                }
+
+                if (!readExpectedKeyword(input, "END_FRAME", errorMessage))
+                {
+                    return false;
+                }
+
+                loadedFrames.push_back(frame);
+            }
+
+            if (!readExpectedKeyword(input, "END_PROJECT", errorMessage))
+            {
+                return false;
+            }
+
+            workCanvas.widthPx = std::clamp(loadedCanvasWidth, 16, 32768);
+            workCanvas.heightPx = std::clamp(loadedCanvasHeight, 16, 32768);
+
+            renderFormat.outputWidthPx = std::clamp(loadedOutputWidth, 16, 16384);
+            renderFormat.outputHeightPx = std::clamp(loadedOutputHeight, 16, 16384);
+            renderFormat.framesPerSecond = std::clamp(loadedFps, 1, 240);
+            renderFormat.pixelAspectRatio = std::clamp(loadedPixelAspectRatio, 0.1f, 10.0f);
+
+            loadedBrush.radiusPx = std::clamp(loadedBrush.radiusPx, 0.1f, 512.0f);
+            loadedBrush.color.r = std::clamp(loadedBrush.color.r, 0.0f, 1.0f);
+            loadedBrush.color.g = std::clamp(loadedBrush.color.g, 0.0f, 1.0f);
+            loadedBrush.color.b = std::clamp(loadedBrush.color.b, 0.0f, 1.0f);
+            loadedBrush.color.a = std::clamp(loadedBrush.color.a, 0.0f, 1.0f);
+
+            brush = loadedBrush;
+            frames = loadedFrames;
+
+            return true;
         }
 
         float distanceSquared(CanvasPoint a, CanvasPoint b)
@@ -774,7 +1192,139 @@ namespace perapera
             + std::to_string(exportedImageCount)
             + "枚";
 
+
         ++nextPngSequenceExportNumber_;
+    }
+
+    void DrawingCanvasPanel::saveProjectFile(
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat
+    )
+    {
+        stopPlayback();
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+
+        std::error_code createDirectoryError;
+        const std::filesystem::path projectPath =
+            makeProjectFilePathFromProjectRoot(projectFilePath_);
+
+        if (projectPath.has_parent_path())
+        {
+            std::filesystem::create_directories(
+                projectPath.parent_path(),
+                createDirectoryError
+            );
+        }
+
+        if (createDirectoryError)
+        {
+            lastProjectFileSucceeded_ = false;
+            lastProjectFileMessage_ =
+                "プロジェクト保存失敗: フォルダを作れません: "
+                + createDirectoryError.message();
+            return;
+        }
+
+        std::ofstream output(projectPath);
+
+        if (!output)
+        {
+            lastProjectFileSucceeded_ = false;
+            lastProjectFileMessage_ =
+                "プロジェクト保存失敗: ファイルを開けません: "
+                + projectPath.string();
+            return;
+        }
+
+        writeProjectFileToStream(
+            output,
+            workCanvas,
+            renderFormat,
+            brush_,
+            frames_
+        );
+
+        if (!output)
+        {
+            lastProjectFileSucceeded_ = false;
+            lastProjectFileMessage_ = "プロジェクト保存失敗: 書き込み中に失敗しました。";
+            return;
+        }
+
+        lastProjectFileSucceeded_ = true;
+        lastProjectFileMessage_ = "プロジェクト保存成功: " + projectPath.string();
+    }
+
+    void DrawingCanvasPanel::loadProjectFile(
+        WorkCanvas& workCanvas,
+        RenderFormat& renderFormat
+    )
+    {
+        stopPlayback();
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+
+        const std::filesystem::path projectPath =
+            makeProjectFilePathFromProjectRoot(projectFilePath_);
+
+        std::ifstream input(projectPath);
+
+        if (!input)
+        {
+            lastProjectFileSucceeded_ = false;
+            lastProjectFileMessage_ =
+                "プロジェクト読み込み失敗: ファイルを開けません: "
+                + projectPath.string();
+            return;
+        }
+
+        std::string errorMessage;
+        Brush loadedBrush = brush_;
+        std::vector<AnimationFrame> loadedFrames;
+
+        const bool succeeded = readProjectFileFromStream(
+            input,
+            workCanvas,
+            renderFormat,
+            loadedBrush,
+            loadedFrames,
+            errorMessage
+        );
+
+        if (!succeeded)
+        {
+            lastProjectFileSucceeded_ = false;
+            lastProjectFileMessage_ = errorMessage;
+            return;
+        }
+
+        brush_ = loadedBrush;
+        frames_ = loadedFrames;
+
+        if (frames_.empty())
+        {
+            frames_.push_back(makeDefaultFrame(1));
+        }
+
+        activeFrameIndex_ = 0;
+        activeLayerIndex_ = 0;
+        nextFrameNumber_ = static_cast<int>(frames_.size()) + 1;
+
+        int largestLayerCount = 0;
+
+        for (const AnimationFrame& frame : frames_)
+        {
+            largestLayerCount = std::max(
+                largestLayerCount,
+                static_cast<int>(frame.layers.size())
+            );
+        }
+
+        nextLayerNumber_ = largestLayerCount + 1;
+
+        lastProjectFileSucceeded_ = true;
+        lastProjectFileMessage_ = "プロジェクト読み込み成功: " + projectPath.string();
     }
 
     void DrawingCanvasPanel::drawFramePanel(const RenderFormat& renderFormat)
@@ -782,7 +1332,7 @@ namespace perapera
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3GではPNG連番保存ができます。");
+        ImGui::Text("Phase 3Hでは保存/読み込みができます。");
 
         ImGui::Separator();
 
@@ -1023,7 +1573,7 @@ namespace perapera
         ImGui::End();
     }
 
-    void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, const RenderFormat& renderFormat)
+    void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, RenderFormat& renderFormat)
     {
         updatePlayback(renderFormat);
 
@@ -1115,6 +1665,43 @@ namespace perapera
                     ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
                     "%s",
                     lastPngSequenceExportMessage_.c_str()
+                );
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Text("プロジェクト保存/読み込み");
+        ImGui::Text("保存先: %s", projectFilePath_.c_str());
+        ImGui::Text("読み込み時は、現在の作業内容をファイル内容で置き換えます。");
+
+        if (ImGui::Button("プロジェクト保存"))
+        {
+            saveProjectFile(workCanvas, renderFormat);
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("プロジェクト読み込み"))
+        {
+            loadProjectFile(workCanvas, renderFormat);
+        }
+
+        if (!lastProjectFileMessage_.empty())
+        {
+            if (lastProjectFileSucceeded_)
+            {
+                ImGui::TextColored(
+                    ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+                    "%s",
+                    lastProjectFileMessage_.c_str()
+                );
+            }
+            else
+            {
+                ImGui::TextColored(
+                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                    "%s",
+                    lastProjectFileMessage_.c_str()
                 );
             }
         }
