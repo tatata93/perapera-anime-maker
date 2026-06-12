@@ -348,6 +348,7 @@ void drawOnionSkinFrame(
 
     void DrawingCanvasPanel::addFrame()
     {
+        stopPlayback();
         frames_.push_back(makeDefaultFrame(nextFrameNumber_));
         ++nextFrameNumber_;
 
@@ -360,6 +361,7 @@ void drawOnionSkinFrame(
 
     void DrawingCanvasPanel::duplicateActiveFrame()
     {
+        stopPlayback();
         const AnimationFrame* currentFrame = activeFrame();
 
         if (currentFrame == nullptr)
@@ -386,6 +388,7 @@ void drawOnionSkinFrame(
 
     void DrawingCanvasPanel::deleteActiveFrame()
     {
+        stopPlayback();
         if (frames_.size() <= 1)
         {
             return;
@@ -402,27 +405,105 @@ void drawOnionSkinFrame(
         isDrawing_ = false;
     }
 
-    void DrawingCanvasPanel::moveToPreviousFrame()
-    {
-        if (activeFrameIndex_ > 0)
+        void DrawingCanvasPanel::moveToPreviousFrame()
         {
-            --activeFrameIndex_;
-            activeLayerIndex_ = 0;
-            currentStroke_.points.clear();
-            isDrawing_ = false;
-        }
-    }
+            stopPlayback();
 
-    void DrawingCanvasPanel::moveToNextFrame()
-    {
-        if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
+            if (activeFrameIndex_ > 0)
+            {
+                --activeFrameIndex_;
+                activeLayerIndex_ = 0;
+                currentStroke_.points.clear();
+                isDrawing_ = false;
+            }
+        }       
+
+        void DrawingCanvasPanel::moveToNextFrame()
         {
-            ++activeFrameIndex_;
-            activeLayerIndex_ = 0;
-            currentStroke_.points.clear();
-            isDrawing_ = false;
+            stopPlayback();
+
+            if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
+            {
+                ++activeFrameIndex_;
+                activeLayerIndex_ = 0;
+                currentStroke_.points.clear();
+                isDrawing_ = false;
+           }
         }
+        void DrawingCanvasPanel::resetPlaybackProgress()
+        {
+            playbackSubFrameCounter_ = 0;
+            playbackTimeAccumulatorSeconds_ = 0.0f;
+        }
+
+        void DrawingCanvasPanel::stopPlayback()
+        {
+           isPlaybackPlaying_ = false;
+          resetPlaybackProgress();
+        }
+
+        void DrawingCanvasPanel::updatePlayback(const RenderFormat& renderFormat)
+        {
+            if (!isPlaybackPlaying_ || frames_.empty())
+           {
+               return;
+           }
+
+    const int playbackFps = std::clamp(
+        renderFormat.framesPerSecond,
+        1,
+        240
+    );
+
+    const float secondsPerFrame = 1.0f / static_cast<float>(playbackFps);
+
+    playbackTimeAccumulatorSeconds_ += ImGui::GetIO().DeltaTime;
+
+    // 低FPSや一時停止明けで時間がたまりすぎても暴走しないように上限を置く。
+    int safetyCounter = 0;
+
+    while (playbackTimeAccumulatorSeconds_ >= secondsPerFrame && safetyCounter < 240)
+    {
+        playbackTimeAccumulatorSeconds_ -= secondsPerFrame;
+
+        AnimationFrame* frame = activeFrame();
+
+        if (frame == nullptr)
+        {
+            stopPlayback();
+            return;
+        }
+
+        const int holdFrames = std::max(1, frame->durationFrames);
+
+        ++playbackSubFrameCounter_;
+
+        if (playbackSubFrameCounter_ >= holdFrames)
+        {
+            playbackSubFrameCounter_ = 0;
+
+            if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
+            {
+                ++activeFrameIndex_;
+                activeLayerIndex_ = 0;
+            }
+            else if (playbackLoopEnabled_)
+            {
+                activeFrameIndex_ = 0;
+                activeLayerIndex_ = 0;
+            }
+            else
+            {
+                stopPlayback();
+                return;
+            }
+        }
+
+        ++safetyCounter;
     }
+}
+
+
 
     void DrawingCanvasPanel::addLayer()
     {
@@ -574,7 +655,7 @@ void drawOnionSkinFrame(
         }
     }
 
-    void DrawingCanvasPanel::drawFramePanel()
+    void DrawingCanvasPanel::drawFramePanel(const RenderFormat& renderFormat)
     {
         ImGui::Begin("フレーム");
 ImGui::Text("現在のフレームを選びます。");
@@ -643,10 +724,12 @@ ImGui::Separator();
 
             if (ImGui::RadioButton(frame.name.c_str(), isActive))
             {
-                activeFrameIndex_ = index;
-                activeLayerIndex_ = 0;
-                currentStroke_.points.clear();
-                isDrawing_ = false;
+                stopPlayback();
+
+             activeFrameIndex_ = index;
+              activeLayerIndex_ = 0;
+              currentStroke_.points.clear();
+             isDrawing_ = false;
             }
 
             ImGui::Text("ストローク数: %d", frame.strokeCount());
@@ -777,10 +860,10 @@ ImGui::Separator();
     }
 
     void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, const RenderFormat& renderFormat)
-    {
-        drawFramePanel();
-        drawLayerPanel();
+    {updatePlayback(renderFormat);
 
+        drawFramePanel(renderFormat);
+        drawLayerPanel();
         ImGui::Begin("簡易作画キャンバス");
 
         const AnimationFrame* currentFrame = activeFrame();
@@ -972,6 +1055,44 @@ if (onionSkinEnabled_ && !frames_.empty())
     }
 }
 
+ImGui::Text("再生プレビュー");
+ImGui::Text("再生FPS: %d", renderFormat.framesPerSecond);
+
+ImGui::Checkbox("ループ再生", &playbackLoopEnabled_);
+
+if (ImGui::Button(isPlaybackPlaying_ ? "停止" : "再生"))
+{
+    if (isPlaybackPlaying_)
+    {
+        stopPlayback();
+    }
+    else
+    {
+        resetPlaybackProgress();
+        isPlaybackPlaying_ = true;
+    }
+}
+
+ImGui::SameLine();
+
+if (ImGui::Button("先頭へ"))
+{
+    stopPlayback();
+    activeFrameIndex_ = 0;
+    activeLayerIndex_ = 0;
+    currentStroke_.points.clear();
+    isDrawing_ = false;
+}
+
+if (isPlaybackPlaying_)
+{
+    ImGui::TextColored(
+        ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+        "再生中: 描画は一時停止します。"
+    );
+}
+
+ImGui::Separator();
 
         if (currentFrame != nullptr)
         {
@@ -1033,12 +1154,22 @@ if (onionSkinEnabled_ && !frames_.empty())
             "撮影フレーム"
         );
 
+if (isPlaybackPlaying_)
+{
+    ImGui::TextColored(
+        ImVec4(1.0f, 0.75f, 0.25f, 1.0f),
+        "再生中は描画できません。停止してから描いてください。"
+    );
+}
+
+
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
         const bool mouseInsideCanvas = isInsideRect(mousePosition, canvasMin, canvasMax);
 
         const bool canDraw =
             currentLayer != nullptr
-            && currentLayer->visible;
+             && currentLayer->visible
+             && !isPlaybackPlaying_;
 
         if (canDraw
             && isInputAreaHovered

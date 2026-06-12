@@ -193,3 +193,26 @@ OnionSkin
 │   └── adjustable
 └── Layer visibility
     └── hidden layers can be excluded
+
+    ## Decision 013: Add playback preview before PNG sequence export
+
+### 決定
+
+Phase 3Fでは、PNG連番保存より先に、アプリ内の再生プレビューを追加する。
+
+```text
+PlaybackPreview
+├── Input
+│   ├── RenderFormat.framesPerSecond
+│   ├── AnimationFrame.durationFrames
+│   └── AnimationFrame[]
+├── State
+│   ├── isPlaybackPlaying
+│   ├── playbackLoopEnabled
+│   ├── playbackSubFrameCounter
+│   └── playbackTimeAccumulatorSeconds
+└── Behavior
+    ├── FPSに合わせてフレームを進める
+    ├── durationFrames分だけ同じ絵を保持する
+    ├── 最後まで行ったらループ可能
+    └── 再生中は描画を止める

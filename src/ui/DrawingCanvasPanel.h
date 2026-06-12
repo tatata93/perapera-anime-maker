@@ -82,6 +82,24 @@ namespace perapera
 
 
 
+        // 再生プレビュー中かどうか。
+        // true の間は、RenderFormat の FPS と各フレームの durationFrames を使って
+        // activeFrameIndex_ を自動で進めます。
+        bool isPlaybackPlaying_ = false;
+
+        // 最後のフレームまで行ったら最初に戻るかどうか。
+        bool playbackLoopEnabled_ = true;
+
+        // 現在フレームを何コマ分表示したかを数える。
+        // durationFrames に達したら次フレームへ進む。
+        int playbackSubFrameCounter_ = 0;
+
+        // ImGuiのDeltaTimeをためる。
+        // 1 / FPS 秒たまるごとに1コマ進める。
+        float playbackTimeAccumulatorSeconds_ = 0.0f;
+
+
+
         void clampActiveFrameIndex();
 
         void clampActiveLayerIndex();
@@ -112,7 +130,13 @@ namespace perapera
 
         void moveActiveLayerDown();
 
-        void drawFramePanel();
+        void drawFramePanel(const RenderFormat& renderFormat);  
+    
+        void updatePlayback(const RenderFormat& renderFormat);
+
+        void stopPlayback();
+
+        void resetPlaybackProgress();
 
         void drawLayerPanel();
 

@@ -50,7 +50,7 @@ namespace
     constexpr const char* AppDisplayName = "ぺらぺらアニメ作り機";
 
     // 今の開発段階を表示するための文字列。
-    constexpr const char* CurrentPhaseName = "Phase 3E: Onion skin foundation";
+constexpr const char* CurrentPhaseName = "Phase 3F: Playback preview foundation";
     // SDLエラーを表示するための補助関数。
     // SDLの関数が失敗したとき、SDL_GetError()で理由を確認できる。
     void printSdlError(const std::string& message)
@@ -208,6 +208,8 @@ namespace
     ImGui::BulletText("現在の撮影フレームをPNG保存する");
     ImGui::BulletText("複数フレームを追加・選択・複製・削除する");
     ImGui::BulletText("前後フレームをオニオンスキン表示する");
+    ImGui::BulletText("フレームをFPSに合わせて再生プレビューする");
+ImGui::BulletText("保持コマ数を使ってフレーム表示時間を変える");
 
     ImGui::Separator();
 
