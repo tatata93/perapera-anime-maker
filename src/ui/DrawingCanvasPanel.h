@@ -2,9 +2,9 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Iでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Jでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
-// Undo/Redoに対応します。
+// Undo/Redo、消しゴムに対応します。
 
 #pragma once
 
@@ -30,6 +30,12 @@ namespace perapera
         void draw(WorkCanvas& workCanvas, RenderFormat& renderFormat);
 
     private:
+        enum class DrawingTool
+        {
+            Pen,
+            Eraser
+        };
+
         struct EditorHistorySnapshot
         {
             std::vector<AnimationFrame> frames;
@@ -43,7 +49,23 @@ namespace perapera
 
         Brush brush_;
 
-        // アニメーションのフレーム一覧。
+        // 現在選択中の作画ツール。
+        // Phase 3Jではペンと消しゴムを切り替えられるようにする。
+        DrawingTool drawingTool_ = DrawingTool::Pen;
+
+        // 消しゴムの半径。
+        // 画面上ではこの半径の円をガイドとして表示する。
+        float eraserRadiusPx_ = 24.0f;
+
+        // 消しゴムドラッグ中かどうか。
+        bool isErasing_ = false;
+
+        // 前回の消しゴム位置。
+        // ドラッグ中に点だけでなく線分として消すために使う。
+        CanvasPoint previousEraserPoint_;
+        bool hasPreviousEraserPoint_ = false;
+
+        // アニメーションのフレーム一覧.
         // 各フレームが自分専用のレイヤーを持つ。
         std::vector<AnimationFrame> frames_;
 
@@ -130,6 +152,13 @@ namespace perapera
         DrawingLayer* activeLayer();
 
         const DrawingLayer* activeLayer() const;
+
+        bool eraseActiveLayerAt(CanvasPoint eraserCanvasPoint);
+
+        bool eraseActiveLayerAlongPath(
+            CanvasPoint previousCanvasPoint,
+            CanvasPoint currentCanvasPoint
+        );
 
         EditorHistorySnapshot makeHistorySnapshot() const;
 

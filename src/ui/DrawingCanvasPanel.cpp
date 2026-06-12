@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Iでは、Undo/Redoに対応します。
+// Phase 3Jでは、消しゴムに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -17,6 +17,7 @@
 // - 全フレームをdurationFrames込みでPNG連番保存する
 // - 作業内容をプロジェクトファイルとして保存/読み込みする
 // - 描画、フレーム操作、レイヤー操作をUndo/Redoする
+// - 消しゴムで選択中レイヤー上の線を消す
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -509,6 +510,127 @@ namespace perapera
             return dx * dx + dy * dy;
         }
 
+        float distancePointToSegmentSquared(
+            CanvasPoint point,
+            CanvasPoint segmentStart,
+            CanvasPoint segmentEnd
+        )
+        {
+            const float segmentX = segmentEnd.x - segmentStart.x;
+            const float segmentY = segmentEnd.y - segmentStart.y;
+            const float segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+
+            if (segmentLengthSquared <= 0.0001f)
+            {
+                return distanceSquared(point, segmentStart);
+            }
+
+            const float pointX = point.x - segmentStart.x;
+            const float pointY = point.y - segmentStart.y;
+
+            const float t = std::clamp(
+                (pointX * segmentX + pointY * segmentY) / segmentLengthSquared,
+                0.0f,
+                1.0f
+            );
+
+            const CanvasPoint closestPoint{
+                segmentStart.x + segmentX * t,
+                segmentStart.y + segmentY * t
+            };
+
+            return distanceSquared(point, closestPoint);
+        }
+
+        void appendStrokePartIfNotEmpty(
+            std::vector<Stroke>& outputStrokes,
+            const Stroke& originalStroke,
+            std::vector<CanvasPoint>& points
+        )
+        {
+            if (points.empty())
+            {
+                return;
+            }
+
+            Stroke strokePart = originalStroke;
+            strokePart.points = points;
+            outputStrokes.push_back(strokePart);
+            points.clear();
+        }
+
+        bool eraseLayerWithPath(
+            DrawingLayer& layer,
+            CanvasPoint eraserPathStart,
+            CanvasPoint eraserPathEnd,
+            bool hasPathStart,
+            float eraserRadiusPx
+        )
+        {
+            bool changed = false;
+            std::vector<Stroke> updatedStrokes;
+            updatedStrokes.reserve(layer.strokes.size());
+
+            for (const Stroke& stroke : layer.strokes)
+            {
+                std::vector<CanvasPoint> keptPointsForCurrentPart;
+                keptPointsForCurrentPart.reserve(stroke.points.size());
+
+                bool strokeChanged = false;
+
+                const float eraseDistance = std::max(1.0f, eraserRadiusPx + stroke.radiusPx);
+                const float eraseDistanceSquared = eraseDistance * eraseDistance;
+
+                for (const CanvasPoint& point : stroke.points)
+                {
+                    bool shouldErasePoint =
+                        distanceSquared(point, eraserPathEnd) <= eraseDistanceSquared;
+
+                    if (hasPathStart)
+                    {
+                        shouldErasePoint = shouldErasePoint
+                            || distancePointToSegmentSquared(
+                                point,
+                                eraserPathStart,
+                                eraserPathEnd
+                            ) <= eraseDistanceSquared;
+                    }
+
+                    if (shouldErasePoint)
+                    {
+                        strokeChanged = true;
+                        appendStrokePartIfNotEmpty(
+                            updatedStrokes,
+                            stroke,
+                            keptPointsForCurrentPart
+                        );
+                    }
+                    else
+                    {
+                        keptPointsForCurrentPart.push_back(point);
+                    }
+                }
+
+                appendStrokePartIfNotEmpty(
+                    updatedStrokes,
+                    stroke,
+                    keptPointsForCurrentPart
+                );
+
+                if (strokeChanged)
+                {
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                layer.strokes = std::move(updatedStrokes);
+            }
+
+            return changed;
+        }
+
         ImU32 toImGuiColor(ColorRgba color, float layerOpacity)
         {
             const float finalAlpha = std::clamp(color.a * layerOpacity, 0.0f, 1.0f);
@@ -784,6 +906,45 @@ namespace perapera
         return &frame->layers[static_cast<std::size_t>(activeLayerIndex_)];
     }
 
+    bool DrawingCanvasPanel::eraseActiveLayerAt(CanvasPoint eraserCanvasPoint)
+    {
+        DrawingLayer* layer = activeLayer();
+
+        if (layer == nullptr || !layer->visible)
+        {
+            return false;
+        }
+
+        return eraseLayerWithPath(
+            *layer,
+            eraserCanvasPoint,
+            eraserCanvasPoint,
+            false,
+            eraserRadiusPx_
+        );
+    }
+
+    bool DrawingCanvasPanel::eraseActiveLayerAlongPath(
+        CanvasPoint previousCanvasPoint,
+        CanvasPoint currentCanvasPoint
+    )
+    {
+        DrawingLayer* layer = activeLayer();
+
+        if (layer == nullptr || !layer->visible)
+        {
+            return false;
+        }
+
+        return eraseLayerWithPath(
+            *layer,
+            previousCanvasPoint,
+            currentCanvasPoint,
+            true,
+            eraserRadiusPx_
+        );
+    }
+
 
     DrawingCanvasPanel::EditorHistorySnapshot DrawingCanvasPanel::makeHistorySnapshot() const
     {
@@ -817,6 +978,8 @@ namespace perapera
 
         currentStroke_.points.clear();
         isDrawing_ = false;
+        isErasing_ = false;
+        hasPreviousEraserPoint_ = false;
     }
 
     void DrawingCanvasPanel::pushUndoSnapshot(const std::string& actionName)
@@ -887,7 +1050,7 @@ namespace perapera
     void DrawingCanvasPanel::drawUndoRedoControls()
     {
         ImGui::Text("Undo / Redo");
-        ImGui::Text("対象: 描画、フレーム操作、レイヤー操作");
+        ImGui::Text("対象: 描画、消しゴム、フレーム操作、レイヤー操作");
         ImGui::Text("履歴: Undo %d / Redo %d", static_cast<int>(undoStack_.size()), static_cast<int>(redoStack_.size()));
 
         // BeginDisabled() と EndDisabled() は必ず同じ条件で呼ぶ必要がある。
@@ -1801,9 +1964,33 @@ namespace perapera
             ImGui::Text("現在フレーム: %s", currentFrame->name.c_str());
         }
 
-        ImGui::Text("左ドラッグで、選択中フレームの選択中レイヤーに線を描けます。");
+        ImGui::Text("左ドラッグで、ペン描画または消しゴム操作ができます。");
 
         drawUndoRedoControls();
+
+        ImGui::Text("ツール");
+
+        int drawingToolIndex = (drawingTool_ == DrawingTool::Pen) ? 0 : 1;
+
+        if (ImGui::RadioButton("ペン", drawingToolIndex == 0))
+        {
+            drawingTool_ = DrawingTool::Pen;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+            isErasing_ = false;
+            hasPreviousEraserPoint_ = false;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::RadioButton("消しゴム", drawingToolIndex == 1))
+        {
+            drawingTool_ = DrawingTool::Eraser;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+            isErasing_ = false;
+            hasPreviousEraserPoint_ = false;
+        }
 
         ImGui::SliderFloat("ペン半径 px", &brush_.radiusPx, 1.0f, 40.0f);
 
@@ -1821,6 +2008,8 @@ namespace perapera
             brush_.color.b = color[2];
             brush_.color.a = color[3];
         }
+
+        ImGui::SliderFloat("消しゴム半径 px", &eraserRadiusPx_, 4.0f, 120.0f);
 
         ImGui::Separator();
 
@@ -2074,7 +2263,10 @@ namespace perapera
             }
         }
 
-        if (isDrawing_ && currentLayer != nullptr && currentLayer->visible)
+        if (drawingTool_ == DrawingTool::Pen
+            && isDrawing_
+            && currentLayer != nullptr
+            && currentLayer->visible)
         {
             drawStroke(drawList, currentStroke_, canvasMin, scale, currentLayer->opacity);
         }
@@ -2121,12 +2313,26 @@ namespace perapera
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
         const bool mouseInsideCanvas = isInsideRect(mousePosition, canvasMin, canvasMax);
 
-        const bool canDraw =
+        if (drawingTool_ == DrawingTool::Eraser
+            && isInputAreaHovered
+            && mouseInsideCanvas)
+        {
+            drawList->AddCircle(
+                mousePosition,
+                eraserRadiusPx_ * scale,
+                IM_COL32(255, 130, 90, 220),
+                32,
+                2.0f
+            );
+        }
+
+        const bool canEditCanvas =
             currentLayer != nullptr
             && currentLayer->visible
             && !isPlaybackPlaying_;
 
-        if (canDraw
+        if (canEditCanvas
+            && drawingTool_ == DrawingTool::Pen
             && isInputAreaHovered
             && mouseInsideCanvas
             && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -2136,9 +2342,30 @@ namespace perapera
             currentStroke_.radiusPx = brush_.radiusPx;
             currentStroke_.addPoint(screenToCanvasPoint(mousePosition, canvasMin, scale));
             isDrawing_ = true;
+            isErasing_ = false;
         }
 
-        if (canDraw && isDrawing_ && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        if (canEditCanvas
+            && drawingTool_ == DrawingTool::Eraser
+            && isInputAreaHovered
+            && mouseInsideCanvas
+            && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            pushUndoSnapshot("消しゴム");
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+            isErasing_ = true;
+
+            previousEraserPoint_ = screenToCanvasPoint(mousePosition, canvasMin, scale);
+            hasPreviousEraserPoint_ = true;
+
+            eraseActiveLayerAt(previousEraserPoint_);
+        }
+
+        if (canEditCanvas
+            && drawingTool_ == DrawingTool::Pen
+            && isDrawing_
+            && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             if (mouseInsideCanvas)
             {
@@ -2156,9 +2383,33 @@ namespace perapera
             }
         }
 
+        if (canEditCanvas
+            && drawingTool_ == DrawingTool::Eraser
+            && isErasing_
+            && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            if (mouseInsideCanvas)
+            {
+                const CanvasPoint currentEraserPoint =
+                    screenToCanvasPoint(mousePosition, canvasMin, scale);
+
+                if (hasPreviousEraserPoint_)
+                {
+                    eraseActiveLayerAlongPath(previousEraserPoint_, currentEraserPoint);
+                }
+                else
+                {
+                    eraseActiveLayerAt(currentEraserPoint);
+                }
+
+                previousEraserPoint_ = currentEraserPoint;
+                hasPreviousEraserPoint_ = true;
+            }
+        }
+
         if (isDrawing_ && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
-            if (canDraw && currentStroke_.hasDrawablePoints())
+            if (canEditCanvas && currentStroke_.hasDrawablePoints())
             {
                 pushUndoSnapshot("ストローク描画");
                 currentLayer->strokes.push_back(currentStroke_);
@@ -2166,6 +2417,12 @@ namespace perapera
 
             currentStroke_.points.clear();
             isDrawing_ = false;
+        }
+
+        if (isErasing_ && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            isErasing_ = false;
+            hasPreviousEraserPoint_ = false;
         }
 
         ImGui::EndChild();
