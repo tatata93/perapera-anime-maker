@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Kでは、タイムラインUIに対応します。
+// Phase 3Lでは、フレーム名・レイヤー名変更に対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -28,6 +28,7 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -86,6 +87,59 @@ namespace perapera
             }
 
             return imageCount;
+        }
+
+        void copyStringToInputBuffer(
+            const std::string& source,
+            char* buffer,
+            std::size_t bufferSize
+        )
+        {
+            if (buffer == nullptr || bufferSize == 0)
+            {
+                return;
+            }
+
+            const std::size_t copySize = std::min(
+                source.size(),
+                bufferSize - 1
+            );
+
+            std::copy_n(source.c_str(), copySize, buffer);
+            buffer[copySize] = '\0';
+        }
+
+        std::string normalizeEditableName(
+            const char* rawName,
+            const std::string& fallbackName
+        )
+        {
+            std::string name = rawName != nullptr ? std::string(rawName) : std::string();
+
+            // 改行など、保存形式やUIを崩しやすい制御文字は空白に置き換える。
+            for (char& character : name)
+            {
+                if (character == '\r' || character == '\n' || character == '\t')
+                {
+                    character = ' ';
+                }
+            }
+
+            const bool hasVisibleCharacter = std::any_of(
+                name.begin(),
+                name.end(),
+                [](unsigned char character)
+                {
+                    return !std::isspace(character);
+                }
+            );
+
+            if (!hasVisibleCharacter)
+            {
+                return fallbackName;
+            }
+
+            return name;
         }
 
         std::filesystem::path findProjectRootFromCurrentPath()
@@ -1685,7 +1739,7 @@ namespace perapera
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3KではタイムラインUIで流れを確認できます。");
+        ImGui::Text("Phase 3Lではフレーム名・レイヤー名を変更できます。");
 
         ImGui::Separator();
 
@@ -1797,6 +1851,28 @@ namespace perapera
                 activeLayerIndex_ = 0;
                 currentStroke_.points.clear();
                 isDrawing_ = false;
+            }
+
+            char frameNameBuffer[128] = {};
+            copyStringToInputBuffer(
+                frame.name,
+                frameNameBuffer,
+                sizeof(frameNameBuffer)
+            );
+
+            ImGui::SetNextItemWidth(220.0f);
+            if (ImGui::InputText("フレーム名", frameNameBuffer, sizeof(frameNameBuffer)))
+            {
+                const std::string newFrameName = normalizeEditableName(
+                    frameNameBuffer,
+                    makeDefaultFrameName(index + 1)
+                );
+
+                if (newFrameName != frame.name)
+                {
+                    pushUndoSnapshot("フレーム名変更");
+                    frame.name = newFrameName;
+                }
             }
 
             ImGui::Text("ストローク数: %d", frame.strokeCount());
@@ -2094,7 +2170,27 @@ namespace perapera
 
             const bool isActive = (index == activeLayerIndex_);
 
-            ImGui::Text("%s", layer.name.c_str());
+            char layerNameBuffer[128] = {};
+            copyStringToInputBuffer(
+                layer.name,
+                layerNameBuffer,
+                sizeof(layerNameBuffer)
+            );
+
+            ImGui::SetNextItemWidth(220.0f);
+            if (ImGui::InputText("レイヤー名", layerNameBuffer, sizeof(layerNameBuffer)))
+            {
+                const std::string newLayerName = normalizeEditableName(
+                    layerNameBuffer,
+                    makeDefaultLayerName(index + 1)
+                );
+
+                if (newLayerName != layer.name)
+                {
+                    pushUndoSnapshot("レイヤー名変更");
+                    layer.name = newLayerName;
+                }
+            }
 
             if (ImGui::RadioButton("このレイヤーに描く", isActive))
             {
