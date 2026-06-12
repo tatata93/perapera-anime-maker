@@ -2,8 +2,8 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Fでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
-// 再生プレビューに対応します。
+// Phase 3Gでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// 再生プレビュー、PNG連番保存に対応します。
 
 #pragma once
 
@@ -51,11 +51,19 @@ namespace perapera
 
         int nextPngExportNumber_ = 1;
 
+        // PNG連番保存の出力フォルダ番号。
+        // exports/png_sequence_0001, exports/png_sequence_0002 ... のように使う。
+        int nextPngSequenceExportNumber_ = 1;
+
         bool pngTransparentBackground_ = false;
 
         std::string lastPngExportMessage_;
 
         bool lastPngExportSucceeded_ = false;
+
+        std::string lastPngSequenceExportMessage_;
+
+        bool lastPngSequenceExportSucceeded_ = false;
 
         // オニオンスキン表示設定。
         // 前後フレームを薄く表示して、動きの差分を描きやすくする。
@@ -125,6 +133,11 @@ namespace perapera
         void clearCurrentFrameLayers();
 
         void exportCurrentRenderFramePng(
+            const WorkCanvas& workCanvas,
+            const RenderFormat& renderFormat
+        );
+
+        void exportAllFramesPngSequence(
             const WorkCanvas& workCanvas,
             const RenderFormat& renderFormat
         );

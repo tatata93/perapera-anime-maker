@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Fでは、再生プレビューに対応します。
+// Phase 3Gでは、PNG連番保存に対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -14,6 +14,7 @@
 // - 前後フレームをオニオンスキン表示する
 // - 現在フレームをPNG保存する
 // - FPSと保持コマ数に従って再生プレビューする
+// - 全フレームをdurationFrames込みでPNG連番保存する
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -28,6 +29,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 namespace perapera
@@ -67,6 +69,18 @@ namespace perapera
             frame.durationFrames = 1;
             frame.layers.push_back(makeDefaultLayer("Layer 1"));
             return frame;
+        }
+
+        int calculatePngSequenceImageCount(const std::vector<AnimationFrame>& frames)
+        {
+            int imageCount = 0;
+
+            for (const AnimationFrame& frame : frames)
+            {
+                imageCount += std::max(1, frame.durationFrames);
+            }
+
+            return imageCount;
         }
 
         float distanceSquared(CanvasPoint a, CanvasPoint b)
@@ -661,12 +675,114 @@ namespace perapera
         }
     }
 
+    void DrawingCanvasPanel::exportAllFramesPngSequence(
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat
+    )
+    {
+        stopPlayback();
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+
+        if (frames_.empty())
+        {
+            lastPngSequenceExportSucceeded_ = false;
+            lastPngSequenceExportMessage_ = "PNG連番保存失敗: フレームがありません。";
+            return;
+        }
+
+        std::ostringstream directoryNameStream;
+
+        directoryNameStream
+            << "png_sequence_"
+            << std::setw(4)
+            << std::setfill('0')
+            << nextPngSequenceExportNumber_;
+
+        const std::filesystem::path outputDirectory =
+            std::filesystem::path("exports") / directoryNameStream.str();
+
+        std::error_code createDirectoryError;
+        std::filesystem::create_directories(outputDirectory, createDirectoryError);
+
+        if (createDirectoryError)
+        {
+            lastPngSequenceExportSucceeded_ = false;
+            lastPngSequenceExportMessage_ =
+                "PNG連番保存失敗: 出力フォルダを作れません: "
+                + createDirectoryError.message();
+            return;
+        }
+
+        PngExportOptions options;
+        options.transparentBackground = pngTransparentBackground_;
+
+        int outputFrameNumber = 1;
+
+        for (std::size_t sourceFrameIndex = 0; sourceFrameIndex < frames_.size(); ++sourceFrameIndex)
+        {
+            const AnimationFrame& frame = frames_[sourceFrameIndex];
+            const int holdFrames = std::max(1, frame.durationFrames);
+
+            for (int holdFrameIndex = 0; holdFrameIndex < holdFrames; ++holdFrameIndex)
+            {
+                std::ostringstream fileNameStream;
+
+                fileNameStream
+                    << "frame_"
+                    << std::setw(4)
+                    << std::setfill('0')
+                    << outputFrameNumber
+                    << ".png";
+
+                const std::filesystem::path outputPath =
+                    outputDirectory / fileNameStream.str();
+
+                std::string errorMessage;
+
+                const bool succeeded = PngExporter::exportCenteredRenderFrame(
+                    outputPath,
+                    workCanvas,
+                    renderFormat,
+                    frame.layers,
+                    options,
+                    errorMessage
+                );
+
+                if (!succeeded)
+                {
+                    lastPngSequenceExportSucceeded_ = false;
+                    lastPngSequenceExportMessage_ =
+                        "PNG連番保存失敗: "
+                        + frame.name
+                        + " の書き出し中に失敗: "
+                        + errorMessage;
+                    return;
+                }
+
+                ++outputFrameNumber;
+            }
+        }
+
+        const int exportedImageCount = outputFrameNumber - 1;
+
+        lastPngSequenceExportSucceeded_ = true;
+        lastPngSequenceExportMessage_ =
+            "PNG連番保存成功: "
+            + outputDirectory.string()
+            + " / "
+            + std::to_string(exportedImageCount)
+            + "枚";
+
+        ++nextPngSequenceExportNumber_;
+    }
+
     void DrawingCanvasPanel::drawFramePanel(const RenderFormat& renderFormat)
     {
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3Fでは再生プレビューができます。");
+        ImGui::Text("Phase 3GではPNG連番保存ができます。");
 
         ImGui::Separator();
 
@@ -969,6 +1085,36 @@ namespace perapera
                     ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
                     "%s",
                     lastPngExportMessage_.c_str()
+                );
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Text("PNG連番保存");
+        ImGui::Text("保持コマ数を反映して全フレームを書き出します。");
+        ImGui::Text("出力予定枚数: %d", calculatePngSequenceImageCount(frames_));
+
+        if (ImGui::Button("全フレームをPNG連番保存"))
+        {
+            exportAllFramesPngSequence(workCanvas, renderFormat);
+        }
+
+        if (!lastPngSequenceExportMessage_.empty())
+        {
+            if (lastPngSequenceExportSucceeded_)
+            {
+                ImGui::TextColored(
+                    ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+                    "%s",
+                    lastPngSequenceExportMessage_.c_str()
+                );
+            }
+            else
+            {
+                ImGui::TextColored(
+                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                    "%s",
+                    lastPngSequenceExportMessage_.c_str()
                 );
             }
         }
