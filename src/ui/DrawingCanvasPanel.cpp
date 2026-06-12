@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Hでは、プロジェクト保存/読み込みに対応します。
+// Phase 3Iでは、Undo/Redoに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -16,6 +16,7 @@
 // - FPSと保持コマ数に従って再生プレビューする
 // - 全フレームをdurationFrames込みでPNG連番保存する
 // - 作業内容をプロジェクトファイルとして保存/読み込みする
+// - 描画、フレーム操作、レイヤー操作をUndo/Redoする
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -783,6 +784,178 @@ namespace perapera
         return &frame->layers[static_cast<std::size_t>(activeLayerIndex_)];
     }
 
+
+    DrawingCanvasPanel::EditorHistorySnapshot DrawingCanvasPanel::makeHistorySnapshot() const
+    {
+        EditorHistorySnapshot snapshot;
+        snapshot.frames = frames_;
+        snapshot.activeFrameIndex = activeFrameIndex_;
+        snapshot.activeLayerIndex = activeLayerIndex_;
+        snapshot.nextFrameNumber = nextFrameNumber_;
+        snapshot.nextLayerNumber = nextLayerNumber_;
+        return snapshot;
+    }
+
+    void DrawingCanvasPanel::restoreHistorySnapshot(const EditorHistorySnapshot& snapshot)
+    {
+        stopPlayback();
+
+        frames_ = snapshot.frames;
+
+        if (frames_.empty())
+        {
+            frames_.push_back(makeDefaultFrame(1));
+        }
+
+        activeFrameIndex_ = snapshot.activeFrameIndex;
+        activeLayerIndex_ = snapshot.activeLayerIndex;
+        nextFrameNumber_ = std::max(2, snapshot.nextFrameNumber);
+        nextLayerNumber_ = std::max(2, snapshot.nextLayerNumber);
+
+        clampActiveFrameIndex();
+        clampActiveLayerIndex();
+
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+    }
+
+    void DrawingCanvasPanel::pushUndoSnapshot(const std::string& actionName)
+    {
+        stopPlayback();
+
+        undoStack_.push_back(makeHistorySnapshot());
+
+        if (undoStack_.size() > static_cast<std::size_t>(MaxUndoHistoryCount))
+        {
+            undoStack_.erase(undoStack_.begin());
+        }
+
+        redoStack_.clear();
+
+        if (!actionName.empty())
+        {
+            lastUndoRedoMessage_ = "Undo記録: " + actionName;
+        }
+    }
+
+    void DrawingCanvasPanel::clearHistory()
+    {
+        undoStack_.clear();
+        redoStack_.clear();
+        lastUndoRedoMessage_.clear();
+    }
+
+    void DrawingCanvasPanel::undoLastAction()
+    {
+        if (undoStack_.empty())
+        {
+            lastUndoRedoMessage_ = "Undoできる操作がありません。";
+            return;
+        }
+
+        redoStack_.push_back(makeHistorySnapshot());
+
+        const EditorHistorySnapshot snapshot = undoStack_.back();
+        undoStack_.pop_back();
+        restoreHistorySnapshot(snapshot);
+
+        lastUndoRedoMessage_ = "元に戻しました。";
+    }
+
+    void DrawingCanvasPanel::redoLastAction()
+    {
+        if (redoStack_.empty())
+        {
+            lastUndoRedoMessage_ = "Redoできる操作がありません。";
+            return;
+        }
+
+        undoStack_.push_back(makeHistorySnapshot());
+
+        if (undoStack_.size() > static_cast<std::size_t>(MaxUndoHistoryCount))
+        {
+            undoStack_.erase(undoStack_.begin());
+        }
+
+        const EditorHistorySnapshot snapshot = redoStack_.back();
+        redoStack_.pop_back();
+        restoreHistorySnapshot(snapshot);
+
+        lastUndoRedoMessage_ = "やり直しました。";
+    }
+
+    void DrawingCanvasPanel::drawUndoRedoControls()
+    {
+        ImGui::Text("Undo / Redo");
+        ImGui::Text("対象: 描画、フレーム操作、レイヤー操作");
+        ImGui::Text("履歴: Undo %d / Redo %d", static_cast<int>(undoStack_.size()), static_cast<int>(redoStack_.size()));
+
+        // BeginDisabled() と EndDisabled() は必ず同じ条件で呼ぶ必要がある。
+        // ボタンを押した結果 undoStack_ / redoStack_ の数が変わるので、
+        // 先に canUndo / canRedo を保存してから使う。
+        const bool canUndo = !undoStack_.empty();
+        const bool canRedo = !redoStack_.empty();
+
+        if (!canUndo)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::Button("元に戻す Ctrl+Z") && canUndo)
+        {
+            undoLastAction();
+        }
+
+        if (!canUndo)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        if (!canRedo)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::Button("やり直す Ctrl+Y") && canRedo)
+        {
+            redoLastAction();
+        }
+
+        if (!canRedo)
+        {
+            ImGui::EndDisabled();
+        }
+
+        if (!lastUndoRedoMessage_.empty())
+        {
+            ImGui::Text("%s", lastUndoRedoMessage_.c_str());
+        }
+
+        ImGui::Separator();
+    }
+
+    void DrawingCanvasPanel::updateUndoRedoShortcuts()
+    {
+        const ImGuiIO& io = ImGui::GetIO();
+
+        if (!io.KeyCtrl)
+        {
+            return;
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false))
+        {
+            undoLastAction();
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Y, false))
+        {
+            redoLastAction();
+        }
+    }
+
     void DrawingCanvasPanel::resetPlaybackProgress()
     {
         playbackSubFrameCounter_ = 0;
@@ -857,7 +1030,7 @@ namespace perapera
 
     void DrawingCanvasPanel::addFrame()
     {
-        stopPlayback();
+        pushUndoSnapshot("空フレーム追加");
 
         frames_.push_back(makeDefaultFrame(nextFrameNumber_));
         ++nextFrameNumber_;
@@ -879,6 +1052,8 @@ namespace perapera
         {
             return;
         }
+
+        pushUndoSnapshot("現在フレームを複製");
 
         AnimationFrame copiedFrame = *currentFrame;
         copiedFrame.name = makeDefaultFrameName(nextFrameNumber_);
@@ -907,6 +1082,8 @@ namespace perapera
         }
 
         clampActiveFrameIndex();
+
+        pushUndoSnapshot("現在フレームを削除");
 
         frames_.erase(frames_.begin() + activeFrameIndex_);
         clampActiveFrameIndex();
@@ -952,6 +1129,8 @@ namespace perapera
             return;
         }
 
+        pushUndoSnapshot("レイヤー追加");
+
         DrawingLayer layer;
         layer.name = makeDefaultLayerName(nextLayerNumber_);
         layer.visible = true;
@@ -974,6 +1153,8 @@ namespace perapera
 
         clampActiveLayerIndex();
 
+        pushUndoSnapshot("レイヤー削除");
+
         frame->layers.erase(frame->layers.begin() + activeLayerIndex_);
         clampActiveLayerIndex();
     }
@@ -993,6 +1174,8 @@ namespace perapera
         {
             return;
         }
+
+        pushUndoSnapshot("レイヤーを上へ移動");
 
         std::swap(
             frame->layers[static_cast<std::size_t>(activeLayerIndex_)],
@@ -1018,6 +1201,8 @@ namespace perapera
             return;
         }
 
+        pushUndoSnapshot("レイヤーを下へ移動");
+
         std::swap(
             frame->layers[static_cast<std::size_t>(activeLayerIndex_)],
             frame->layers[static_cast<std::size_t>(activeLayerIndex_ - 1)]
@@ -1030,10 +1215,12 @@ namespace perapera
     {
         AnimationFrame* frame = activeFrame();
 
-        if (frame == nullptr)
+        if (frame == nullptr || frame->strokeCount() == 0)
         {
             return;
         }
+
+        pushUndoSnapshot("現在フレームの全レイヤー消去");
 
         frame->clearAllLayers();
         currentStroke_.points.clear();
@@ -1323,6 +1510,8 @@ namespace perapera
 
         nextLayerNumber_ = largestLayerCount + 1;
 
+        clearHistory();
+
         lastProjectFileSucceeded_ = true;
         lastProjectFileMessage_ = "プロジェクト読み込み成功: " + projectPath.string();
     }
@@ -1332,7 +1521,7 @@ namespace perapera
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3Hでは保存/読み込みができます。");
+        ImGui::Text("Phase 3IではUndo/Redoができます。");
 
         ImGui::Separator();
 
@@ -1448,8 +1637,14 @@ namespace perapera
 
             ImGui::Text("ストローク数: %d", frame.strokeCount());
 
+            int editedDurationFrames = frame.durationFrames;
             ImGui::SetNextItemWidth(120.0f);
-            ImGui::SliderInt("保持コマ数", &frame.durationFrames, 1, 24);
+            if (ImGui::SliderInt("保持コマ数", &editedDurationFrames, 1, 24)
+                && editedDurationFrames != frame.durationFrames)
+            {
+                pushUndoSnapshot("保持コマ数変更");
+                frame.durationFrames = editedDurationFrames;
+            }
 
             ImGui::Separator();
 
@@ -1525,10 +1720,22 @@ namespace perapera
                 activeLayerIndex_ = index;
             }
 
-            ImGui::Checkbox("表示する", &layer.visible);
+            bool editedVisible = layer.visible;
+            if (ImGui::Checkbox("表示する", &editedVisible)
+                && editedVisible != layer.visible)
+            {
+                pushUndoSnapshot("レイヤー表示切り替え");
+                layer.visible = editedVisible;
+            }
 
+            float editedOpacity = layer.opacity;
             ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("不透明度", &layer.opacity, 0.0f, 1.0f);
+            if (ImGui::SliderFloat("不透明度", &editedOpacity, 0.0f, 1.0f)
+                && editedOpacity != layer.opacity)
+            {
+                pushUndoSnapshot("レイヤー不透明度変更");
+                layer.opacity = editedOpacity;
+            }
 
             ImGui::Text("ストローク数: %d", static_cast<int>(layer.strokes.size()));
 
@@ -1561,7 +1768,11 @@ namespace perapera
 
             if (ImGui::Button("アクティブレイヤーを消去"))
             {
-                layer->clear();
+                if (layer->hasStrokes())
+                {
+                    pushUndoSnapshot("アクティブレイヤーを消去");
+                    layer->clear();
+                }
             }
         }
 
@@ -1575,6 +1786,7 @@ namespace perapera
 
     void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, RenderFormat& renderFormat)
     {
+        updateUndoRedoShortcuts();
         updatePlayback(renderFormat);
 
         drawFramePanel(renderFormat);
@@ -1590,6 +1802,8 @@ namespace perapera
         }
 
         ImGui::Text("左ドラッグで、選択中フレームの選択中レイヤーに線を描けます。");
+
+        drawUndoRedoControls();
 
         ImGui::SliderFloat("ペン半径 px", &brush_.radiusPx, 1.0f, 40.0f);
 
@@ -1946,6 +2160,7 @@ namespace perapera
         {
             if (canDraw && currentStroke_.hasDrawablePoints())
             {
+                pushUndoSnapshot("ストローク描画");
                 currentLayer->strokes.push_back(currentStroke_);
             }
 

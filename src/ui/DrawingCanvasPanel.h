@@ -2,8 +2,9 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Hでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
-// 再生プレビュー、PNG連番保存、プロジェクト保存/読み込みに対応します。
+// Phase 3Iでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
+// Undo/Redoに対応します。
 
 #pragma once
 
@@ -29,6 +30,17 @@ namespace perapera
         void draw(WorkCanvas& workCanvas, RenderFormat& renderFormat);
 
     private:
+        struct EditorHistorySnapshot
+        {
+            std::vector<AnimationFrame> frames;
+            int activeFrameIndex = 0;
+            int activeLayerIndex = 0;
+            int nextFrameNumber = 2;
+            int nextLayerNumber = 2;
+        };
+
+        static constexpr int MaxUndoHistoryCount = 50;
+
         Brush brush_;
 
         // アニメーションのフレーム一覧。
@@ -73,6 +85,15 @@ namespace perapera
 
         bool lastProjectFileSucceeded_ = false;
 
+        // Undo/Redo用の履歴。
+        // Phase 3Iでは、フレーム・レイヤー・ストロークの状態を丸ごと保存する
+        // スナップショット方式で実装する。
+        std::vector<EditorHistorySnapshot> undoStack_;
+
+        std::vector<EditorHistorySnapshot> redoStack_;
+
+        std::string lastUndoRedoMessage_;
+
         // オニオンスキン表示設定。
         // 前後フレームを薄く表示して、動きの差分を描きやすくする。
         bool onionSkinEnabled_ = true;
@@ -109,6 +130,22 @@ namespace perapera
         DrawingLayer* activeLayer();
 
         const DrawingLayer* activeLayer() const;
+
+        EditorHistorySnapshot makeHistorySnapshot() const;
+
+        void restoreHistorySnapshot(const EditorHistorySnapshot& snapshot);
+
+        void pushUndoSnapshot(const std::string& actionName);
+
+        void clearHistory();
+
+        void undoLastAction();
+
+        void redoLastAction();
+
+        void drawUndoRedoControls();
+
+        void updateUndoRedoShortcuts();
 
         void updatePlayback(const RenderFormat& renderFormat);
 
