@@ -2,9 +2,18 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Dでは、フレーム管理に対応します。
+// Phase 3Fでは、再生プレビューに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
+//
+// できること:
+// - フレームを追加する
+// - フレームを複製する
+// - フレームを削除する
+// - フレームごとに別々のレイヤーと線を持つ
+// - 前後フレームをオニオンスキン表示する
+// - 現在フレームをPNG保存する
+// - FPSと保持コマ数に従って再生プレビューする
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -143,102 +152,98 @@ namespace perapera
             }
         }
 
-ImU32 toOnionSkinColor(
-    bool isPreviousFrame,
-    float onionOpacity,
-    float layerOpacity,
-    float strokeAlpha
-)
-{
-    const float finalAlpha = std::clamp(
-        onionOpacity * layerOpacity * strokeAlpha,
-        0.0f,
-        1.0f
-    );
-
-    const int alphaByte = static_cast<int>(finalAlpha * 255.0f);
-
-    if (isPreviousFrame)
-    {
-        // 前フレームは赤〜オレンジ系。
-        return IM_COL32(255, 110, 80, alphaByte);
-    }
-
-    // 次フレームは青系。
-    return IM_COL32(80, 180, 255, alphaByte);
-}
-
-void drawStrokeWithFixedColor(
-    ImDrawList* drawList,
-    const Stroke& stroke,
-    ImVec2 canvasMin,
-    float scale,
-    ImU32 color
-)
-{
-    if (!stroke.hasDrawablePoints())
-    {
-        return;
-    }
-
-    const float thickness = std::max(1.0f, stroke.radiusPx * 2.0f * scale);
-
-    if (stroke.points.size() == 1)
-    {
-        const ImVec2 center = canvasToScreenPoint(stroke.points.front(), canvasMin, scale);
-        drawList->AddCircleFilled(center, thickness * 0.5f, color);
-        return;
-    }
-
-    for (std::size_t i = 1; i < stroke.points.size(); ++i)
-    {
-        const ImVec2 a = canvasToScreenPoint(stroke.points[i - 1], canvasMin, scale);
-        const ImVec2 b = canvasToScreenPoint(stroke.points[i], canvasMin, scale);
-
-        drawList->AddLine(a, b, color, thickness);
-    }
-}
-
-void drawOnionSkinFrame(
-    ImDrawList* drawList,
-    const AnimationFrame& frame,
-    ImVec2 canvasMin,
-    float scale,
-    bool isPreviousFrame,
-    float onionOpacity,
-    bool visibleLayersOnly
-)
-{
-    for (const DrawingLayer& layer : frame.layers)
-    {
-        if (visibleLayersOnly && !layer.visible)
+        ImU32 toOnionSkinColor(
+            bool isPreviousFrame,
+            float onionOpacity,
+            float layerOpacity,
+            float strokeAlpha
+        )
         {
-            continue;
-        }
-
-        const float layerOpacity = std::clamp(layer.opacity, 0.0f, 1.0f);
-
-        for (const Stroke& stroke : layer.strokes)
-        {
-            const ImU32 onionColor = toOnionSkinColor(
-                isPreviousFrame,
-                onionOpacity,
-                layerOpacity,
-                stroke.color.a
+            const float finalAlpha = std::clamp(
+                onionOpacity * layerOpacity * strokeAlpha,
+                0.0f,
+                1.0f
             );
 
-            drawStrokeWithFixedColor(
-                drawList,
-                stroke,
-                canvasMin,
-                scale,
-                onionColor
-            );
+            const int alphaByte = static_cast<int>(finalAlpha * 255.0f);
+
+            if (isPreviousFrame)
+            {
+                return IM_COL32(255, 110, 80, alphaByte);
+            }
+
+            return IM_COL32(80, 180, 255, alphaByte);
         }
-    }
-}
 
+        void drawStrokeWithFixedColor(
+            ImDrawList* drawList,
+            const Stroke& stroke,
+            ImVec2 canvasMin,
+            float scale,
+            ImU32 color
+        )
+        {
+            if (!stroke.hasDrawablePoints())
+            {
+                return;
+            }
 
+            const float thickness = std::max(1.0f, stroke.radiusPx * 2.0f * scale);
+
+            if (stroke.points.size() == 1)
+            {
+                const ImVec2 center = canvasToScreenPoint(stroke.points.front(), canvasMin, scale);
+                drawList->AddCircleFilled(center, thickness * 0.5f, color);
+                return;
+            }
+
+            for (std::size_t i = 1; i < stroke.points.size(); ++i)
+            {
+                const ImVec2 a = canvasToScreenPoint(stroke.points[i - 1], canvasMin, scale);
+                const ImVec2 b = canvasToScreenPoint(stroke.points[i], canvasMin, scale);
+
+                drawList->AddLine(a, b, color, thickness);
+            }
+        }
+
+        void drawOnionSkinFrame(
+            ImDrawList* drawList,
+            const AnimationFrame& frame,
+            ImVec2 canvasMin,
+            float scale,
+            bool isPreviousFrame,
+            float onionOpacity,
+            bool visibleLayersOnly
+        )
+        {
+            for (const DrawingLayer& layer : frame.layers)
+            {
+                if (visibleLayersOnly && !layer.visible)
+                {
+                    continue;
+                }
+
+                const float layerOpacity = std::clamp(layer.opacity, 0.0f, 1.0f);
+
+                for (const Stroke& stroke : layer.strokes)
+                {
+                    const ImU32 onionColor = toOnionSkinColor(
+                        isPreviousFrame,
+                        onionOpacity,
+                        layerOpacity,
+                        stroke.color.a
+                    );
+
+                    drawStrokeWithFixedColor(
+                        drawList,
+                        stroke,
+                        canvasMin,
+                        scale,
+                        onionColor
+                    );
+                }
+            }
+        }
     }
 
     DrawingCanvasPanel::DrawingCanvasPanel()
@@ -346,9 +351,82 @@ void drawOnionSkinFrame(
         return &frame->layers[static_cast<std::size_t>(activeLayerIndex_)];
     }
 
+    void DrawingCanvasPanel::resetPlaybackProgress()
+    {
+        playbackSubFrameCounter_ = 0;
+        playbackTimeAccumulatorSeconds_ = 0.0f;
+    }
+
+    void DrawingCanvasPanel::stopPlayback()
+    {
+        isPlaybackPlaying_ = false;
+        resetPlaybackProgress();
+    }
+
+    void DrawingCanvasPanel::updatePlayback(const RenderFormat& renderFormat)
+    {
+        if (!isPlaybackPlaying_ || frames_.empty())
+        {
+            return;
+        }
+
+        const int playbackFps = std::clamp(
+            renderFormat.framesPerSecond,
+            1,
+            240
+        );
+
+        const float secondsPerFrame = 1.0f / static_cast<float>(playbackFps);
+
+        playbackTimeAccumulatorSeconds_ += ImGui::GetIO().DeltaTime;
+
+        int safetyCounter = 0;
+
+        while (playbackTimeAccumulatorSeconds_ >= secondsPerFrame && safetyCounter < 240)
+        {
+            playbackTimeAccumulatorSeconds_ -= secondsPerFrame;
+
+            AnimationFrame* frame = activeFrame();
+
+            if (frame == nullptr)
+            {
+                stopPlayback();
+                return;
+            }
+
+            const int holdFrames = std::max(1, frame->durationFrames);
+
+            ++playbackSubFrameCounter_;
+
+            if (playbackSubFrameCounter_ >= holdFrames)
+            {
+                playbackSubFrameCounter_ = 0;
+
+                if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
+                {
+                    ++activeFrameIndex_;
+                    activeLayerIndex_ = 0;
+                }
+                else if (playbackLoopEnabled_)
+                {
+                    activeFrameIndex_ = 0;
+                    activeLayerIndex_ = 0;
+                }
+                else
+                {
+                    stopPlayback();
+                    return;
+                }
+            }
+
+            ++safetyCounter;
+        }
+    }
+
     void DrawingCanvasPanel::addFrame()
     {
         stopPlayback();
+
         frames_.push_back(makeDefaultFrame(nextFrameNumber_));
         ++nextFrameNumber_;
 
@@ -362,6 +440,7 @@ void drawOnionSkinFrame(
     void DrawingCanvasPanel::duplicateActiveFrame()
     {
         stopPlayback();
+
         const AnimationFrame* currentFrame = activeFrame();
 
         if (currentFrame == nullptr)
@@ -389,6 +468,7 @@ void drawOnionSkinFrame(
     void DrawingCanvasPanel::deleteActiveFrame()
     {
         stopPlayback();
+
         if (frames_.size() <= 1)
         {
             return;
@@ -405,105 +485,31 @@ void drawOnionSkinFrame(
         isDrawing_ = false;
     }
 
-        void DrawingCanvasPanel::moveToPreviousFrame()
-        {
-            stopPlayback();
-
-            if (activeFrameIndex_ > 0)
-            {
-                --activeFrameIndex_;
-                activeLayerIndex_ = 0;
-                currentStroke_.points.clear();
-                isDrawing_ = false;
-            }
-        }       
-
-        void DrawingCanvasPanel::moveToNextFrame()
-        {
-            stopPlayback();
-
-            if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
-            {
-                ++activeFrameIndex_;
-                activeLayerIndex_ = 0;
-                currentStroke_.points.clear();
-                isDrawing_ = false;
-           }
-        }
-        void DrawingCanvasPanel::resetPlaybackProgress()
-        {
-            playbackSubFrameCounter_ = 0;
-            playbackTimeAccumulatorSeconds_ = 0.0f;
-        }
-
-        void DrawingCanvasPanel::stopPlayback()
-        {
-           isPlaybackPlaying_ = false;
-          resetPlaybackProgress();
-        }
-
-        void DrawingCanvasPanel::updatePlayback(const RenderFormat& renderFormat)
-        {
-            if (!isPlaybackPlaying_ || frames_.empty())
-           {
-               return;
-           }
-
-    const int playbackFps = std::clamp(
-        renderFormat.framesPerSecond,
-        1,
-        240
-    );
-
-    const float secondsPerFrame = 1.0f / static_cast<float>(playbackFps);
-
-    playbackTimeAccumulatorSeconds_ += ImGui::GetIO().DeltaTime;
-
-    // 低FPSや一時停止明けで時間がたまりすぎても暴走しないように上限を置く。
-    int safetyCounter = 0;
-
-    while (playbackTimeAccumulatorSeconds_ >= secondsPerFrame && safetyCounter < 240)
+    void DrawingCanvasPanel::moveToPreviousFrame()
     {
-        playbackTimeAccumulatorSeconds_ -= secondsPerFrame;
+        stopPlayback();
 
-        AnimationFrame* frame = activeFrame();
-
-        if (frame == nullptr)
+        if (activeFrameIndex_ > 0)
         {
-            stopPlayback();
-            return;
+            --activeFrameIndex_;
+            activeLayerIndex_ = 0;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
         }
-
-        const int holdFrames = std::max(1, frame->durationFrames);
-
-        ++playbackSubFrameCounter_;
-
-        if (playbackSubFrameCounter_ >= holdFrames)
-        {
-            playbackSubFrameCounter_ = 0;
-
-            if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
-            {
-                ++activeFrameIndex_;
-                activeLayerIndex_ = 0;
-            }
-            else if (playbackLoopEnabled_)
-            {
-                activeFrameIndex_ = 0;
-                activeLayerIndex_ = 0;
-            }
-            else
-            {
-                stopPlayback();
-                return;
-            }
-        }
-
-        ++safetyCounter;
     }
-}
 
+    void DrawingCanvasPanel::moveToNextFrame()
+    {
+        stopPlayback();
 
+        if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
+        {
+            ++activeFrameIndex_;
+            activeLayerIndex_ = 0;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+        }
+    }
 
     void DrawingCanvasPanel::addLayer()
     {
@@ -658,30 +664,72 @@ void drawOnionSkinFrame(
     void DrawingCanvasPanel::drawFramePanel(const RenderFormat& renderFormat)
     {
         ImGui::Begin("フレーム");
-ImGui::Text("現在のフレームを選びます。");
-ImGui::Text("Phase 3Eでは前後フレームをオニオンスキン表示できます。");
 
-ImGui::Separator();
+        ImGui::Text("現在のフレームを選びます。");
+        ImGui::Text("Phase 3Fでは再生プレビューができます。");
 
-ImGui::Text("オニオンスキン");
+        ImGui::Separator();
 
-ImGui::Checkbox("オニオンスキンを表示", &onionSkinEnabled_);
+        ImGui::Text("オニオンスキン");
 
-if (onionSkinEnabled_)
-{
-    ImGui::Checkbox("前フレームを表示", &showPreviousOnionSkin_);
-    ImGui::Checkbox("次フレームを表示", &showNextOnionSkin_);
+        ImGui::Checkbox("オニオンスキンを表示", &onionSkinEnabled_);
 
-    ImGui::SetNextItemWidth(160.0f);
-    ImGui::SliderInt("表示範囲", &onionSkinRange_, 1, 3);
+        if (onionSkinEnabled_)
+        {
+            ImGui::Checkbox("前フレームを表示", &showPreviousOnionSkin_);
+            ImGui::Checkbox("次フレームを表示", &showNextOnionSkin_);
 
-    ImGui::SetNextItemWidth(160.0f);
-    ImGui::SliderFloat("濃さ", &onionSkinOpacity_, 0.05f, 0.8f);
+            ImGui::SetNextItemWidth(160.0f);
+            ImGui::SliderInt("表示範囲", &onionSkinRange_, 1, 3);
 
-    ImGui::Checkbox("非表示レイヤーは除外", &onionSkinVisibleLayersOnly_);
-}
+            ImGui::SetNextItemWidth(160.0f);
+            ImGui::SliderFloat("濃さ", &onionSkinOpacity_, 0.05f, 0.8f);
 
-ImGui::Separator();
+            ImGui::Checkbox("非表示レイヤーは除外", &onionSkinVisibleLayersOnly_);
+        }
+
+        ImGui::Separator();
+
+        ImGui::Text("再生プレビュー");
+        ImGui::Text("再生FPS: %d", renderFormat.framesPerSecond);
+
+        ImGui::Checkbox("ループ再生", &playbackLoopEnabled_);
+
+        if (ImGui::Button(isPlaybackPlaying_ ? "停止" : "再生"))
+        {
+            if (isPlaybackPlaying_)
+            {
+                stopPlayback();
+            }
+            else
+            {
+                resetPlaybackProgress();
+                currentStroke_.points.clear();
+                isDrawing_ = false;
+                isPlaybackPlaying_ = true;
+            }
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("先頭へ"))
+        {
+            stopPlayback();
+            activeFrameIndex_ = 0;
+            activeLayerIndex_ = 0;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+        }
+
+        if (isPlaybackPlaying_)
+        {
+            ImGui::TextColored(
+                ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+                "再生中: 描画は一時停止します。"
+            );
+        }
+
+        ImGui::Separator();
 
         if (ImGui::Button("前のフレーム"))
         {
@@ -726,10 +774,10 @@ ImGui::Separator();
             {
                 stopPlayback();
 
-             activeFrameIndex_ = index;
-              activeLayerIndex_ = 0;
-              currentStroke_.points.clear();
-             isDrawing_ = false;
+                activeFrameIndex_ = index;
+                activeLayerIndex_ = 0;
+                currentStroke_.points.clear();
+                isDrawing_ = false;
             }
 
             ImGui::Text("ストローク数: %d", frame.strokeCount());
@@ -860,10 +908,12 @@ ImGui::Separator();
     }
 
     void DrawingCanvasPanel::draw(WorkCanvas& workCanvas, const RenderFormat& renderFormat)
-    {updatePlayback(renderFormat);
+    {
+        updatePlayback(renderFormat);
 
         drawFramePanel(renderFormat);
         drawLayerPanel();
+
         ImGui::Begin("簡易作画キャンバス");
 
         const AnimationFrame* currentFrame = activeFrame();
@@ -930,6 +980,14 @@ ImGui::Separator();
         if (currentLayer != nullptr)
         {
             ImGui::Text("描き込み先: %s", currentLayer->name.c_str());
+        }
+
+        if (isPlaybackPlaying_)
+        {
+            ImGui::TextColored(
+                ImVec4(1.0f, 0.75f, 0.25f, 1.0f),
+                "再生中は描画できません。停止してから描いてください。"
+            );
         }
 
         ImGui::Separator();
@@ -1012,87 +1070,46 @@ ImGui::Separator();
 
         drawList->PushClipRect(canvasMin, canvasMax, true);
 
-
-if (onionSkinEnabled_ && !frames_.empty())
-{
-    onionSkinRange_ = std::clamp(onionSkinRange_, 1, 3);
-    onionSkinOpacity_ = std::clamp(onionSkinOpacity_, 0.0f, 1.0f);
-
-    for (int offset = onionSkinRange_; offset >= 1; --offset)
-    {
-        // 遠いフレームほど薄くする。
-        const float fadedOpacity =
-            onionSkinOpacity_ / static_cast<float>(offset);
-
-        const int previousFrameIndex = activeFrameIndex_ - offset;
-        const int nextFrameIndex = activeFrameIndex_ + offset;
-
-        if (showPreviousOnionSkin_ && previousFrameIndex >= 0)
+        if (onionSkinEnabled_ && !frames_.empty())
         {
-            drawOnionSkinFrame(
-                drawList,
-                frames_[static_cast<std::size_t>(previousFrameIndex)],
-                canvasMin,
-                scale,
-                true,
-                fadedOpacity,
-                onionSkinVisibleLayersOnly_
-            );
+            onionSkinRange_ = std::clamp(onionSkinRange_, 1, 3);
+            onionSkinOpacity_ = std::clamp(onionSkinOpacity_, 0.0f, 1.0f);
+
+            for (int offset = onionSkinRange_; offset >= 1; --offset)
+            {
+                const float fadedOpacity =
+                    onionSkinOpacity_ / static_cast<float>(offset);
+
+                const int previousFrameIndex = activeFrameIndex_ - offset;
+                const int nextFrameIndex = activeFrameIndex_ + offset;
+
+                if (showPreviousOnionSkin_ && previousFrameIndex >= 0)
+                {
+                    drawOnionSkinFrame(
+                        drawList,
+                        frames_[static_cast<std::size_t>(previousFrameIndex)],
+                        canvasMin,
+                        scale,
+                        true,
+                        fadedOpacity,
+                        onionSkinVisibleLayersOnly_
+                    );
+                }
+
+                if (showNextOnionSkin_ && nextFrameIndex < static_cast<int>(frames_.size()))
+                {
+                    drawOnionSkinFrame(
+                        drawList,
+                        frames_[static_cast<std::size_t>(nextFrameIndex)],
+                        canvasMin,
+                        scale,
+                        false,
+                        fadedOpacity,
+                        onionSkinVisibleLayersOnly_
+                    );
+                }
+            }
         }
-
-        if (showNextOnionSkin_ && nextFrameIndex < static_cast<int>(frames_.size()))
-        {
-            drawOnionSkinFrame(
-                drawList,
-                frames_[static_cast<std::size_t>(nextFrameIndex)],
-                canvasMin,
-                scale,
-                false,
-                fadedOpacity,
-                onionSkinVisibleLayersOnly_
-            );
-        }
-    }
-}
-
-ImGui::Text("再生プレビュー");
-ImGui::Text("再生FPS: %d", renderFormat.framesPerSecond);
-
-ImGui::Checkbox("ループ再生", &playbackLoopEnabled_);
-
-if (ImGui::Button(isPlaybackPlaying_ ? "停止" : "再生"))
-{
-    if (isPlaybackPlaying_)
-    {
-        stopPlayback();
-    }
-    else
-    {
-        resetPlaybackProgress();
-        isPlaybackPlaying_ = true;
-    }
-}
-
-ImGui::SameLine();
-
-if (ImGui::Button("先頭へ"))
-{
-    stopPlayback();
-    activeFrameIndex_ = 0;
-    activeLayerIndex_ = 0;
-    currentStroke_.points.clear();
-    isDrawing_ = false;
-}
-
-if (isPlaybackPlaying_)
-{
-    ImGui::TextColored(
-        ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
-        "再生中: 描画は一時停止します。"
-    );
-}
-
-ImGui::Separator();
 
         if (currentFrame != nullptr)
         {
@@ -1154,22 +1171,13 @@ ImGui::Separator();
             "撮影フレーム"
         );
 
-if (isPlaybackPlaying_)
-{
-    ImGui::TextColored(
-        ImVec4(1.0f, 0.75f, 0.25f, 1.0f),
-        "再生中は描画できません。停止してから描いてください。"
-    );
-}
-
-
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
         const bool mouseInsideCanvas = isInsideRect(mousePosition, canvasMin, canvasMax);
 
         const bool canDraw =
             currentLayer != nullptr
-             && currentLayer->visible
-             && !isPlaybackPlaying_;
+            && currentLayer->visible
+            && !isPlaybackPlaying_;
 
         if (canDraw
             && isInputAreaHovered

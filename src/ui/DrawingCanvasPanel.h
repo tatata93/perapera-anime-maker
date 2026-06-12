@@ -2,9 +2,8 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Dでは、フレーム管理に対応します。
-// 1つのAnimationFrameが複数のDrawingLayerを持ち、
-// 現在選択中のフレームに描き込みます。
+// Phase 3Fでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// 再生プレビューに対応します。
 
 #pragma once
 
@@ -58,33 +57,18 @@ namespace perapera
 
         bool lastPngExportSucceeded_ = false;
 
-
-        // オニオンスキンを表示するかどうか。
+        // オニオンスキン表示設定。
         // 前後フレームを薄く表示して、動きの差分を描きやすくする。
         bool onionSkinEnabled_ = true;
-
-        // 1つ前のフレームを表示するか。
         bool showPreviousOnionSkin_ = true;
-
-        // 1つ次のフレームを表示するか。
         bool showNextOnionSkin_ = true;
-
-        // 何フレーム前後まで表示するか。
-        // Phase 3Eでは1〜3まで。
         int onionSkinRange_ = 1;
-
-        // オニオンスキンの濃さ。
-        // 0.0で見えない、1.0で濃い。
         float onionSkinOpacity_ = 0.25f;
-
-        // trueなら、非表示レイヤーはオニオンスキンにも出さない。
         bool onionSkinVisibleLayersOnly_ = true;
-
-
 
         // 再生プレビュー中かどうか。
         // true の間は、RenderFormat の FPS と各フレームの durationFrames を使って
-        // activeFrameIndex_ を自動で進めます。
+        // activeFrameIndex_ を自動で進める。
         bool isPlaybackPlaying_ = false;
 
         // 最後のフレームまで行ったら最初に戻るかどうか。
@@ -98,8 +82,6 @@ namespace perapera
         // 1 / FPS 秒たまるごとに1コマ進める。
         float playbackTimeAccumulatorSeconds_ = 0.0f;
 
-
-
         void clampActiveFrameIndex();
 
         void clampActiveLayerIndex();
@@ -111,6 +93,12 @@ namespace perapera
         DrawingLayer* activeLayer();
 
         const DrawingLayer* activeLayer() const;
+
+        void updatePlayback(const RenderFormat& renderFormat);
+
+        void stopPlayback();
+
+        void resetPlaybackProgress();
 
         void addFrame();
 
@@ -130,13 +118,7 @@ namespace perapera
 
         void moveActiveLayerDown();
 
-        void drawFramePanel(const RenderFormat& renderFormat);  
-    
-        void updatePlayback(const RenderFormat& renderFormat);
-
-        void stopPlayback();
-
-        void resetPlaybackProgress();
+        void drawFramePanel(const RenderFormat& renderFormat);
 
         void drawLayerPanel();
 
