@@ -58,6 +58,30 @@ namespace perapera
 
         bool lastPngExportSucceeded_ = false;
 
+
+        // オニオンスキンを表示するかどうか。
+        // 前後フレームを薄く表示して、動きの差分を描きやすくする。
+        bool onionSkinEnabled_ = true;
+
+        // 1つ前のフレームを表示するか。
+        bool showPreviousOnionSkin_ = true;
+
+        // 1つ次のフレームを表示するか。
+        bool showNextOnionSkin_ = true;
+
+        // 何フレーム前後まで表示するか。
+        // Phase 3Eでは1〜3まで。
+        int onionSkinRange_ = 1;
+
+        // オニオンスキンの濃さ。
+        // 0.0で見えない、1.0で濃い。
+        float onionSkinOpacity_ = 0.25f;
+
+        // trueなら、非表示レイヤーはオニオンスキンにも出さない。
+        bool onionSkinVisibleLayersOnly_ = true;
+
+
+
         void clampActiveFrameIndex();
 
         void clampActiveLayerIndex();

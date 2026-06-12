@@ -236,4 +236,23 @@ perapera-anime-maker/
     └── ui/
         ├── DrawingCanvasPanel.h
         └── DrawingCanvasPanel.cpp
+
+        ## 2026-06-12
+
+### 作業概要
+
+- Phase 3Eとして、オニオンスキン表示を追加した。
+
+### 変更ファイル
+
+```text
+perapera-anime-maker/
+├── DECISIONS.md
+├── WORK_LOG.md
+└── src/
+    ├── app/
+    │   └── main.cpp
+    └── ui/
+        ├── DrawingCanvasPanel.h
+        └── DrawingCanvasPanel.cpp
         

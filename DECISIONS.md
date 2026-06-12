@@ -174,3 +174,22 @@ AnimationData
 │   └── DrawingLayer[]
 └── DrawingLayer[]
     └── Stroke[]
+
+    ## Decision 012: Add onion skin before PNG sequence export
+
+### 決定
+
+Phase 3Eでは、PNG連番保存より先にオニオンスキン表示を追加する。
+
+```text
+OnionSkin
+├── Previous frames
+│   └── red/orange tint
+├── Next frames
+│   └── blue tint
+├── Range
+│   └── 1 to 3 frames
+├── Opacity
+│   └── adjustable
+└── Layer visibility
+    └── hidden layers can be excluded

@@ -142,6 +142,103 @@ namespace perapera
                 drawList->AddLine(a, b, color, thickness);
             }
         }
+
+ImU32 toOnionSkinColor(
+    bool isPreviousFrame,
+    float onionOpacity,
+    float layerOpacity,
+    float strokeAlpha
+)
+{
+    const float finalAlpha = std::clamp(
+        onionOpacity * layerOpacity * strokeAlpha,
+        0.0f,
+        1.0f
+    );
+
+    const int alphaByte = static_cast<int>(finalAlpha * 255.0f);
+
+    if (isPreviousFrame)
+    {
+        // 前フレームは赤〜オレンジ系。
+        return IM_COL32(255, 110, 80, alphaByte);
+    }
+
+    // 次フレームは青系。
+    return IM_COL32(80, 180, 255, alphaByte);
+}
+
+void drawStrokeWithFixedColor(
+    ImDrawList* drawList,
+    const Stroke& stroke,
+    ImVec2 canvasMin,
+    float scale,
+    ImU32 color
+)
+{
+    if (!stroke.hasDrawablePoints())
+    {
+        return;
+    }
+
+    const float thickness = std::max(1.0f, stroke.radiusPx * 2.0f * scale);
+
+    if (stroke.points.size() == 1)
+    {
+        const ImVec2 center = canvasToScreenPoint(stroke.points.front(), canvasMin, scale);
+        drawList->AddCircleFilled(center, thickness * 0.5f, color);
+        return;
+    }
+
+    for (std::size_t i = 1; i < stroke.points.size(); ++i)
+    {
+        const ImVec2 a = canvasToScreenPoint(stroke.points[i - 1], canvasMin, scale);
+        const ImVec2 b = canvasToScreenPoint(stroke.points[i], canvasMin, scale);
+
+        drawList->AddLine(a, b, color, thickness);
+    }
+}
+
+void drawOnionSkinFrame(
+    ImDrawList* drawList,
+    const AnimationFrame& frame,
+    ImVec2 canvasMin,
+    float scale,
+    bool isPreviousFrame,
+    float onionOpacity,
+    bool visibleLayersOnly
+)
+{
+    for (const DrawingLayer& layer : frame.layers)
+    {
+        if (visibleLayersOnly && !layer.visible)
+        {
+            continue;
+        }
+
+        const float layerOpacity = std::clamp(layer.opacity, 0.0f, 1.0f);
+
+        for (const Stroke& stroke : layer.strokes)
+        {
+            const ImU32 onionColor = toOnionSkinColor(
+                isPreviousFrame,
+                onionOpacity,
+                layerOpacity,
+                stroke.color.a
+            );
+
+            drawStrokeWithFixedColor(
+                drawList,
+                stroke,
+                canvasMin,
+                scale,
+                onionColor
+            );
+        }
+    }
+}
+
+
     }
 
     DrawingCanvasPanel::DrawingCanvasPanel()
@@ -480,11 +577,30 @@ namespace perapera
     void DrawingCanvasPanel::drawFramePanel()
     {
         ImGui::Begin("フレーム");
+ImGui::Text("現在のフレームを選びます。");
+ImGui::Text("Phase 3Eでは前後フレームをオニオンスキン表示できます。");
 
-        ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3Dでは再生はまだ行いません。");
+ImGui::Separator();
 
-        ImGui::Separator();
+ImGui::Text("オニオンスキン");
+
+ImGui::Checkbox("オニオンスキンを表示", &onionSkinEnabled_);
+
+if (onionSkinEnabled_)
+{
+    ImGui::Checkbox("前フレームを表示", &showPreviousOnionSkin_);
+    ImGui::Checkbox("次フレームを表示", &showNextOnionSkin_);
+
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SliderInt("表示範囲", &onionSkinRange_, 1, 3);
+
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SliderFloat("濃さ", &onionSkinOpacity_, 0.05f, 0.8f);
+
+    ImGui::Checkbox("非表示レイヤーは除外", &onionSkinVisibleLayersOnly_);
+}
+
+ImGui::Separator();
 
         if (ImGui::Button("前のフレーム"))
         {
@@ -812,6 +928,50 @@ namespace perapera
         }
 
         drawList->PushClipRect(canvasMin, canvasMax, true);
+
+
+if (onionSkinEnabled_ && !frames_.empty())
+{
+    onionSkinRange_ = std::clamp(onionSkinRange_, 1, 3);
+    onionSkinOpacity_ = std::clamp(onionSkinOpacity_, 0.0f, 1.0f);
+
+    for (int offset = onionSkinRange_; offset >= 1; --offset)
+    {
+        // 遠いフレームほど薄くする。
+        const float fadedOpacity =
+            onionSkinOpacity_ / static_cast<float>(offset);
+
+        const int previousFrameIndex = activeFrameIndex_ - offset;
+        const int nextFrameIndex = activeFrameIndex_ + offset;
+
+        if (showPreviousOnionSkin_ && previousFrameIndex >= 0)
+        {
+            drawOnionSkinFrame(
+                drawList,
+                frames_[static_cast<std::size_t>(previousFrameIndex)],
+                canvasMin,
+                scale,
+                true,
+                fadedOpacity,
+                onionSkinVisibleLayersOnly_
+            );
+        }
+
+        if (showNextOnionSkin_ && nextFrameIndex < static_cast<int>(frames_.size()))
+        {
+            drawOnionSkinFrame(
+                drawList,
+                frames_[static_cast<std::size_t>(nextFrameIndex)],
+                canvasMin,
+                scale,
+                false,
+                fadedOpacity,
+                onionSkinVisibleLayersOnly_
+            );
+        }
+    }
+}
+
 
         if (currentFrame != nullptr)
         {
