@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Lでは、フレーム名・レイヤー名変更に対応します。
+// Phase 3Mでは、ブラシ補間・手ぶれ補正・簡易入り抜きに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -19,6 +19,7 @@
 // - 描画、フレーム操作、レイヤー操作をUndo/Redoする
 // - 消しゴムで選択中レイヤー上の線を消す
 // - タイムラインでフレーム・保持コマ数・再生位置を確認する
+// - 線の補間、手ぶれ補正、簡易入り抜きで描き味を調整する
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -565,6 +566,100 @@ namespace perapera
             return dx * dx + dy * dy;
         }
 
+        float distance(CanvasPoint a, CanvasPoint b)
+        {
+            return std::sqrt(distanceSquared(a, b));
+        }
+
+        CanvasPoint lerpCanvasPoint(CanvasPoint a, CanvasPoint b, float t)
+        {
+            return CanvasPoint{
+                a.x + (b.x - a.x) * t,
+                a.y + (b.y - a.y) * t
+            };
+        }
+
+        float smoothStep(float t)
+        {
+            const float clampedT = std::clamp(t, 0.0f, 1.0f);
+            return clampedT * clampedT * (3.0f - 2.0f * clampedT);
+        }
+
+        void addPointWithOptionalInterpolation(
+            Stroke& stroke,
+            CanvasPoint newPoint,
+            bool interpolationEnabled,
+            float pointSpacingPx
+        )
+        {
+            if (stroke.points.empty())
+            {
+                stroke.addPoint(newPoint);
+                return;
+            }
+
+            const CanvasPoint previousPoint = stroke.points.back();
+            const float segmentLength = distance(previousPoint, newPoint);
+
+            if (segmentLength < 0.5f)
+            {
+                return;
+            }
+
+            if (!interpolationEnabled)
+            {
+                stroke.addPoint(newPoint);
+                return;
+            }
+
+            const float safeSpacing = std::clamp(pointSpacingPx, 1.0f, 64.0f);
+            const int extraPointCount = static_cast<int>(segmentLength / safeSpacing);
+
+            for (int pointIndex = 1; pointIndex <= extraPointCount; ++pointIndex)
+            {
+                const float t =
+                    static_cast<float>(pointIndex) * safeSpacing / segmentLength;
+
+                if (t < 1.0f)
+                {
+                    stroke.addPoint(lerpCanvasPoint(previousPoint, newPoint, t));
+                }
+            }
+
+            stroke.addPoint(newPoint);
+        }
+
+        void smoothStrokePointsInPlace(Stroke& stroke, int passCount)
+        {
+            if (stroke.points.size() < 3 || passCount <= 0)
+            {
+                return;
+            }
+
+            const int safePassCount = std::clamp(passCount, 0, 5);
+
+            for (int passIndex = 0; passIndex < safePassCount; ++passIndex)
+            {
+                std::vector<CanvasPoint> smoothedPoints = stroke.points;
+
+                // 始点と終点はそのまま残し、中間点だけを平均化する。
+                // これにより、線の大まかな位置を保ったまま細かなブレだけを減らす。
+                for (std::size_t pointIndex = 1; pointIndex + 1 < stroke.points.size(); ++pointIndex)
+                {
+                    const CanvasPoint previousPoint = stroke.points[pointIndex - 1];
+                    const CanvasPoint currentPoint = stroke.points[pointIndex];
+                    const CanvasPoint nextPoint = stroke.points[pointIndex + 1];
+
+                    smoothedPoints[pointIndex] = CanvasPoint{
+                        (previousPoint.x + currentPoint.x * 2.0f + nextPoint.x) * 0.25f,
+                        (previousPoint.y + currentPoint.y * 2.0f + nextPoint.y) * 0.25f
+                    };
+                }
+
+                stroke.points = smoothedPoints;
+            }
+        }
+
         float distancePointToSegmentSquared(
             CanvasPoint point,
             CanvasPoint segmentStart,
@@ -785,6 +880,57 @@ namespace perapera
             return IM_COL32(80, 180, 255, alphaByte);
         }
 
+        void drawTaperedStroke(
+            ImDrawList* drawList,
+            const Stroke& stroke,
+            ImVec2 canvasMin,
+            float scale,
+            float layerOpacity,
+            float taperFraction,
+            float taperMinimumScale
+        )
+        {
+            if (!stroke.hasDrawablePoints())
+            {
+                return;
+            }
+
+            const ImU32 color = toImGuiColor(stroke.color, layerOpacity);
+            const float safeTaperFraction = std::clamp(taperFraction, 0.01f, 0.5f);
+            const float safeMinimumScale = std::clamp(taperMinimumScale, 0.02f, 1.0f);
+            const float baseThickness = std::max(1.0f, stroke.radiusPx * 2.0f * scale);
+
+            if (stroke.points.size() == 1)
+            {
+                const ImVec2 center = canvasToScreenPoint(stroke.points.front(), canvasMin, scale);
+                drawList->AddCircleFilled(
+                    center,
+                    baseThickness * safeMinimumScale * 0.5f,
+                    color
+                );
+                return;
+            }
+
+            const int segmentCount = static_cast<int>(stroke.points.size()) - 1;
+
+            for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex)
+            {
+                const float progress =
+                    (static_cast<float>(segmentIndex) + 0.5f) / static_cast<float>(segmentCount);
+
+                const float startFactor = progress / safeTaperFraction;
+                const float endFactor = (1.0f - progress) / safeTaperFraction;
+                const float edgeFactor = std::min(startFactor, endFactor);
+                const float thicknessScale =
+                    safeMinimumScale + (1.0f - safeMinimumScale) * smoothStep(edgeFactor);
+
+                const ImVec2 a = canvasToScreenPoint(stroke.points[segmentIndex], canvasMin, scale);
+                const ImVec2 b = canvasToScreenPoint(stroke.points[segmentIndex + 1], canvasMin, scale);
+
+                drawList->AddLine(a, b, color, baseThickness * thicknessScale);
+            }
+        }
+
         void drawStrokeWithFixedColor(
             ImDrawList* drawList,
             const Stroke& stroke,
@@ -959,6 +1105,54 @@ namespace perapera
         }
 
         return &frame->layers[static_cast<std::size_t>(activeLayerIndex_)];
+    }
+
+    std::vector<Stroke> DrawingCanvasPanel::makeFinalizedBrushStrokes(
+        const Stroke& sourceStroke
+    ) const
+    {
+        if (!sourceStroke.hasDrawablePoints())
+        {
+            return {};
+        }
+
+        Stroke processedStroke = sourceStroke;
+        smoothStrokePointsInPlace(processedStroke, strokeSmoothingPassCount_);
+
+        if (!strokeTaperEnabled_ || processedStroke.points.size() < 2)
+        {
+            return { processedStroke };
+        }
+
+        const float safeTaperFraction = std::clamp(strokeTaperFraction_, 0.01f, 0.5f);
+        const float safeMinimumScale = std::clamp(strokeTaperMinimumScale_, 0.02f, 1.0f);
+        const int segmentCount = static_cast<int>(processedStroke.points.size()) - 1;
+
+        std::vector<Stroke> segmentedStrokes;
+        segmentedStrokes.reserve(static_cast<std::size_t>(segmentCount));
+
+        for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex)
+        {
+            const float progress =
+                (static_cast<float>(segmentIndex) + 0.5f) / static_cast<float>(segmentCount);
+
+            const float startFactor = progress / safeTaperFraction;
+            const float endFactor = (1.0f - progress) / safeTaperFraction;
+            const float edgeFactor = std::min(startFactor, endFactor);
+            const float radiusScale =
+                safeMinimumScale + (1.0f - safeMinimumScale) * smoothStep(edgeFactor);
+
+            Stroke segmentStroke;
+            segmentStroke.color = processedStroke.color;
+            segmentStroke.radiusPx =
+                std::max(0.1f, processedStroke.radiusPx * radiusScale);
+            segmentStroke.addPoint(processedStroke.points[segmentIndex]);
+            segmentStroke.addPoint(processedStroke.points[segmentIndex + 1]);
+
+            segmentedStrokes.push_back(segmentStroke);
+        }
+
+        return segmentedStrokes;
     }
 
     bool DrawingCanvasPanel::eraseActiveLayerAt(CanvasPoint eraserCanvasPoint)
@@ -2309,6 +2503,39 @@ namespace perapera
 
         ImGui::SliderFloat("ペン半径 px", &brush_.radiusPx, 1.0f, 40.0f);
 
+        ImGui::Spacing();
+        ImGui::Text("ブラシ改善");
+
+        ImGui::Checkbox("線の補間", &strokeInterpolationEnabled_);
+
+        if (strokeInterpolationEnabled_)
+        {
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("補間点間隔 px", &strokePointSpacingPx_, 1.0f, 20.0f);
+        }
+
+        ImGui::Checkbox("手ぶれ補正", &strokeSmoothingEnabled_);
+
+        if (strokeSmoothingEnabled_)
+        {
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("手ぶれ補正の強さ", &strokeSmoothingStrength_, 0.0f, 0.85f);
+        }
+
+        ImGui::SetNextItemWidth(180.0f);
+        ImGui::SliderInt("仕上げ平滑化", &strokeSmoothingPassCount_, 0, 3);
+
+        ImGui::Checkbox("簡易入り抜き", &strokeTaperEnabled_);
+
+        if (strokeTaperEnabled_)
+        {
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("入り抜き長さ", &strokeTaperFraction_, 0.05f, 0.45f);
+
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("最小太さ", &strokeTaperMinimumScale_, 0.05f, 1.0f);
+        }
+
         float color[4] = {
             brush_.color.r,
             brush_.color.g,
@@ -2583,7 +2810,22 @@ namespace perapera
             && currentLayer != nullptr
             && currentLayer->visible)
         {
-            drawStroke(drawList, currentStroke_, canvasMin, scale, currentLayer->opacity);
+            if (strokeTaperEnabled_)
+            {
+                drawTaperedStroke(
+                    drawList,
+                    currentStroke_,
+                    canvasMin,
+                    scale,
+                    currentLayer->opacity,
+                    strokeTaperFraction_,
+                    strokeTaperMinimumScale_
+                );
+            }
+            else
+            {
+                drawStroke(drawList, currentStroke_, canvasMin, scale, currentLayer->opacity);
+            }
         }
 
         drawList->PopClipRect();
@@ -2684,17 +2926,27 @@ namespace perapera
         {
             if (mouseInsideCanvas)
             {
-                const CanvasPoint nextPoint =
+                CanvasPoint nextPoint =
                     screenToCanvasPoint(mousePosition, canvasMin, scale);
 
-                constexpr float MinimumPointDistancePx = 2.0f;
-
-                if (currentStroke_.points.empty()
-                    || distanceSquared(currentStroke_.points.back(), nextPoint)
-                        >= MinimumPointDistancePx * MinimumPointDistancePx)
+                if (strokeSmoothingEnabled_ && !currentStroke_.points.empty())
                 {
-                    currentStroke_.addPoint(nextPoint);
+                    const float smoothingStrength =
+                        std::clamp(strokeSmoothingStrength_, 0.0f, 0.85f);
+
+                    nextPoint = lerpCanvasPoint(
+                        currentStroke_.points.back(),
+                        nextPoint,
+                        1.0f - smoothingStrength
+                    );
                 }
+
+                addPointWithOptionalInterpolation(
+                    currentStroke_,
+                    nextPoint,
+                    strokeInterpolationEnabled_,
+                    strokePointSpacingPx_
+                );
             }
         }
 
@@ -2726,8 +2978,18 @@ namespace perapera
         {
             if (canEditCanvas && currentStroke_.hasDrawablePoints())
             {
-                pushUndoSnapshot("ストローク描画");
-                currentLayer->strokes.push_back(currentStroke_);
+                const std::vector<Stroke> finalizedStrokes =
+                    makeFinalizedBrushStrokes(currentStroke_);
+
+                if (!finalizedStrokes.empty())
+                {
+                    pushUndoSnapshot("ストローク描画");
+
+                    for (const Stroke& finalizedStroke : finalizedStrokes)
+                    {
+                        currentLayer->strokes.push_back(finalizedStroke);
+                    }
+                }
             }
 
             currentStroke_.points.clear();

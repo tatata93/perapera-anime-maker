@@ -2,9 +2,10 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Lでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Mでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
-// Undo/Redo、消しゴム、タイムラインUI、名前変更に対応します。
+// Undo/Redo、消しゴム、タイムラインUI、名前変更、
+// ブラシ補間・手ぶれ補正・簡易入り抜きに対応します。
 
 #pragma once
 
@@ -59,6 +60,37 @@ namespace perapera
 
         // 消しゴムドラッグ中かどうか。
         bool isErasing_ = false;
+
+        // 線の補間を有効にするか。
+        // 点と点の間が空きすぎたときに中間点を追加し、線の途切れ感を減らす。
+        bool strokeInterpolationEnabled_ = true;
+
+        // 補間した点同士の目安間隔。
+        // 小さいほど点が増えてなめらかになるが、保存データも少し増える。
+        float strokePointSpacingPx_ = 4.0f;
+
+        // 手ぶれ補正を有効にするか。
+        // マウス入力を少し遅れて追従させ、細かなブレを抑える。
+        bool strokeSmoothingEnabled_ = true;
+
+        // 手ぶれ補正の強さ。
+        // 0.0 は補正なし、0.85 に近いほど強く補正する。
+        float strokeSmoothingStrength_ = 0.35f;
+
+        // 描き終わったあとに、点列を何回ならすか。
+        // 0なら仕上げ平滑化なし。
+        int strokeSmoothingPassCount_ = 1;
+
+        // 簡易入り抜きを有効にするか。
+        // 1本の線を短い複数ストロークに分け、始点/終点付近の半径を小さくする。
+        bool strokeTaperEnabled_ = false;
+
+        // 線全体のうち、始点側/終点側を細くする割合。
+        float strokeTaperFraction_ = 0.18f;
+
+        // 入り抜き部分の最小太さ。
+        // 0.25なら通常太さの25%まで細くする。
+        float strokeTaperMinimumScale_ = 0.25f;
 
         // 前回の消しゴム位置。
         // ドラッグ中に点だけでなく線分として消すために使う。
@@ -159,6 +191,8 @@ namespace perapera
             CanvasPoint previousCanvasPoint,
             CanvasPoint currentCanvasPoint
         );
+
+        std::vector<Stroke> makeFinalizedBrushStrokes(const Stroke& sourceStroke) const;
 
         EditorHistorySnapshot makeHistorySnapshot() const;
 
