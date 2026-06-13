@@ -6,7 +6,7 @@
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
 // ブラシ補間・手ぶれ補正・簡易入り抜き、
-// 撮影用2Dカメラの直接操作とカメラキーに対応します。
+// 作画ビューのパン・ズームと、撮影用2Dカメラの専用操作に対応します。
 
 #pragma once
 
@@ -18,6 +18,7 @@
 #include "drawing/DrawingLayer.h"
 #include "drawing/Stroke.h"
 #include "export/PngExporter.h"
+#include "ui/EditorViewport2D.h"
 
 #include <string>
 #include <vector>
@@ -39,6 +40,12 @@ namespace perapera
         {
             Pen,
             Eraser
+        };
+
+        enum class CanvasInteractionMode
+        {
+            Drawing,
+            ShotCamera
         };
 
         struct EditorHistorySnapshot
@@ -65,11 +72,18 @@ namespace perapera
 
         ShotCameraController2D shotCameraController2D_;
 
+        EditorViewport2D editorViewport2D_;
+
         bool shotCameraAnimationEnabled_ = true;
 
         bool shotCameraAutoKeyEnabled_ = true;
 
         bool isShotCameraPanning_ = false;
+
+        bool isEditorViewportPanning_ = false;
+
+        CanvasInteractionMode canvasInteractionMode_ =
+            CanvasInteractionMode::Drawing;
 
         ShotCameraInterpolation newShotCameraKeyInterpolation_ =
             ShotCameraInterpolation::Smooth;

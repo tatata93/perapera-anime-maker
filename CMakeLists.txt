@@ -78,6 +78,8 @@ add_executable(perapera_anime_maker
 
     src/ui/CanvasPreview.h
     src/ui/CanvasPreview.cpp
+    src/ui/EditorViewport2D.h
+    src/ui/EditorViewport2D.cpp
     src/ui/DrawingCanvasPanel.h
     src/ui/DrawingCanvasPanel.cpp
 )

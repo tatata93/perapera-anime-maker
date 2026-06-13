@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Pでは、撮影用2Dカメラの直接操作に対応します。
+// Phase 3Pでは、作画ビューと撮影用2Dカメラの操作を分離します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -21,7 +21,8 @@
 // - タイムラインでフレーム・保持コマ数・再生位置を確認する
 // - 線の補間、手ぶれ補正、簡易入り抜きで描き味を調整する
 // - 撮影用2Dカメラでパン・ズームした範囲をPNG/PNG連番へ書き出す
-// - 中ドラッグとホイールで撮影用2Dカメラを直接操作する
+// - 中ドラッグとホイールで作画ビューをパン・ズームする
+// - 撮影カメラモードでは黄色い撮影枠を左ドラッグで移動する
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -2742,7 +2743,7 @@ namespace perapera
         }
 
         ImGui::Checkbox("直接操作でオートキー", &shotCameraAutoKeyEnabled_);
-        ImGui::Text("中ドラッグ: パン / ホイール: カーソル基準ズーム");
+        ImGui::Text("撮影カメラモードでは黄色枠を左ドラッグします。");
 
         const int timelineFrame = currentTimelineFrame();
 
@@ -3090,8 +3091,46 @@ namespace perapera
         }
 
         ImGui::Text("左ドラッグで、ペン描画または消しゴム操作ができます。");
+        ImGui::Text("ホイール: 作画ビュー拡大 / 中ドラッグ: 作画ビュー移動");
 
         drawUndoRedoControls();
+
+        ImGui::Text("キャンバス操作");
+
+        if (ImGui::RadioButton(
+            "作画",
+            canvasInteractionMode_ == CanvasInteractionMode::Drawing
+        ))
+        {
+            canvasInteractionMode_ = CanvasInteractionMode::Drawing;
+            isShotCameraPanning_ = false;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::RadioButton(
+            "撮影カメラ",
+            canvasInteractionMode_ == CanvasInteractionMode::ShotCamera
+        ))
+        {
+            canvasInteractionMode_ = CanvasInteractionMode::ShotCamera;
+            currentStroke_.points.clear();
+            isDrawing_ = false;
+            isErasing_ = false;
+            hasPreviousEraserPoint_ = false;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("作画表示を全体へ戻す"))
+        {
+            editorViewport2D_.reset(workCanvas);
+        }
+
+        ImGui::Text(
+            "作画表示倍率: %.0f%%",
+            editorViewport2D_.zoom * 100.0f
+        );
 
         ImGui::Text("ツール");
 
@@ -3314,6 +3353,11 @@ namespace perapera
 
         const bool isInputAreaHovered = ImGui::IsItemHovered();
 
+        if (isInputAreaHovered)
+        {
+            ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
+        }
+
         drawList->AddRectFilled(previewMin, previewMax, PreviewBackgroundColor);
 
         constexpr float PaddingPx = 24.0f;
@@ -3323,14 +3367,29 @@ namespace perapera
 
         const float scaleX = availableWidth / static_cast<float>(workCanvas.widthPx);
         const float scaleY = availableHeight / static_cast<float>(workCanvas.heightPx);
-        const float scale = std::min(scaleX, scaleY);
+        const float baseScale = std::min(scaleX, scaleY);
+
+        editorViewport2D_.ensureInitialized(workCanvas);
+        editorViewport2D_.clampToCanvas(
+            baseScale,
+            previewSize.x,
+            previewSize.y,
+            workCanvas
+        );
+
+        const float scale = editorViewport2D_.canvasScreenScale(baseScale);
 
         const float canvasPreviewWidth = static_cast<float>(workCanvas.widthPx) * scale;
         const float canvasPreviewHeight = static_cast<float>(workCanvas.heightPx) * scale;
 
+        const ImVec2 previewCenter(
+            previewMin.x + previewSize.x * 0.5f,
+            previewMin.y + previewSize.y * 0.5f
+        );
+
         const ImVec2 canvasMin(
-            previewMin.x + (previewSize.x - canvasPreviewWidth) * 0.5f,
-            previewMin.y + (previewSize.y - canvasPreviewHeight) * 0.5f
+            previewCenter.x - editorViewport2D_.centerX * scale,
+            previewCenter.y - editorViewport2D_.centerY * scale
         );
 
         const ImVec2 canvasMax(
@@ -3451,10 +3510,69 @@ namespace perapera
         const bool mouseInsideCanvas =
             isInsideRect(mousePosition, canvasMin, canvasMax);
 
-        if (!isPlaybackPlaying_
-            && isInputAreaHovered
-            && mouseInsideCanvas
+        if (isInputAreaHovered
             && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+        {
+            isEditorViewportPanning_ = true;
+        }
+
+        if (isEditorViewportPanning_
+            && ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+        {
+            const ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
+
+            editorViewport2D_.panByScreenDelta(
+                mouseDelta.x,
+                mouseDelta.y,
+                baseScale,
+                previewSize.x,
+                previewSize.y,
+                workCanvas
+            );
+        }
+
+        if (isEditorViewportPanning_
+            && ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
+        {
+            isEditorViewportPanning_ = false;
+        }
+
+        const float mouseWheel = ImGui::GetIO().MouseWheel;
+
+        if (isInputAreaHovered
+            && std::abs(mouseWheel) > 0.0001f)
+        {
+            editorViewport2D_.zoomAtScreenPoint(
+                mousePosition.x - previewCenter.x,
+                mousePosition.y - previewCenter.y,
+                mouseWheel,
+                baseScale,
+                previewSize.x,
+                previewSize.y,
+                workCanvas
+            );
+        }
+
+        const CanvasRect shotViewport = shotCamera2D_.calculateViewportRect(renderFormat);
+
+        const ImVec2 renderFrameMin(
+            canvasMin.x + shotViewport.minX * scale,
+            canvasMin.y + shotViewport.minY * scale
+        );
+
+        const ImVec2 renderFrameMax(
+            renderFrameMin.x + shotViewport.width * scale,
+            renderFrameMin.y + shotViewport.height * scale
+        );
+
+        const bool mouseInsideShotFrame =
+            isInsideRect(mousePosition, renderFrameMin, renderFrameMax);
+
+        if (!isPlaybackPlaying_
+            && canvasInteractionMode_ == CanvasInteractionMode::ShotCamera
+            && isInputAreaHovered
+            && mouseInsideShotFrame
+            && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
             pushUndoSnapshot("撮影カメラを直接パン");
             isShotCameraPanning_ = true;
@@ -3462,7 +3580,7 @@ namespace perapera
 
         if (!isPlaybackPlaying_
             && isShotCameraPanning_
-            && ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+            && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             const ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
 
@@ -3480,47 +3598,10 @@ namespace perapera
         }
 
         if (isShotCameraPanning_
-            && ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
+            && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
             isShotCameraPanning_ = false;
         }
-
-        const float mouseWheel = ImGui::GetIO().MouseWheel;
-
-        if (!isPlaybackPlaying_
-            && isInputAreaHovered
-            && mouseInsideCanvas
-            && std::abs(mouseWheel) > 0.0001f)
-        {
-            pushUndoSnapshot("撮影カメラを直接ズーム");
-
-            const CanvasPoint zoomAnchor =
-                screenToCanvasPoint(mousePosition, canvasMin, scale);
-
-            if (shotCameraController2D_.zoomAtCanvasPoint(
-                shotCamera2D_,
-                zoomAnchor.x,
-                zoomAnchor.y,
-                mouseWheel,
-                workCanvas,
-                renderFormat
-            ))
-            {
-                commitDirectShotCameraEdit();
-            }
-        }
-
-        const CanvasRect shotViewport = shotCamera2D_.calculateViewportRect(renderFormat);
-
-        const ImVec2 renderFrameMin(
-            canvasMin.x + shotViewport.minX * scale,
-            canvasMin.y + shotViewport.minY * scale
-        );
-
-        const ImVec2 renderFrameMax(
-            renderFrameMin.x + shotViewport.width * scale,
-            renderFrameMin.y + shotViewport.height * scale
-        );
 
         const bool renderFrameFits =
             renderFrameMin.x >= canvasMin.x
@@ -3562,7 +3643,8 @@ namespace perapera
             "撮影カメラ / 2D"
         );
 
-        if (drawingTool_ == DrawingTool::Eraser
+        if (canvasInteractionMode_ == CanvasInteractionMode::Drawing
+            && drawingTool_ == DrawingTool::Eraser
             && isInputAreaHovered
             && mouseInsideCanvas)
         {
@@ -3581,6 +3663,7 @@ namespace perapera
             && !isPlaybackPlaying_;
 
         if (canEditCanvas
+            && canvasInteractionMode_ == CanvasInteractionMode::Drawing
             && drawingTool_ == DrawingTool::Pen
             && isInputAreaHovered
             && mouseInsideCanvas
@@ -3595,6 +3678,7 @@ namespace perapera
         }
 
         if (canEditCanvas
+            && canvasInteractionMode_ == CanvasInteractionMode::Drawing
             && drawingTool_ == DrawingTool::Eraser
             && isInputAreaHovered
             && mouseInsideCanvas
@@ -3612,6 +3696,7 @@ namespace perapera
         }
 
         if (canEditCanvas
+            && canvasInteractionMode_ == CanvasInteractionMode::Drawing
             && drawingTool_ == DrawingTool::Pen
             && isDrawing_
             && ImGui::IsMouseDown(ImGuiMouseButton_Left))
@@ -3643,6 +3728,7 @@ namespace perapera
         }
 
         if (canEditCanvas
+            && canvasInteractionMode_ == CanvasInteractionMode::Drawing
             && drawingTool_ == DrawingTool::Eraser
             && isErasing_
             && ImGui::IsMouseDown(ImGuiMouseButton_Left))
