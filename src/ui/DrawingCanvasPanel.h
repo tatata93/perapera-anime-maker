@@ -2,15 +2,16 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Nでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Oでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
 // ブラシ補間・手ぶれ補正・簡易入り抜き、
-// 撮影用2Dカメラのパン・ズームに対応します。
+// 撮影用2Dカメラのパン・ズームとカメラキーに対応します。
 
 #pragma once
 
 #include "camera/ShotCamera2D.h"
+#include "camera/ShotCameraAnimation.h"
 #include "drawing/AnimationFrame.h"
 #include "drawing/Brush.h"
 #include "drawing/DrawingLayer.h"
@@ -42,6 +43,9 @@ namespace perapera
         struct EditorHistorySnapshot
         {
             std::vector<AnimationFrame> frames;
+            ShotCameraAnimation shotCameraAnimation;
+            ShotCamera2D shotCamera;
+            bool shotCameraAnimationEnabled = true;
             int activeFrameIndex = 0;
             int activeLayerIndex = 0;
             int nextFrameNumber = 2;
@@ -55,6 +59,15 @@ namespace perapera
         // 最終出力に使う撮影用2Dカメラ。
         // 将来追加する3D補助カメラとは別概念として管理する。
         ShotCamera2D shotCamera2D_;
+
+        ShotCameraAnimation shotCameraAnimation_;
+
+        bool shotCameraAnimationEnabled_ = true;
+
+        ShotCameraInterpolation newShotCameraKeyInterpolation_ =
+            ShotCameraInterpolation::Smooth;
+
+        int lastAppliedShotCameraTimelineFrame_ = -1;
 
         // 撮影カメラの上下左右移動ボタンで使う移動量。
         float shotCameraNudgePx_ = 100.0f;
@@ -220,6 +233,21 @@ namespace perapera
         void updateUndoRedoShortcuts();
 
         void updatePlayback(const RenderFormat& renderFormat);
+
+        int timelineFrameForDrawingFrame(int drawingFrameIndex) const;
+
+        int currentTimelineFrame() const;
+
+        void seekTimelineFrame(int timelineFrame);
+
+        void invalidateShotCameraEvaluation();
+
+        void synchronizeShotCameraToTimeline(
+            const WorkCanvas& workCanvas,
+            const RenderFormat& renderFormat
+        );
+
+        void changeFrameDuration(int frameIndex, int newDurationFrames);
 
         void stopPlayback();
 

@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Nでは、撮影用2Dカメラのパン・ズームに対応します。
+// Phase 3Oでは、撮影用2Dカメラのカメラキーと補間に対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -237,6 +237,8 @@ namespace perapera
             const RenderFormat& renderFormat,
             const Brush& brush,
             const ShotCamera2D& shotCamera,
+            const ShotCameraAnimation& shotCameraAnimation,
+            bool shotCameraAnimationEnabled,
             const std::vector<AnimationFrame>& frames
         )
         {
@@ -281,6 +283,29 @@ namespace perapera
                 << ' '
                 << shotCamera.zoom
                 << "\n";
+
+            output
+                << "SHOT_CAMERA_ANIMATION "
+                << (shotCameraAnimationEnabled ? 1 : 0)
+                << ' '
+                << shotCameraAnimation.keys().size()
+                << "\n";
+
+            for (const ShotCameraKey& key : shotCameraAnimation.keys())
+            {
+                output
+                    << "CAMERA_KEY "
+                    << key.timelineFrame
+                    << ' '
+                    << key.camera.centerX
+                    << ' '
+                    << key.camera.centerY
+                    << ' '
+                    << key.camera.zoom
+                    << ' '
+                    << static_cast<int>(key.interpolation)
+                    << "\n";
+            }
 
             output << "FRAMES " << frames.size() << "\n";
 
@@ -353,6 +378,8 @@ namespace perapera
             RenderFormat& renderFormat,
             Brush& brush,
             ShotCamera2D& shotCamera,
+            ShotCameraAnimation& shotCameraAnimation,
+            bool& shotCameraAnimationEnabled,
             std::vector<AnimationFrame>& frames,
             std::string& errorMessage
         )
@@ -414,6 +441,8 @@ namespace perapera
             loadedShotCamera.centerX = static_cast<float>(loadedCanvasWidth) * 0.5f;
             loadedShotCamera.centerY = static_cast<float>(loadedCanvasHeight) * 0.5f;
             loadedShotCamera.zoom = 1.0f;
+            ShotCameraAnimation loadedShotCameraAnimation;
+            bool loadedShotCameraAnimationEnabled = true;
 
             std::string nextKeyword;
 
@@ -432,6 +461,60 @@ namespace perapera
                 {
                     errorMessage = "プロジェクト読み込み失敗: 撮影用2Dカメラ設定を読めません。";
                     return false;
+                }
+
+                if (!(input >> nextKeyword))
+                {
+                    errorMessage = "プロジェクト読み込み失敗: フレーム情報を読む前にファイル終端に到達しました。";
+                    return false;
+                }
+            }
+
+            if (nextKeyword == "SHOT_CAMERA_ANIMATION")
+            {
+                int enabledValue = 1;
+                int keyCount = 0;
+
+                if (!(input >> enabledValue >> keyCount) || keyCount < 0)
+                {
+                    errorMessage = "プロジェクト読み込み失敗: カメラアニメーション設定が不正です。";
+                    return false;
+                }
+
+                loadedShotCameraAnimationEnabled = (enabledValue != 0);
+
+                for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+                {
+                    if (!readExpectedKeyword(input, "CAMERA_KEY", errorMessage))
+                    {
+                        return false;
+                    }
+
+                    int timelineFrame = 0;
+                    int interpolationValue = 0;
+                    ShotCamera2D keyCamera;
+
+                    if (!(input
+                        >> timelineFrame
+                        >> keyCamera.centerX
+                        >> keyCamera.centerY
+                        >> keyCamera.zoom
+                        >> interpolationValue))
+                    {
+                        errorMessage = "プロジェクト読み込み失敗: カメラキー情報が不正です。";
+                        return false;
+                    }
+
+                    const ShotCameraInterpolation interpolation =
+                        static_cast<ShotCameraInterpolation>(
+                            std::clamp(interpolationValue, 0, 2)
+                        );
+
+                    loadedShotCameraAnimation.setKey(
+                        std::max(0, timelineFrame),
+                        keyCamera,
+                        interpolation
+                    );
                 }
 
                 if (!(input >> nextKeyword))
@@ -595,6 +678,8 @@ namespace perapera
 
             loadedShotCamera.clampToReasonableValues(workCanvas, renderFormat);
             shotCamera = loadedShotCamera;
+            shotCameraAnimation = loadedShotCameraAnimation;
+            shotCameraAnimationEnabled = loadedShotCameraAnimationEnabled;
 
             loadedBrush.radiusPx = std::clamp(loadedBrush.radiusPx, 0.1f, 512.0f);
             loadedBrush.color.r = std::clamp(loadedBrush.color.r, 0.0f, 1.0f);
@@ -1248,6 +1333,9 @@ namespace perapera
     {
         EditorHistorySnapshot snapshot;
         snapshot.frames = frames_;
+        snapshot.shotCameraAnimation = shotCameraAnimation_;
+        snapshot.shotCamera = shotCamera2D_;
+        snapshot.shotCameraAnimationEnabled = shotCameraAnimationEnabled_;
         snapshot.activeFrameIndex = activeFrameIndex_;
         snapshot.activeLayerIndex = activeLayerIndex_;
         snapshot.nextFrameNumber = nextFrameNumber_;
@@ -1260,6 +1348,10 @@ namespace perapera
         stopPlayback();
 
         frames_ = snapshot.frames;
+        shotCameraAnimation_ = snapshot.shotCameraAnimation;
+        shotCamera2D_ = snapshot.shotCamera;
+        shotCameraAnimationEnabled_ = snapshot.shotCameraAnimationEnabled;
+        invalidateShotCameraEvaluation();
 
         if (frames_.empty())
         {
@@ -1489,6 +1581,155 @@ namespace perapera
         }
     }
 
+    int DrawingCanvasPanel::timelineFrameForDrawingFrame(int drawingFrameIndex) const
+    {
+        const int safeFrameIndex = std::clamp(
+            drawingFrameIndex,
+            0,
+            static_cast<int>(frames_.size())
+        );
+
+        int timelineFrame = 0;
+
+        for (int index = 0; index < safeFrameIndex; ++index)
+        {
+            timelineFrame += std::max(
+                1,
+                frames_[static_cast<std::size_t>(index)].durationFrames
+            );
+        }
+
+        return timelineFrame;
+    }
+
+    int DrawingCanvasPanel::currentTimelineFrame() const
+    {
+        if (frames_.empty() || activeFrameIndex_ < 0)
+        {
+            return 0;
+        }
+
+        const int frameStart = timelineFrameForDrawingFrame(activeFrameIndex_);
+        const int holdFrames = std::max(
+            1,
+            frames_[static_cast<std::size_t>(activeFrameIndex_)].durationFrames
+        );
+
+        return frameStart + std::clamp(
+            playbackSubFrameCounter_,
+            0,
+            holdFrames - 1
+        );
+    }
+
+    void DrawingCanvasPanel::seekTimelineFrame(int timelineFrame)
+    {
+        stopPlayback();
+
+        const int safeTimelineFrame = std::max(0, timelineFrame);
+        int frameStart = 0;
+
+        for (int index = 0; index < static_cast<int>(frames_.size()); ++index)
+        {
+            const int holdFrames = std::max(
+                1,
+                frames_[static_cast<std::size_t>(index)].durationFrames
+            );
+
+            if (safeTimelineFrame < frameStart + holdFrames)
+            {
+                activeFrameIndex_ = index;
+                activeLayerIndex_ = 0;
+                playbackSubFrameCounter_ = safeTimelineFrame - frameStart;
+                invalidateShotCameraEvaluation();
+                return;
+            }
+
+            frameStart += holdFrames;
+        }
+
+        if (!frames_.empty())
+        {
+            activeFrameIndex_ = static_cast<int>(frames_.size()) - 1;
+            activeLayerIndex_ = 0;
+            playbackSubFrameCounter_ =
+                std::max(1, frames_.back().durationFrames) - 1;
+        }
+
+        invalidateShotCameraEvaluation();
+    }
+
+    void DrawingCanvasPanel::invalidateShotCameraEvaluation()
+    {
+        lastAppliedShotCameraTimelineFrame_ = -1;
+    }
+
+    void DrawingCanvasPanel::synchronizeShotCameraToTimeline(
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat
+    )
+    {
+        if (!shotCameraAnimationEnabled_ || shotCameraAnimation_.empty())
+        {
+            return;
+        }
+
+        const int timelineFrame = currentTimelineFrame();
+
+        if (timelineFrame == lastAppliedShotCameraTimelineFrame_)
+        {
+            return;
+        }
+
+        shotCamera2D_ = shotCameraAnimation_.evaluate(
+            timelineFrame,
+            shotCamera2D_
+        );
+        shotCamera2D_.clampToReasonableValues(workCanvas, renderFormat);
+        lastAppliedShotCameraTimelineFrame_ = timelineFrame;
+    }
+
+    void DrawingCanvasPanel::changeFrameDuration(
+        int frameIndex,
+        int newDurationFrames
+    )
+    {
+        if (frameIndex < 0 || frameIndex >= static_cast<int>(frames_.size()))
+        {
+            return;
+        }
+
+        AnimationFrame& frame = frames_[static_cast<std::size_t>(frameIndex)];
+        const int oldDuration = std::max(1, frame.durationFrames);
+        const int safeNewDuration = std::clamp(newDurationFrames, 1, 240);
+
+        if (oldDuration == safeNewDuration)
+        {
+            return;
+        }
+
+        const int frameStart = timelineFrameForDrawingFrame(frameIndex);
+
+        if (safeNewDuration > oldDuration)
+        {
+            shotCameraAnimation_.insertTimelineFrames(
+                frameStart + oldDuration,
+                safeNewDuration - oldDuration
+            );
+        }
+        else
+        {
+            shotCameraAnimation_.removeTimelineFrames(
+                frameStart + safeNewDuration,
+                oldDuration - safeNewDuration
+            );
+        }
+
+        frame.durationFrames = safeNewDuration;
+        resetPlaybackProgress();
+        invalidateShotCameraEvaluation();
+    }
+
     void DrawingCanvasPanel::addFrame()
     {
         pushUndoSnapshot("空フレーム追加");
@@ -1518,8 +1759,17 @@ namespace perapera
 
         AnimationFrame copiedFrame = *currentFrame;
         copiedFrame.name = makeDefaultFrameName(nextFrameNumber_);
+        const int insertionTimelineFrame =
+            timelineFrameForDrawingFrame(activeFrameIndex_ + 1);
+        const int insertedTimelineFrameCount =
+            std::max(1, copiedFrame.durationFrames);
 
         ++nextFrameNumber_;
+
+        shotCameraAnimation_.insertTimelineFrames(
+            insertionTimelineFrame,
+            insertedTimelineFrameCount
+        );
 
         frames_.insert(
             frames_.begin() + activeFrameIndex_ + 1,
@@ -1531,6 +1781,7 @@ namespace perapera
 
         currentStroke_.points.clear();
         isDrawing_ = false;
+        invalidateShotCameraEvaluation();
     }
 
     void DrawingCanvasPanel::deleteActiveFrame()
@@ -1546,6 +1797,18 @@ namespace perapera
 
         pushUndoSnapshot("現在フレームを削除");
 
+        const int removedTimelineFrame =
+            timelineFrameForDrawingFrame(activeFrameIndex_);
+        const int removedTimelineFrameCount = std::max(
+            1,
+            frames_[static_cast<std::size_t>(activeFrameIndex_)].durationFrames
+        );
+
+        shotCameraAnimation_.removeTimelineFrames(
+            removedTimelineFrame,
+            removedTimelineFrameCount
+        );
+
         frames_.erase(frames_.begin() + activeFrameIndex_);
         clampActiveFrameIndex();
 
@@ -1553,6 +1816,7 @@ namespace perapera
 
         currentStroke_.points.clear();
         isDrawing_ = false;
+        invalidateShotCameraEvaluation();
     }
 
     void DrawingCanvasPanel::moveToPreviousFrame()
@@ -1718,12 +1982,22 @@ namespace perapera
         options.transparentBackground = pngTransparentBackground_;
 
         std::string errorMessage;
+        ShotCamera2D exportCamera = shotCamera2D_;
+
+        if (shotCameraAnimationEnabled_ && !shotCameraAnimation_.empty())
+        {
+            exportCamera = shotCameraAnimation_.evaluate(
+                currentTimelineFrame(),
+                shotCamera2D_
+            );
+            exportCamera.clampToReasonableValues(workCanvas, renderFormat);
+        }
 
         const bool succeeded = PngExporter::exportShotCameraFrame(
             outputPath,
             workCanvas,
             renderFormat,
-            shotCamera2D_,
+            exportCamera,
             frame->layers,
             options,
             errorMessage
@@ -1806,12 +2080,22 @@ namespace perapera
                     outputDirectory / fileNameStream.str();
 
                 std::string errorMessage;
+                ShotCamera2D exportCamera = shotCamera2D_;
+
+                if (shotCameraAnimationEnabled_ && !shotCameraAnimation_.empty())
+                {
+                    exportCamera = shotCameraAnimation_.evaluate(
+                        outputFrameNumber - 1,
+                        shotCamera2D_
+                    );
+                    exportCamera.clampToReasonableValues(workCanvas, renderFormat);
+                }
 
                 const bool succeeded = PngExporter::exportShotCameraFrame(
                     outputPath,
                     workCanvas,
                     renderFormat,
-                    shotCamera2D_,
+                    exportCamera,
                     frame.layers,
                     options,
                     errorMessage
@@ -1893,6 +2177,8 @@ namespace perapera
             renderFormat,
             brush_,
             shotCamera2D_,
+            shotCameraAnimation_,
+            shotCameraAnimationEnabled_,
             frames_
         );
 
@@ -1935,6 +2221,8 @@ namespace perapera
         std::vector<AnimationFrame> loadedFrames;
 
         ShotCamera2D loadedShotCamera = shotCamera2D_;
+        ShotCameraAnimation loadedShotCameraAnimation;
+        bool loadedShotCameraAnimationEnabled = true;
 
         const bool succeeded = readProjectFileFromStream(
             input,
@@ -1942,6 +2230,8 @@ namespace perapera
             renderFormat,
             loadedBrush,
             loadedShotCamera,
+            loadedShotCameraAnimation,
+            loadedShotCameraAnimationEnabled,
             loadedFrames,
             errorMessage
         );
@@ -1956,6 +2246,9 @@ namespace perapera
         brush_ = loadedBrush;
         shotCamera2D_ = loadedShotCamera;
         shotCamera2D_.clampToReasonableValues(workCanvas, renderFormat);
+        shotCameraAnimation_ = loadedShotCameraAnimation;
+        shotCameraAnimationEnabled_ = loadedShotCameraAnimationEnabled;
+        invalidateShotCameraEvaluation();
         frames_ = loadedFrames;
 
         if (frames_.empty())
@@ -1990,7 +2283,7 @@ namespace perapera
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3Nでは撮影用2Dカメラでパン・ズームできます。");
+        ImGui::Text("Phase 3Oでは撮影用2Dカメラをキーアニメーションできます。");
 
         ImGui::Separator();
 
@@ -2134,7 +2427,7 @@ namespace perapera
                 && editedDurationFrames != frame.durationFrames)
             {
                 pushUndoSnapshot("保持コマ数変更");
-                frame.durationFrames = editedDurationFrames;
+                changeFrameDuration(index, editedDurationFrames);
             }
 
             ImGui::Separator();
@@ -2239,13 +2532,14 @@ namespace perapera
                 && editedDurationFrames != currentFrame->durationFrames)
             {
                 pushUndoSnapshot("タイムライン保持コマ数変更");
-                currentFrame->durationFrames = editedDurationFrames;
+                changeFrameDuration(activeFrameIndex_, editedDurationFrames);
             }
         }
 
         ImGui::Separator();
 
         ImGui::Text("横長の箱がフレームです。箱の幅が保持コマ数を表します。");
+        ImGui::Text("黄色い菱形は撮影カメラキーです。");
 
         const ImVec2 childSize(0.0f, 140.0f);
 
@@ -2262,6 +2556,7 @@ namespace perapera
         constexpr float MinimumFrameBlockWidth = 56.0f;
         constexpr float FrameBlockHeight = 52.0f;
         constexpr float FrameBlockGap = 6.0f;
+        int timelineFrameStart = 0;
 
         for (int index = 0; index < static_cast<int>(frames_.size()); ++index)
         {
@@ -2333,6 +2628,34 @@ namespace perapera
                 durationLabel.c_str()
             );
 
+            for (const ShotCameraKey& key : shotCameraAnimation_.keys())
+            {
+                if (key.timelineFrame < timelineFrameStart
+                    || key.timelineFrame >= timelineFrameStart + holdFrames)
+                {
+                    continue;
+                }
+
+                const float keyRatio =
+                    static_cast<float>(key.timelineFrame - timelineFrameStart)
+                    / static_cast<float>(holdFrames);
+
+                const float keyX = blockMin.x + blockWidth * keyRatio;
+                const float keyY = blockMax.y - 6.0f;
+                const ImVec2 diamondPoints[] = {
+                    ImVec2(keyX, keyY - 5.0f),
+                    ImVec2(keyX + 5.0f, keyY),
+                    ImVec2(keyX, keyY + 5.0f),
+                    ImVec2(keyX - 5.0f, keyY)
+                };
+
+                drawList->AddConvexPolyFilled(
+                    diamondPoints,
+                    4,
+                    IM_COL32(255, 210, 70, 255)
+                );
+            }
+
             if (isActive)
             {
                 float markerRatio = 0.0f;
@@ -2363,6 +2686,8 @@ namespace perapera
             {
                 ImGui::SameLine(0.0f, FrameBlockGap);
             }
+
+            timelineFrameStart += holdFrames;
         }
 
         ImGui::EndChild();
@@ -2379,6 +2704,117 @@ namespace perapera
 
         ImGui::Text("最終出力に使う2D撮影カメラです。");
         ImGui::Text("3D作画補助用カメラとは別概念として管理します。");
+
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("カメラアニメーション", &shotCameraAnimationEnabled_))
+        {
+            invalidateShotCameraEvaluation();
+        }
+
+        const int timelineFrame = currentTimelineFrame();
+
+        ImGui::Text(
+            "現在位置: タイムライン %dコマ目",
+            timelineFrame + 1
+        );
+
+        const char* interpolationItems[] = {
+            "ホールド",
+            "リニア",
+            "なめらか"
+        };
+
+        int interpolationIndex =
+            static_cast<int>(newShotCameraKeyInterpolation_);
+
+        ImGui::SetNextItemWidth(180.0f);
+
+        if (ImGui::Combo(
+            "キー間補間",
+            &interpolationIndex,
+            interpolationItems,
+            3
+        ))
+        {
+            newShotCameraKeyInterpolation_ =
+                static_cast<ShotCameraInterpolation>(interpolationIndex);
+        }
+
+        const bool hasKeyHere = shotCameraAnimation_.hasKeyAt(timelineFrame);
+
+        if (ImGui::Button(
+            hasKeyHere
+                ? "現在位置のキーを更新"
+                : "現在位置にキー追加"
+        ))
+        {
+            const int keyTimelineFrame = timelineFrame;
+            pushUndoSnapshot(
+                hasKeyHere
+                    ? "撮影カメラキー更新"
+                    : "撮影カメラキー追加"
+            );
+
+            shotCameraAnimation_.setKey(
+                keyTimelineFrame,
+                shotCamera2D_,
+                newShotCameraKeyInterpolation_
+            );
+
+            seekTimelineFrame(keyTimelineFrame);
+            invalidateShotCameraEvaluation();
+        }
+
+        if (hasKeyHere)
+        {
+            ImGui::SameLine();
+
+            if (ImGui::Button("現在位置のキーを削除"))
+            {
+                const int keyTimelineFrame = timelineFrame;
+                pushUndoSnapshot("撮影カメラキー削除");
+                shotCameraAnimation_.removeKeyAt(keyTimelineFrame);
+                seekTimelineFrame(keyTimelineFrame);
+                invalidateShotCameraEvaluation();
+            }
+        }
+
+        ImGui::Text(
+            "キー数: %d",
+            static_cast<int>(shotCameraAnimation_.keys().size())
+        );
+
+        if (!shotCameraAnimation_.empty()
+            && ImGui::TreeNode("カメラキー一覧"))
+        {
+            for (const ShotCameraKey& key : shotCameraAnimation_.keys())
+            {
+                ImGui::PushID(key.timelineFrame);
+
+                const char* interpolationLabel =
+                    interpolationItems[static_cast<int>(key.interpolation)];
+
+                if (ImGui::SmallButton("移動"))
+                {
+                    seekTimelineFrame(key.timelineFrame);
+                }
+
+                ImGui::SameLine();
+                ImGui::Text(
+                    "%dコマ目 / X %.1f / Y %.1f / Zoom %.3f / %s",
+                    key.timelineFrame + 1,
+                    key.camera.centerX,
+                    key.camera.centerY,
+                    key.camera.zoom,
+                    interpolationLabel
+                );
+
+                ImGui::PopID();
+            }
+
+            ImGui::TreePop();
+        }
 
         ImGui::Separator();
 
@@ -2605,10 +3041,11 @@ namespace perapera
     {
         updateUndoRedoShortcuts();
         updatePlayback(renderFormat);
+        synchronizeShotCameraToTimeline(workCanvas, renderFormat);
 
+        drawFramePanel(renderFormat);
         drawTimelinePanel(renderFormat);
         drawShotCameraPanel(workCanvas, renderFormat);
-        drawFramePanel(renderFormat);
         drawLayerPanel();
 
         ImGui::Begin("簡易作画キャンバス");
