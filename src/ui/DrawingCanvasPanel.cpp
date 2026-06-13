@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Oでは、撮影用2Dカメラのカメラキーと補間に対応します。
+// Phase 3Pでは、撮影用2Dカメラの直接操作に対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -21,6 +21,7 @@
 // - タイムラインでフレーム・保持コマ数・再生位置を確認する
 // - 線の補間、手ぶれ補正、簡易入り抜きで描き味を調整する
 // - 撮影用2Dカメラでパン・ズームした範囲をPNG/PNG連番へ書き出す
+// - 中ドラッグとホイールで撮影用2Dカメラを直接操作する
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -1689,6 +1690,34 @@ namespace perapera
         lastAppliedShotCameraTimelineFrame_ = timelineFrame;
     }
 
+    void DrawingCanvasPanel::commitDirectShotCameraEdit()
+    {
+        if (!shotCameraAnimationEnabled_ || !shotCameraAutoKeyEnabled_)
+        {
+            return;
+        }
+
+        const int timelineFrame = currentTimelineFrame();
+        ShotCameraInterpolation interpolation =
+            newShotCameraKeyInterpolation_;
+
+        for (const ShotCameraKey& key : shotCameraAnimation_.keys())
+        {
+            if (key.timelineFrame == timelineFrame)
+            {
+                interpolation = key.interpolation;
+                break;
+            }
+        }
+
+        shotCameraAnimation_.setKey(
+            timelineFrame,
+            shotCamera2D_,
+            interpolation
+        );
+        invalidateShotCameraEvaluation();
+    }
+
     void DrawingCanvasPanel::changeFrameDuration(
         int frameIndex,
         int newDurationFrames
@@ -2712,6 +2741,9 @@ namespace perapera
             invalidateShotCameraEvaluation();
         }
 
+        ImGui::Checkbox("直接操作でオートキー", &shotCameraAutoKeyEnabled_);
+        ImGui::Text("中ドラッグ: パン / ホイール: カーソル基準ズーム");
+
         const int timelineFrame = currentTimelineFrame();
 
         ImGui::Text(
@@ -3277,6 +3309,7 @@ namespace perapera
             "DrawingCanvasInput",
             previewSize,
             ImGuiButtonFlags_MouseButtonLeft
+                | ImGuiButtonFlags_MouseButtonMiddle
         );
 
         const bool isInputAreaHovered = ImGui::IsItemHovered();
@@ -3414,6 +3447,69 @@ namespace perapera
 
         drawList->PopClipRect();
 
+        const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+        const bool mouseInsideCanvas =
+            isInsideRect(mousePosition, canvasMin, canvasMax);
+
+        if (!isPlaybackPlaying_
+            && isInputAreaHovered
+            && mouseInsideCanvas
+            && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+        {
+            pushUndoSnapshot("撮影カメラを直接パン");
+            isShotCameraPanning_ = true;
+        }
+
+        if (!isPlaybackPlaying_
+            && isShotCameraPanning_
+            && ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+        {
+            const ImVec2 mouseDelta = ImGui::GetIO().MouseDelta;
+
+            if (shotCameraController2D_.panByScreenDelta(
+                shotCamera2D_,
+                mouseDelta.x,
+                mouseDelta.y,
+                scale,
+                workCanvas,
+                renderFormat
+            ))
+            {
+                commitDirectShotCameraEdit();
+            }
+        }
+
+        if (isShotCameraPanning_
+            && ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
+        {
+            isShotCameraPanning_ = false;
+        }
+
+        const float mouseWheel = ImGui::GetIO().MouseWheel;
+
+        if (!isPlaybackPlaying_
+            && isInputAreaHovered
+            && mouseInsideCanvas
+            && std::abs(mouseWheel) > 0.0001f)
+        {
+            pushUndoSnapshot("撮影カメラを直接ズーム");
+
+            const CanvasPoint zoomAnchor =
+                screenToCanvasPoint(mousePosition, canvasMin, scale);
+
+            if (shotCameraController2D_.zoomAtCanvasPoint(
+                shotCamera2D_,
+                zoomAnchor.x,
+                zoomAnchor.y,
+                mouseWheel,
+                workCanvas,
+                renderFormat
+            ))
+            {
+                commitDirectShotCameraEdit();
+            }
+        }
+
         const CanvasRect shotViewport = shotCamera2D_.calculateViewportRect(renderFormat);
 
         const ImVec2 renderFrameMin(
@@ -3465,9 +3561,6 @@ namespace perapera
             renderFrameFits ? RenderFrameColor : WarningColor,
             "撮影カメラ / 2D"
         );
-
-        const ImVec2 mousePosition = ImGui::GetIO().MousePos;
-        const bool mouseInsideCanvas = isInsideRect(mousePosition, canvasMin, canvasMax);
 
         if (drawingTool_ == DrawingTool::Eraser
             && isInputAreaHovered

@@ -2,16 +2,17 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Oでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Pでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
 // ブラシ補間・手ぶれ補正・簡易入り抜き、
-// 撮影用2Dカメラのパン・ズームとカメラキーに対応します。
+// 撮影用2Dカメラの直接操作とカメラキーに対応します。
 
 #pragma once
 
 #include "camera/ShotCamera2D.h"
 #include "camera/ShotCameraAnimation.h"
+#include "camera/ShotCameraController2D.h"
 #include "drawing/AnimationFrame.h"
 #include "drawing/Brush.h"
 #include "drawing/DrawingLayer.h"
@@ -62,7 +63,13 @@ namespace perapera
 
         ShotCameraAnimation shotCameraAnimation_;
 
+        ShotCameraController2D shotCameraController2D_;
+
         bool shotCameraAnimationEnabled_ = true;
+
+        bool shotCameraAutoKeyEnabled_ = true;
+
+        bool isShotCameraPanning_ = false;
 
         ShotCameraInterpolation newShotCameraKeyInterpolation_ =
             ShotCameraInterpolation::Smooth;
@@ -246,6 +253,8 @@ namespace perapera
             const WorkCanvas& workCanvas,
             const RenderFormat& renderFormat
         );
+
+        void commitDirectShotCameraEdit();
 
         void changeFrameDuration(int frameIndex, int newDurationFrames);
 

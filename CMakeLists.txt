@@ -56,6 +56,8 @@ add_executable(perapera_anime_maker
     src/camera/ShotCamera2D.cpp
     src/camera/ShotCameraAnimation.h
     src/camera/ShotCameraAnimation.cpp
+    src/camera/ShotCameraController2D.h
+    src/camera/ShotCameraController2D.cpp
 
     src/drawing/Brush.h
     src/drawing/Brush.cpp
