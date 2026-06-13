@@ -2,11 +2,12 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Rでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Sでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
 // ブラシ補間・手ぶれ補正・簡易入り抜き、
 // 作画ビュー、撮影用2Dカメラ、タイムライン、MP4出力に対応します。
+// 出力とプロジェクト操作のUIは専用パネルへ分離しています。
 
 #pragma once
 
@@ -17,11 +18,11 @@
 #include "drawing/Brush.h"
 #include "drawing/DrawingLayer.h"
 #include "drawing/Stroke.h"
-#include "export/FfmpegExporter.h"
-#include "export/PngExporter.h"
-#include "ui/EditorViewport2D.h"
 #include "timeline/TimelineController.h"
 #include "timeline/TimelineViewState.h"
+#include "ui/EditorViewport2D.h"
+#include "ui/panels/ExportPanel.h"
+#include "ui/panels/ProjectPanel.h"
 
 #include <filesystem>
 #include <string>
@@ -168,35 +169,11 @@ namespace perapera
         // exports/png_sequence_0001, exports/png_sequence_0002 ... のように使う。
         int nextPngSequenceExportNumber_ = 1;
 
-        bool pngTransparentBackground_ = false;
-
-        std::string lastPngExportMessage_;
-
-        bool lastPngExportSucceeded_ = false;
-
-        std::string lastPngSequenceExportMessage_;
-
-        bool lastPngSequenceExportSucceeded_ = false;
-
-        FfmpegSettings ffmpegSettings_;
-
         int nextVideoExportNumber_ = 1;
 
-        bool keepVideoPngFrames_ = false;
+        ExportPanel exportPanel_;
 
-        std::string lastVideoExportMessage_;
-
-        std::string lastVideoExportLog_;
-
-        bool lastVideoExportSucceeded_ = false;
-
-        // Phase 3Hでは、最初の保存/読み込みとして固定パスを使う。
-        // ファイルダイアログは後のPhaseで追加する。
-        std::string projectFilePath_ = "projects/current_project.perapera_project.txt";
-
-        std::string lastProjectFileMessage_;
-
-        bool lastProjectFileSucceeded_ = false;
+        ProjectPanel projectPanel_;
 
         // Undo/Redo用の履歴。
         // Phase 3Iでは、フレーム・レイヤー・ストロークの状態を丸ごと保存する

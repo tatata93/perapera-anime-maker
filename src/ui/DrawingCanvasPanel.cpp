@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Rでは、外部FFmpegを使ったMP4動画出力に対応します。
+// Phase 3Sでは、出力UIとプロジェクトUIを専用パネルへ分離します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -28,6 +28,8 @@
 #include "ui/DrawingCanvasPanel.h"
 
 #include "drawing/WorkCanvas.h"
+#include "export/FfmpegExporter.h"
+#include "export/PngExporter.h"
 #include "project/RenderFormat.h"
 
 #include "imgui.h"
@@ -2032,8 +2034,10 @@ namespace perapera
 
         if (frame == nullptr)
         {
-            lastPngExportSucceeded_ = false;
-            lastPngExportMessage_ = "PNG保存失敗: 現在フレームがありません。";
+            exportPanel_.setCurrentPngResult(
+                false,
+                "PNG保存失敗: 現在フレームがありません。"
+            );
             return;
         }
 
@@ -2050,7 +2054,8 @@ namespace perapera
             std::filesystem::path("exports") / fileNameStream.str();
 
         PngExportOptions options;
-        options.transparentBackground = pngTransparentBackground_;
+        options.transparentBackground =
+            exportPanel_.transparentBackground();
 
         std::string errorMessage;
         ShotCamera2D exportCamera = shotCamera2D_;
@@ -2076,14 +2081,18 @@ namespace perapera
 
         if (succeeded)
         {
-            lastPngExportSucceeded_ = true;
-            lastPngExportMessage_ = "PNG保存成功: " + outputPath.string();
+            exportPanel_.setCurrentPngResult(
+                true,
+                "PNG保存成功: " + outputPath.string()
+            );
             ++nextPngExportNumber_;
         }
         else
         {
-            lastPngExportSucceeded_ = false;
-            lastPngExportMessage_ = "PNG保存失敗: " + errorMessage;
+            exportPanel_.setCurrentPngResult(
+                false,
+                "PNG保存失敗: " + errorMessage
+            );
         }
     }
 
@@ -2098,8 +2107,10 @@ namespace perapera
 
         if (frames_.empty())
         {
-            lastPngSequenceExportSucceeded_ = false;
-            lastPngSequenceExportMessage_ = "PNG連番保存失敗: フレームがありません。";
+            exportPanel_.setPngSequenceResult(
+                false,
+                "PNG連番保存失敗: フレームがありません。"
+            );
             return;
         }
 
@@ -2121,25 +2132,26 @@ namespace perapera
             outputDirectory,
             workCanvas,
             renderFormat,
-            pngTransparentBackground_,
+            exportPanel_.transparentBackground(),
             exportedImageCount,
             errorMessage
         ))
         {
-            lastPngSequenceExportSucceeded_ = false;
-            lastPngSequenceExportMessage_ =
-                "PNG連番保存失敗: " + errorMessage;
+            exportPanel_.setPngSequenceResult(
+                false,
+                "PNG連番保存失敗: " + errorMessage
+            );
             return;
         }
 
-        lastPngSequenceExportSucceeded_ = true;
-        lastPngSequenceExportMessage_ =
+        exportPanel_.setPngSequenceResult(
+            true,
             "PNG連番保存成功: "
-            + outputDirectory.string()
-            + " / "
-            + std::to_string(exportedImageCount)
-            + "枚";
-
+                + outputDirectory.string()
+                + " / "
+                + std::to_string(exportedImageCount)
+                + "枚"
+        );
 
         ++nextPngSequenceExportNumber_;
     }
@@ -2293,14 +2305,18 @@ namespace perapera
             pngErrorMessage
         ))
         {
-            lastVideoExportSucceeded_ = false;
-            lastVideoExportMessage_ =
-                "MP4保存失敗: PNG連番生成: " + pngErrorMessage;
-            lastVideoExportLog_.clear();
+            exportPanel_.setVideoResult(
+                false,
+                "MP4保存失敗: PNG連番生成: " + pngErrorMessage,
+                std::string()
+            );
             return;
         }
 
-        ffmpegSettings_.framesPerSecond = std::clamp(
+        FfmpegSettings& ffmpegSettings =
+            exportPanel_.ffmpegSettings();
+
+        ffmpegSettings.framesPerSecond = std::clamp(
             renderFormat.framesPerSecond,
             1,
             240
@@ -2312,38 +2328,39 @@ namespace perapera
             FfmpegExporter::exportPngSequenceToMp4(
                 inputPattern,
                 outputPath,
-                ffmpegSettings_
+                ffmpegSettings
             );
 
-        lastVideoExportLog_ =
+        const std::string videoLog =
             result.command
             + (result.log.empty() ? std::string() : "\n\n" + result.log);
 
         if (!result.succeeded)
         {
-            lastVideoExportSucceeded_ = false;
-            lastVideoExportMessage_ =
+            exportPanel_.setVideoResult(
+                false,
                 "MP4保存失敗: "
-                + result.errorMessage
-                + " / PNG "
-                + std::to_string(exportedImageCount)
-                + "枚は "
-                + framesDirectory.string()
-                + " に残しました。";
+                    + result.errorMessage
+                    + " / PNG "
+                    + std::to_string(exportedImageCount)
+                    + "枚は "
+                    + framesDirectory.string()
+                    + " に残しました。",
+                videoLog
+            );
             return;
         }
 
-        lastVideoExportSucceeded_ = true;
-        lastVideoExportMessage_ =
+        std::string videoMessage =
             "MP4保存成功: "
             + outputPath.string()
             + " / "
             + std::to_string(exportedImageCount)
             + "枚 / "
-            + std::to_string(ffmpegSettings_.framesPerSecond)
+            + std::to_string(ffmpegSettings.framesPerSecond)
             + " fps";
 
-        if (!keepVideoPngFrames_)
+        if (!exportPanel_.keepVideoPngFrames())
         {
             std::error_code removeFramesError;
             std::filesystem::remove_all(
@@ -2353,11 +2370,17 @@ namespace perapera
 
             if (removeFramesError)
             {
-                lastVideoExportMessage_ +=
+                videoMessage +=
                     " / 一時PNG削除失敗: "
                     + removeFramesError.message();
             }
         }
+
+        exportPanel_.setVideoResult(
+            true,
+            videoMessage,
+            videoLog
+        );
 
         ++nextVideoExportNumber_;
     }
@@ -2373,7 +2396,9 @@ namespace perapera
 
         std::error_code createDirectoryError;
         const std::filesystem::path projectPath =
-            makeProjectFilePathFromProjectRoot(projectFilePath_);
+            makeProjectFilePathFromProjectRoot(
+                projectPanel_.projectFilePath()
+            );
 
         if (projectPath.has_parent_path())
         {
@@ -2385,10 +2410,11 @@ namespace perapera
 
         if (createDirectoryError)
         {
-            lastProjectFileSucceeded_ = false;
-            lastProjectFileMessage_ =
+            projectPanel_.setResult(
+                false,
                 "プロジェクト保存失敗: フォルダを作れません: "
-                + createDirectoryError.message();
+                    + createDirectoryError.message()
+            );
             return;
         }
 
@@ -2396,10 +2422,11 @@ namespace perapera
 
         if (!output)
         {
-            lastProjectFileSucceeded_ = false;
-            lastProjectFileMessage_ =
+            projectPanel_.setResult(
+                false,
                 "プロジェクト保存失敗: ファイルを開けません: "
-                + projectPath.string();
+                    + projectPath.string()
+            );
             return;
         }
 
@@ -2416,13 +2443,17 @@ namespace perapera
 
         if (!output)
         {
-            lastProjectFileSucceeded_ = false;
-            lastProjectFileMessage_ = "プロジェクト保存失敗: 書き込み中に失敗しました。";
+            projectPanel_.setResult(
+                false,
+                "プロジェクト保存失敗: 書き込み中に失敗しました。"
+            );
             return;
         }
 
-        lastProjectFileSucceeded_ = true;
-        lastProjectFileMessage_ = "プロジェクト保存成功: " + projectPath.string();
+        projectPanel_.setResult(
+            true,
+            "プロジェクト保存成功: " + projectPath.string()
+        );
     }
 
     void DrawingCanvasPanel::loadProjectFile(
@@ -2435,16 +2466,19 @@ namespace perapera
         isDrawing_ = false;
 
         const std::filesystem::path projectPath =
-            makeProjectFilePathFromProjectRoot(projectFilePath_);
+            makeProjectFilePathFromProjectRoot(
+                projectPanel_.projectFilePath()
+            );
 
         std::ifstream input(projectPath);
 
         if (!input)
         {
-            lastProjectFileSucceeded_ = false;
-            lastProjectFileMessage_ =
+            projectPanel_.setResult(
+                false,
                 "プロジェクト読み込み失敗: ファイルを開けません: "
-                + projectPath.string();
+                    + projectPath.string()
+            );
             return;
         }
 
@@ -2470,8 +2504,10 @@ namespace perapera
 
         if (!succeeded)
         {
-            lastProjectFileSucceeded_ = false;
-            lastProjectFileMessage_ = errorMessage;
+            projectPanel_.setResult(
+                false,
+                errorMessage
+            );
             return;
         }
 
@@ -2506,8 +2542,10 @@ namespace perapera
 
         clearHistory();
 
-        lastProjectFileSucceeded_ = true;
-        lastProjectFileMessage_ = "プロジェクト読み込み成功: " + projectPath.string();
+        projectPanel_.setResult(
+            true,
+            "プロジェクト読み込み成功: " + projectPath.string()
+        );
     }
 
     void DrawingCanvasPanel::drawFramePanel(const RenderFormat& renderFormat)
@@ -3460,6 +3498,38 @@ namespace perapera
         drawShotCameraPanel(workCanvas, renderFormat);
         drawLayerPanel();
 
+        const ExportPanelActions exportActions = exportPanel_.draw(
+            renderFormat.framesPerSecond,
+            calculatePngSequenceImageCount(frames_)
+        );
+
+        if (exportActions.exportCurrentPng)
+        {
+            exportCurrentRenderFramePng(workCanvas, renderFormat);
+        }
+
+        if (exportActions.exportPngSequence)
+        {
+            exportAllFramesPngSequence(workCanvas, renderFormat);
+        }
+
+        if (exportActions.exportMp4)
+        {
+            exportVideoMp4(workCanvas, renderFormat);
+        }
+
+        const ProjectPanelAction projectAction =
+            projectPanel_.draw();
+
+        if (projectAction == ProjectPanelAction::Save)
+        {
+            saveProjectFile(workCanvas, renderFormat);
+        }
+        else if (projectAction == ProjectPanelAction::Load)
+        {
+            loadProjectFile(workCanvas, renderFormat);
+        }
+
         ImGui::Begin("簡易作画キャンバス");
 
         const AnimationFrame* currentFrame = activeFrame();
@@ -3586,202 +3656,6 @@ namespace perapera
         }
 
         ImGui::SliderFloat("消しゴム半径 px", &eraserRadiusPx_, 4.0f, 120.0f);
-
-        ImGui::Separator();
-
-        ImGui::Text("PNG保存");
-
-        ImGui::Checkbox("透明背景で保存", &pngTransparentBackground_);
-
-        if (ImGui::Button("現在の撮影フレームをPNG保存"))
-        {
-            exportCurrentRenderFramePng(workCanvas, renderFormat);
-        }
-
-        if (!lastPngExportMessage_.empty())
-        {
-            if (lastPngExportSucceeded_)
-            {
-                ImGui::TextColored(
-                    ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
-                    "%s",
-                    lastPngExportMessage_.c_str()
-                );
-            }
-            else
-            {
-                ImGui::TextColored(
-                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-                    "%s",
-                    lastPngExportMessage_.c_str()
-                );
-            }
-        }
-
-        ImGui::Spacing();
-        ImGui::Text("PNG連番保存");
-        ImGui::Text("保持コマ数を反映して全フレームを書き出します。");
-        ImGui::Text("出力予定枚数: %d", calculatePngSequenceImageCount(frames_));
-
-        if (ImGui::Button("全フレームをPNG連番保存"))
-        {
-            exportAllFramesPngSequence(workCanvas, renderFormat);
-        }
-
-        if (!lastPngSequenceExportMessage_.empty())
-        {
-            if (lastPngSequenceExportSucceeded_)
-            {
-                ImGui::TextColored(
-                    ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
-                    "%s",
-                    lastPngSequenceExportMessage_.c_str()
-                );
-            }
-            else
-            {
-                ImGui::TextColored(
-                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-                    "%s",
-                    lastPngSequenceExportMessage_.c_str()
-                );
-            }
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Text("MP4動画保存 / 外部FFmpeg");
-        ImGui::Text(
-            "PNG連番をFFmpegでH.264のMP4へ変換します。FPS: %d",
-            renderFormat.framesPerSecond
-        );
-
-        char ffmpegPathBuffer[512] = {};
-        copyStringToInputBuffer(
-            ffmpegSettings_.executablePath.string(),
-            ffmpegPathBuffer,
-            sizeof(ffmpegPathBuffer)
-        );
-
-        ImGui::SetNextItemWidth(420.0f);
-        if (ImGui::InputText(
-            "ffmpeg.exeのパス",
-            ffmpegPathBuffer,
-            sizeof(ffmpegPathBuffer)
-        ))
-        {
-            ffmpegSettings_.executablePath =
-                std::filesystem::path(ffmpegPathBuffer);
-        }
-
-        ImGui::SetNextItemWidth(180.0f);
-        ImGui::SliderInt(
-            "動画品質 CRF",
-            &ffmpegSettings_.constantRateFactor,
-            0,
-            51
-        );
-        ImGui::Text("CRFは小さいほど高画質です。通常は18～23を使用します。");
-
-        const char* presetItems[] = {
-            "ultrafast",
-            "fast",
-            "medium",
-            "slow"
-        };
-        int presetIndex = 2;
-
-        for (int index = 0; index < 4; ++index)
-        {
-            if (ffmpegSettings_.preset == presetItems[index])
-            {
-                presetIndex = index;
-                break;
-            }
-        }
-
-        ImGui::SetNextItemWidth(180.0f);
-        if (ImGui::Combo(
-            "圧縮速度",
-            &presetIndex,
-            presetItems,
-            4
-        ))
-        {
-            ffmpegSettings_.preset = presetItems[presetIndex];
-        }
-
-        ImGui::Checkbox(
-            "動画変換後も一時PNGを残す",
-            &keepVideoPngFrames_
-        );
-
-        if (ImGui::Button("全フレームをMP4動画保存"))
-        {
-            exportVideoMp4(workCanvas, renderFormat);
-        }
-
-        if (!lastVideoExportMessage_.empty())
-        {
-            ImGui::TextColored(
-                lastVideoExportSucceeded_
-                    ? ImVec4(0.45f, 1.0f, 0.55f, 1.0f)
-                    : ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-                "%s",
-                lastVideoExportMessage_.c_str()
-            );
-        }
-
-        if (!lastVideoExportLog_.empty()
-            && ImGui::TreeNode("FFmpeg実行ログ"))
-        {
-            ImGui::BeginChild(
-                "FfmpegLog",
-                ImVec2(0.0f, 180.0f),
-                true,
-                ImGuiWindowFlags_HorizontalScrollbar
-            );
-            ImGui::TextUnformatted(lastVideoExportLog_.c_str());
-            ImGui::EndChild();
-            ImGui::TreePop();
-        }
-
-        ImGui::Spacing();
-        ImGui::Text("プロジェクト保存/読み込み");
-        ImGui::Text("保存先: %s", projectFilePath_.c_str());
-        ImGui::Text("読み込み時は、現在の作業内容をファイル内容で置き換えます。");
-
-        if (ImGui::Button("プロジェクト保存"))
-        {
-            saveProjectFile(workCanvas, renderFormat);
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("プロジェクト読み込み"))
-        {
-            loadProjectFile(workCanvas, renderFormat);
-        }
-
-        if (!lastProjectFileMessage_.empty())
-        {
-            if (lastProjectFileSucceeded_)
-            {
-                ImGui::TextColored(
-                    ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
-                    "%s",
-                    lastProjectFileMessage_.c_str()
-                );
-            }
-            else
-            {
-                ImGui::TextColored(
-                    ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
-                    "%s",
-                    lastProjectFileMessage_.c_str()
-                );
-            }
-        }
 
         ImGui::Separator();
 
