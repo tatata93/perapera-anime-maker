@@ -73,6 +73,11 @@ add_executable(perapera_anime_maker
     src/project/RenderFormat.h
     src/project/RenderFormat.cpp
 
+    src/timeline/TimelineViewState.h
+    src/timeline/TimelineViewState.cpp
+    src/timeline/TimelineController.h
+    src/timeline/TimelineController.cpp
+
     src/export/PngExporter.h
     src/export/PngExporter.cpp
 

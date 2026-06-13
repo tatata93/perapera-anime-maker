@@ -2,11 +2,11 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Pでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Qでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
 // ブラシ補間・手ぶれ補正・簡易入り抜き、
-// 作画ビューのパン・ズームと、撮影用2Dカメラの専用操作に対応します。
+// 作画ビュー、撮影用2Dカメラ、長尺対応タイムラインに対応します。
 
 #pragma once
 
@@ -19,6 +19,8 @@
 #include "drawing/Stroke.h"
 #include "export/PngExporter.h"
 #include "ui/EditorViewport2D.h"
+#include "timeline/TimelineController.h"
+#include "timeline/TimelineViewState.h"
 
 #include <string>
 #include <vector>
@@ -216,6 +218,16 @@ namespace perapera
         // 1 / FPS 秒たまるごとに1コマ進める。
         float playbackTimeAccumulatorSeconds_ = 0.0f;
 
+        int activePlaybackRangeStart_ = 0;
+
+        int activePlaybackRangeEnd_ = 0;
+
+        TimelineViewState timelineViewState_;
+
+        TimelineController timelineController_;
+
+        bool isTimelineCameraKeyDragging_ = false;
+
         void clampActiveFrameIndex();
 
         void clampActiveLayerIndex();
@@ -255,11 +267,15 @@ namespace perapera
 
         void updatePlayback(const RenderFormat& renderFormat);
 
+        void startPlayback();
+
         int timelineFrameForDrawingFrame(int drawingFrameIndex) const;
 
         int currentTimelineFrame() const;
 
         void seekTimelineFrame(int timelineFrame);
+
+        void setTimelineFramePosition(int timelineFrame);
 
         void invalidateShotCameraEvaluation();
 

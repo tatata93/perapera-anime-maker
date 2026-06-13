@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Pでは、作画ビューと撮影用2Dカメラの操作を分離します。
+// Phase 3Qでは、長尺対応タイムラインとカメラキー編集に対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -1523,6 +1523,45 @@ namespace perapera
         resetPlaybackProgress();
     }
 
+    void DrawingCanvasPanel::startPlayback()
+    {
+        if (frames_.empty())
+        {
+            return;
+        }
+
+        const int requestedStartFrame = currentTimelineFrame();
+        const int totalFrames = calculatePngSequenceImageCount(frames_);
+        timelineViewState_.clampToTimeline(totalFrames);
+
+        activePlaybackRangeStart_ =
+            timelineViewState_.playbackRangeEnabled
+                ? timelineViewState_.playbackRangeStart
+                : 0;
+        activePlaybackRangeEnd_ =
+            timelineViewState_.playbackRangeEnabled
+                ? timelineViewState_.playbackRangeEnd
+                : std::max(0, totalFrames - 1);
+
+        resetPlaybackProgress();
+
+        if (requestedStartFrame < activePlaybackRangeStart_
+            || requestedStartFrame > activePlaybackRangeEnd_)
+        {
+            setTimelineFramePosition(activePlaybackRangeStart_);
+        }
+        else
+        {
+            setTimelineFramePosition(requestedStartFrame);
+        }
+
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+        isErasing_ = false;
+        hasPreviousEraserPoint_ = false;
+        isPlaybackPlaying_ = true;
+    }
+
     void DrawingCanvasPanel::updatePlayback(const RenderFormat& renderFormat)
     {
         if (!isPlaybackPlaying_ || frames_.empty())
@@ -1546,37 +1585,23 @@ namespace perapera
         {
             playbackTimeAccumulatorSeconds_ -= secondsPerFrame;
 
-            AnimationFrame* frame = activeFrame();
+            const int totalFrames = calculatePngSequenceImageCount(frames_);
+            const TimelinePlaybackStep step =
+                timelineController_.nextPlaybackStep(
+                    currentTimelineFrame(),
+                    activePlaybackRangeStart_,
+                    activePlaybackRangeEnd_,
+                    totalFrames,
+                    playbackLoopEnabled_
+                );
 
-            if (frame == nullptr)
+            setTimelineFramePosition(step.timelineFrame);
+
+            if (step.shouldStop)
             {
-                stopPlayback();
+                isPlaybackPlaying_ = false;
+                playbackTimeAccumulatorSeconds_ = 0.0f;
                 return;
-            }
-
-            const int holdFrames = std::max(1, frame->durationFrames);
-
-            ++playbackSubFrameCounter_;
-
-            if (playbackSubFrameCounter_ >= holdFrames)
-            {
-                playbackSubFrameCounter_ = 0;
-
-                if (activeFrameIndex_ < static_cast<int>(frames_.size()) - 1)
-                {
-                    ++activeFrameIndex_;
-                    activeLayerIndex_ = 0;
-                }
-                else if (playbackLoopEnabled_)
-                {
-                    activeFrameIndex_ = 0;
-                    activeLayerIndex_ = 0;
-                }
-                else
-                {
-                    stopPlayback();
-                    return;
-                }
             }
 
             ++safetyCounter;
@@ -1627,8 +1652,23 @@ namespace perapera
     void DrawingCanvasPanel::seekTimelineFrame(int timelineFrame)
     {
         stopPlayback();
+        setTimelineFramePosition(timelineFrame);
+    }
 
-        const int safeTimelineFrame = std::max(0, timelineFrame);
+    void DrawingCanvasPanel::setTimelineFramePosition(int timelineFrame)
+    {
+        if (frames_.empty())
+        {
+            return;
+        }
+
+        const int totalTimelineFrames =
+            calculatePngSequenceImageCount(frames_);
+        const int safeTimelineFrame = std::clamp(
+            timelineFrame,
+            0,
+            std::max(0, totalTimelineFrames - 1)
+        );
         int frameStart = 0;
 
         for (int index = 0; index < static_cast<int>(frames_.size()); ++index)
@@ -2350,10 +2390,7 @@ namespace perapera
             }
             else
             {
-                resetPlaybackProgress();
-                currentStroke_.points.clear();
-                isDrawing_ = false;
-                isPlaybackPlaying_ = true;
+                startPlayback();
             }
         }
 
@@ -2490,6 +2527,15 @@ namespace perapera
         const int playbackFps = std::clamp(renderFormat.framesPerSecond, 1, 240);
         const float totalSeconds =
             static_cast<float>(totalTimelineFrames) / static_cast<float>(playbackFps);
+        timelineViewState_.clampToTimeline(totalTimelineFrames);
+
+        if (timelineViewState_.selectedCameraKeyFrame >= 0
+            && !shotCameraAnimation_.hasKeyAt(
+                timelineViewState_.selectedCameraKeyFrame
+            ))
+        {
+            timelineViewState_.selectedCameraKeyFrame = -1;
+        }
 
         ImGui::Text(
             "合計: %dコマ / %.2f秒 / %d fps",
@@ -2506,13 +2552,7 @@ namespace perapera
 
         if (ImGui::Button("先頭"))
         {
-            stopPlayback();
-            activeFrameIndex_ = 0;
-            activeLayerIndex_ = 0;
-            currentStroke_.points.clear();
-            isDrawing_ = false;
-            isErasing_ = false;
-            hasPreviousEraserPoint_ = false;
+            seekTimelineFrame(0);
         }
 
         ImGui::SameLine();
@@ -2539,12 +2579,7 @@ namespace perapera
             }
             else
             {
-                resetPlaybackProgress();
-                currentStroke_.points.clear();
-                isDrawing_ = false;
-                isErasing_ = false;
-                hasPreviousEraserPoint_ = false;
-                isPlaybackPlaying_ = true;
+                startPlayback();
             }
         }
 
@@ -2568,10 +2603,100 @@ namespace perapera
 
         ImGui::Separator();
 
-        ImGui::Text("横長の箱がフレームです。箱の幅が保持コマ数を表します。");
-        ImGui::Text("黄色い菱形は撮影カメラキーです。");
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat(
+            "タイムライン表示倍率",
+            &timelineViewState_.pixelsPerFrame,
+            8.0f,
+            96.0f,
+            "%.0f px/コマ"
+        );
 
-        const ImVec2 childSize(0.0f, 140.0f);
+        if (isPlaybackPlaying_)
+        {
+            ImGui::TextColored(
+                ImVec4(0.45f, 1.0f, 0.55f, 1.0f),
+                "再生中範囲: %d～%dコマ目",
+                activePlaybackRangeStart_ + 1,
+                activePlaybackRangeEnd_ + 1
+            );
+            ImGui::BeginDisabled();
+        }
+
+        ImGui::Checkbox(
+            "再生範囲を使用",
+            &timelineViewState_.playbackRangeEnabled
+        );
+
+        int rangeStartDisplay = timelineViewState_.playbackRangeStart + 1;
+        int rangeEndDisplay = timelineViewState_.playbackRangeEnd + 1;
+
+        ImGui::SetNextItemWidth(150.0f);
+        if (ImGui::SliderInt(
+            "範囲開始",
+            &rangeStartDisplay,
+            1,
+            totalTimelineFrames
+        ))
+        {
+            timelineViewState_.playbackRangeStart = rangeStartDisplay - 1;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("現在を開始"))
+        {
+            timelineViewState_.playbackRangeStart = currentTimelineFrame();
+        }
+
+        ImGui::SetNextItemWidth(150.0f);
+        if (ImGui::SliderInt(
+            "範囲終了",
+            &rangeEndDisplay,
+            1,
+            totalTimelineFrames
+        ))
+        {
+            timelineViewState_.playbackRangeEnd = rangeEndDisplay - 1;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("現在を終了"))
+        {
+            timelineViewState_.playbackRangeEnd = currentTimelineFrame();
+        }
+
+        if (isPlaybackPlaying_)
+        {
+            ImGui::EndDisabled();
+        }
+
+        timelineViewState_.clampToTimeline(totalTimelineFrames);
+
+        if (timelineViewState_.selectedCameraKeyFrame >= 0)
+        {
+            ImGui::Text(
+                "選択中カメラキー: %dコマ目",
+                timelineViewState_.selectedCameraKeyFrame + 1
+            );
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("選択キーを削除"))
+            {
+                pushUndoSnapshot("タイムラインでカメラキー削除");
+                shotCameraAnimation_.removeKeyAt(
+                    timelineViewState_.selectedCameraKeyFrame
+                );
+                timelineViewState_.selectedCameraKeyFrame = -1;
+                invalidateShotCameraEvaluation();
+            }
+        }
+
+        ImGui::Text("クリック: 再生位置移動 / 黄色い菱形をドラッグ: カメラキー移動");
+
+        const ImVec2 childSize(0.0f, 156.0f);
 
         ImGui::BeginChild(
             "TimelineScrollArea",
@@ -2581,44 +2706,89 @@ namespace perapera
         );
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
+        constexpr float TimelineHeight = 112.0f;
+        constexpr float FrameBlockTop = 24.0f;
+        constexpr float FrameBlockBottom = 78.0f;
+        constexpr float CameraKeyY = 94.0f;
+        const float contentWidth =
+            timelineViewState_.contentWidth(totalTimelineFrames);
 
-        constexpr float PixelsPerHeldFrame = 28.0f;
-        constexpr float MinimumFrameBlockWidth = 56.0f;
-        constexpr float FrameBlockHeight = 52.0f;
-        constexpr float FrameBlockGap = 6.0f;
+        ImGui::InvisibleButton(
+            "TimelineContent",
+            ImVec2(contentWidth, TimelineHeight),
+            ImGuiButtonFlags_MouseButtonLeft
+        );
+
+        const ImVec2 contentMin = ImGui::GetItemRectMin();
+        const ImVec2 contentMax = ImGui::GetItemRectMax();
+        const bool timelineHovered = ImGui::IsItemHovered();
+        const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+        const float mouseContentX = mousePosition.x - contentMin.x;
+
+        drawList->AddRectFilled(
+            contentMin,
+            contentMax,
+            IM_COL32(30, 33, 40, 255)
+        );
+
+        if (timelineViewState_.playbackRangeEnabled)
+        {
+            const float rangeStartX =
+                contentMin.x
+                + static_cast<float>(timelineViewState_.playbackRangeStart)
+                    * timelineViewState_.pixelsPerFrame;
+            const float rangeEndX =
+                contentMin.x
+                + static_cast<float>(timelineViewState_.playbackRangeEnd + 1)
+                    * timelineViewState_.pixelsPerFrame;
+
+            drawList->AddRectFilled(
+                ImVec2(contentMin.x, contentMin.y),
+                ImVec2(rangeStartX, contentMax.y),
+                IM_COL32(10, 10, 14, 150)
+            );
+            drawList->AddRectFilled(
+                ImVec2(rangeEndX, contentMin.y),
+                contentMax,
+                IM_COL32(10, 10, 14, 150)
+            );
+            drawList->AddLine(
+                ImVec2(rangeStartX, contentMin.y),
+                ImVec2(rangeStartX, contentMax.y),
+                IM_COL32(80, 220, 130, 255),
+                2.0f
+            );
+            drawList->AddLine(
+                ImVec2(rangeEndX, contentMin.y),
+                ImVec2(rangeEndX, contentMax.y),
+                IM_COL32(255, 120, 90, 255),
+                2.0f
+            );
+        }
+
         int timelineFrameStart = 0;
 
         for (int index = 0; index < static_cast<int>(frames_.size()); ++index)
         {
             AnimationFrame& frame = frames_[static_cast<std::size_t>(index)];
             const int holdFrames = std::max(1, frame.durationFrames);
-            const float blockWidth = std::max(
-                MinimumFrameBlockWidth,
-                static_cast<float>(holdFrames) * PixelsPerHeldFrame
+            const float blockMinX =
+                contentMin.x
+                + static_cast<float>(timelineFrameStart)
+                    * timelineViewState_.pixelsPerFrame;
+            const float blockMaxX =
+                blockMinX
+                + static_cast<float>(holdFrames)
+                    * timelineViewState_.pixelsPerFrame;
+            const ImVec2 blockMin(
+                blockMinX,
+                contentMin.y + FrameBlockTop
             );
-
-            ImGui::PushID(index);
-
-            ImGui::InvisibleButton(
-                "TimelineFrameBlock",
-                ImVec2(blockWidth, FrameBlockHeight)
+            const ImVec2 blockMax(
+                blockMaxX,
+                contentMin.y + FrameBlockBottom
             );
-
-            const ImVec2 blockMin = ImGui::GetItemRectMin();
-            const ImVec2 blockMax = ImGui::GetItemRectMax();
-            const bool isHovered = ImGui::IsItemHovered();
             const bool isActive = (index == activeFrameIndex_);
-
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-            {
-                stopPlayback();
-                activeFrameIndex_ = index;
-                activeLayerIndex_ = 0;
-                currentStroke_.points.clear();
-                isDrawing_ = false;
-                isErasing_ = false;
-                hasPreviousEraserPoint_ = false;
-            }
 
             const ImU32 fillColor = isActive
                 ? IM_COL32(70, 120, 190, 255)
@@ -2628,14 +2798,12 @@ namespace perapera
                 ? IM_COL32(255, 220, 80, 255)
                 : IM_COL32(130, 140, 160, 255);
 
-            const ImU32 hoveredBorderColor = IM_COL32(230, 240, 255, 255);
-
             drawList->AddRectFilled(blockMin, blockMax, fillColor, 6.0f);
             drawList->AddRect(
                 blockMin,
                 blockMax,
-                isHovered ? hoveredBorderColor : borderColor,
-                6.0f,
+                borderColor,
+                3.0f,
                 0,
                 isActive ? 3.0f : 1.5f
             );
@@ -2658,66 +2826,115 @@ namespace perapera
                 durationLabel.c_str()
             );
 
-            for (const ShotCameraKey& key : shotCameraAnimation_.keys())
-            {
-                if (key.timelineFrame < timelineFrameStart
-                    || key.timelineFrame >= timelineFrameStart + holdFrames)
-                {
-                    continue;
-                }
-
-                const float keyRatio =
-                    static_cast<float>(key.timelineFrame - timelineFrameStart)
-                    / static_cast<float>(holdFrames);
-
-                const float keyX = blockMin.x + blockWidth * keyRatio;
-                const float keyY = blockMax.y - 6.0f;
-                const ImVec2 diamondPoints[] = {
-                    ImVec2(keyX, keyY - 5.0f),
-                    ImVec2(keyX + 5.0f, keyY),
-                    ImVec2(keyX, keyY + 5.0f),
-                    ImVec2(keyX - 5.0f, keyY)
-                };
-
-                drawList->AddConvexPolyFilled(
-                    diamondPoints,
-                    4,
-                    IM_COL32(255, 210, 70, 255)
-                );
-            }
-
-            if (isActive)
-            {
-                float markerRatio = 0.0f;
-
-                if (isPlaybackPlaying_)
-                {
-                    markerRatio = std::clamp(
-                        static_cast<float>(playbackSubFrameCounter_) /
-                            static_cast<float>(holdFrames),
-                        0.0f,
-                        1.0f
-                    );
-                }
-
-                const float markerX = blockMin.x + blockWidth * markerRatio;
-
-                drawList->AddLine(
-                    ImVec2(markerX, blockMin.y - 8.0f),
-                    ImVec2(markerX, blockMax.y + 8.0f),
-                    IM_COL32(255, 80, 80, 255),
-                    3.0f
-                );
-            }
-
-            ImGui::PopID();
-
-            if (index + 1 < static_cast<int>(frames_.size()))
-            {
-                ImGui::SameLine(0.0f, FrameBlockGap);
-            }
-
             timelineFrameStart += holdFrames;
+        }
+
+        for (const ShotCameraKey& key : shotCameraAnimation_.keys())
+        {
+            const float keyX =
+                contentMin.x
+                + timelineController_.frameCenterX(
+                    key.timelineFrame,
+                    timelineViewState_.pixelsPerFrame
+                );
+            const float keyY = contentMin.y + CameraKeyY;
+            const float radius =
+                key.timelineFrame
+                    == timelineViewState_.selectedCameraKeyFrame
+                    ? 8.0f
+                    : 6.0f;
+            const ImVec2 diamondPoints[] = {
+                ImVec2(keyX, keyY - radius),
+                ImVec2(keyX + radius, keyY),
+                ImVec2(keyX, keyY + radius),
+                ImVec2(keyX - radius, keyY)
+            };
+
+            drawList->AddConvexPolyFilled(
+                diamondPoints,
+                4,
+                key.timelineFrame
+                    == timelineViewState_.selectedCameraKeyFrame
+                    ? IM_COL32(255, 245, 150, 255)
+                    : IM_COL32(255, 210, 70, 255)
+            );
+        }
+
+        const float playheadX =
+            contentMin.x
+            + timelineController_.frameCenterX(
+                currentTimelineFrame(),
+                timelineViewState_.pixelsPerFrame
+            );
+        drawList->AddLine(
+            ImVec2(playheadX, contentMin.y),
+            ImVec2(playheadX, contentMax.y),
+            IM_COL32(255, 80, 80, 255),
+            3.0f
+        );
+
+        if (timelineHovered
+            && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            const int cameraKeyFrame =
+                timelineController_.findCameraKeyNearX(
+                    shotCameraAnimation_,
+                    mouseContentX,
+                    timelineViewState_.pixelsPerFrame,
+                    10.0f
+                );
+
+            if (cameraKeyFrame >= 0
+                && std::abs(
+                    mousePosition.y - (contentMin.y + CameraKeyY)
+                ) <= 14.0f)
+            {
+                pushUndoSnapshot("タイムラインでカメラキー移動");
+                timelineViewState_.selectedCameraKeyFrame = cameraKeyFrame;
+                isTimelineCameraKeyDragging_ = true;
+                seekTimelineFrame(cameraKeyFrame);
+            }
+            else
+            {
+                timelineViewState_.selectedCameraKeyFrame = -1;
+                seekTimelineFrame(
+                    timelineController_.frameAtContentX(
+                        mouseContentX,
+                        timelineViewState_.pixelsPerFrame,
+                        totalTimelineFrames
+                    )
+                );
+            }
+        }
+
+        if (isTimelineCameraKeyDragging_
+            && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            const int destinationFrame =
+                timelineController_.frameAtContentX(
+                    mouseContentX,
+                    timelineViewState_.pixelsPerFrame,
+                    totalTimelineFrames
+                );
+
+            if (timelineController_.moveCameraKey(
+                shotCameraAnimation_,
+                timelineViewState_.selectedCameraKeyFrame,
+                destinationFrame,
+                totalTimelineFrames
+            ))
+            {
+                timelineViewState_.selectedCameraKeyFrame =
+                    destinationFrame;
+                setTimelineFramePosition(destinationFrame);
+                invalidateShotCameraEvaluation();
+            }
+        }
+
+        if (isTimelineCameraKeyDragging_
+            && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            isTimelineCameraKeyDragging_ = false;
         }
 
         ImGui::EndChild();
