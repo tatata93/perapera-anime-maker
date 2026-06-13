@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Mでは、ブラシ補間・手ぶれ補正・簡易入り抜きに対応します。
+// Phase 3Nでは、撮影用2Dカメラのパン・ズームに対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -20,6 +20,7 @@
 // - 消しゴムで選択中レイヤー上の線を消す
 // - タイムラインでフレーム・保持コマ数・再生位置を確認する
 // - 線の補間、手ぶれ補正、簡易入り抜きで描き味を調整する
+// - 撮影用2Dカメラでパン・ズームした範囲をPNG/PNG連番へ書き出す
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -235,6 +236,7 @@ namespace perapera
             const WorkCanvas& workCanvas,
             const RenderFormat& renderFormat,
             const Brush& brush,
+            const ShotCamera2D& shotCamera,
             const std::vector<AnimationFrame>& frames
         )
         {
@@ -269,6 +271,15 @@ namespace perapera
                 << brush.color.b
                 << ' '
                 << brush.color.a
+                << "\n";
+
+            output
+                << "SHOT_CAMERA_2D "
+                << shotCamera.centerX
+                << ' '
+                << shotCamera.centerY
+                << ' '
+                << shotCamera.zoom
                 << "\n";
 
             output << "FRAMES " << frames.size() << "\n";
@@ -341,6 +352,7 @@ namespace perapera
             WorkCanvas& workCanvas,
             RenderFormat& renderFormat,
             Brush& brush,
+            ShotCamera2D& shotCamera,
             std::vector<AnimationFrame>& frames,
             std::string& errorMessage
         )
@@ -398,12 +410,46 @@ namespace perapera
                 return false;
             }
 
-            int frameCount = 0;
+            ShotCamera2D loadedShotCamera;
+            loadedShotCamera.centerX = static_cast<float>(loadedCanvasWidth) * 0.5f;
+            loadedShotCamera.centerY = static_cast<float>(loadedCanvasHeight) * 0.5f;
+            loadedShotCamera.zoom = 1.0f;
 
-            if (!readExpectedKeyword(input, "FRAMES", errorMessage))
+            std::string nextKeyword;
+
+            if (!(input >> nextKeyword))
             {
+                errorMessage = "プロジェクト読み込み失敗: フレーム情報を読む前にファイル終端に到達しました。";
                 return false;
             }
+
+            if (nextKeyword == "SHOT_CAMERA_2D")
+            {
+                if (!(input
+                    >> loadedShotCamera.centerX
+                    >> loadedShotCamera.centerY
+                    >> loadedShotCamera.zoom))
+                {
+                    errorMessage = "プロジェクト読み込み失敗: 撮影用2Dカメラ設定を読めません。";
+                    return false;
+                }
+
+                if (!(input >> nextKeyword))
+                {
+                    errorMessage = "プロジェクト読み込み失敗: フレーム情報を読む前にファイル終端に到達しました。";
+                    return false;
+                }
+            }
+
+            if (nextKeyword != "FRAMES")
+            {
+                errorMessage = "プロジェクト読み込み失敗: FRAMES が必要な場所で "
+                    + nextKeyword
+                    + " を読みました。";
+                return false;
+            }
+
+            int frameCount = 0;
 
             if (!(input >> frameCount) || frameCount <= 0)
             {
@@ -546,6 +592,9 @@ namespace perapera
             renderFormat.outputHeightPx = std::clamp(loadedOutputHeight, 16, 16384);
             renderFormat.framesPerSecond = std::clamp(loadedFps, 1, 240);
             renderFormat.pixelAspectRatio = std::clamp(loadedPixelAspectRatio, 0.1f, 10.0f);
+
+            loadedShotCamera.clampToReasonableValues(workCanvas, renderFormat);
+            shotCamera = loadedShotCamera;
 
             loadedBrush.radiusPx = std::clamp(loadedBrush.radiusPx, 0.1f, 512.0f);
             loadedBrush.color.r = std::clamp(loadedBrush.color.r, 0.0f, 1.0f);
@@ -1670,10 +1719,11 @@ namespace perapera
 
         std::string errorMessage;
 
-        const bool succeeded = PngExporter::exportCenteredRenderFrame(
+        const bool succeeded = PngExporter::exportShotCameraFrame(
             outputPath,
             workCanvas,
             renderFormat,
+            shotCamera2D_,
             frame->layers,
             options,
             errorMessage
@@ -1757,10 +1807,11 @@ namespace perapera
 
                 std::string errorMessage;
 
-                const bool succeeded = PngExporter::exportCenteredRenderFrame(
+                const bool succeeded = PngExporter::exportShotCameraFrame(
                     outputPath,
                     workCanvas,
                     renderFormat,
+                    shotCamera2D_,
                     frame.layers,
                     options,
                     errorMessage
@@ -1841,6 +1892,7 @@ namespace perapera
             workCanvas,
             renderFormat,
             brush_,
+            shotCamera2D_,
             frames_
         );
 
@@ -1882,11 +1934,14 @@ namespace perapera
         Brush loadedBrush = brush_;
         std::vector<AnimationFrame> loadedFrames;
 
+        ShotCamera2D loadedShotCamera = shotCamera2D_;
+
         const bool succeeded = readProjectFileFromStream(
             input,
             workCanvas,
             renderFormat,
             loadedBrush,
+            loadedShotCamera,
             loadedFrames,
             errorMessage
         );
@@ -1899,6 +1954,8 @@ namespace perapera
         }
 
         brush_ = loadedBrush;
+        shotCamera2D_ = loadedShotCamera;
+        shotCamera2D_.clampToReasonableValues(workCanvas, renderFormat);
         frames_ = loadedFrames;
 
         if (frames_.empty())
@@ -1933,7 +1990,7 @@ namespace perapera
         ImGui::Begin("フレーム");
 
         ImGui::Text("現在のフレームを選びます。");
-        ImGui::Text("Phase 3Lではフレーム名・レイヤー名を変更できます。");
+        ImGui::Text("Phase 3Nでは撮影用2Dカメラでパン・ズームできます。");
 
         ImGui::Separator();
 
@@ -2312,6 +2369,95 @@ namespace perapera
         ImGui::End();
     }
 
+
+    void DrawingCanvasPanel::drawShotCameraPanel(
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat
+    )
+    {
+        ImGui::Begin("撮影カメラ / 2D");
+
+        ImGui::Text("最終出力に使う2D撮影カメラです。");
+        ImGui::Text("3D作画補助用カメラとは別概念として管理します。");
+
+        ImGui::Separator();
+
+        shotCamera2D_.clampToReasonableValues(workCanvas, renderFormat);
+
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat(
+            "中心X px",
+            &shotCamera2D_.centerX,
+            0.0f,
+            static_cast<float>(workCanvas.widthPx)
+        );
+
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat(
+            "中心Y px",
+            &shotCamera2D_.centerY,
+            0.0f,
+            static_cast<float>(workCanvas.heightPx)
+        );
+
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat("ズーム", &shotCamera2D_.zoom, 0.1f, 8.0f);
+
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::SliderFloat("移動量 px", &shotCameraNudgePx_, 1.0f, 1000.0f);
+
+        shotCameraNudgePx_ = std::clamp(shotCameraNudgePx_, 1.0f, 1000.0f);
+
+        if (ImGui::Button("左"))
+        {
+            shotCamera2D_.centerX -= shotCameraNudgePx_;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("右"))
+        {
+            shotCamera2D_.centerX += shotCameraNudgePx_;
+        }
+
+        if (ImGui::Button("上"))
+        {
+            shotCamera2D_.centerY -= shotCameraNudgePx_;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("下"))
+        {
+            shotCamera2D_.centerY += shotCameraNudgePx_;
+        }
+
+        if (ImGui::Button("キャンバス中央へ"))
+        {
+            shotCamera2D_.resetToCanvasCenter(workCanvas);
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("ズーム1.0"))
+        {
+            shotCamera2D_.resetZoom();
+        }
+
+        shotCamera2D_.clampToReasonableValues(workCanvas, renderFormat);
+
+        const CanvasRect viewport = shotCamera2D_.calculateViewportRect(renderFormat);
+
+        ImGui::Separator();
+        ImGui::Text("撮影範囲");
+        ImGui::Text("左上: %.1f, %.1f", viewport.minX, viewport.minY);
+        ImGui::Text("サイズ: %.1f x %.1f canvas px", viewport.width, viewport.height);
+        ImGui::Text("出力: %d x %d px", renderFormat.outputWidthPx, renderFormat.outputHeightPx);
+        ImGui::Text("PNG保存/PNG連番保存にはこの範囲が反映されます。");
+
+        ImGui::End();
+    }
+
     void DrawingCanvasPanel::drawLayerPanel()
     {
         ImGui::Begin("レイヤー");
@@ -2460,8 +2606,9 @@ namespace perapera
         updateUndoRedoShortcuts();
         updatePlayback(renderFormat);
 
-        drawFramePanel(renderFormat);
         drawTimelinePanel(renderFormat);
+        drawShotCameraPanel(workCanvas, renderFormat);
+        drawFramePanel(renderFormat);
         drawLayerPanel();
 
         ImGui::Begin("簡易作画キャンバス");
@@ -2830,20 +2977,16 @@ namespace perapera
 
         drawList->PopClipRect();
 
-        const float renderFramePreviewWidth =
-            static_cast<float>(renderFormat.outputWidthPx) * scale;
-
-        const float renderFramePreviewHeight =
-            static_cast<float>(renderFormat.outputHeightPx) * scale;
+        const CanvasRect shotViewport = shotCamera2D_.calculateViewportRect(renderFormat);
 
         const ImVec2 renderFrameMin(
-            canvasMin.x + (canvasPreviewWidth - renderFramePreviewWidth) * 0.5f,
-            canvasMin.y + (canvasPreviewHeight - renderFramePreviewHeight) * 0.5f
+            canvasMin.x + shotViewport.minX * scale,
+            canvasMin.y + shotViewport.minY * scale
         );
 
         const ImVec2 renderFrameMax(
-            renderFrameMin.x + renderFramePreviewWidth,
-            renderFrameMin.y + renderFramePreviewHeight
+            renderFrameMin.x + shotViewport.width * scale,
+            renderFrameMin.y + shotViewport.height * scale
         );
 
         const bool renderFrameFits =
@@ -2861,10 +3004,29 @@ namespace perapera
             3.0f
         );
 
+        const ImVec2 renderFrameCenter(
+            (renderFrameMin.x + renderFrameMax.x) * 0.5f,
+            (renderFrameMin.y + renderFrameMax.y) * 0.5f
+        );
+
+        drawList->AddLine(
+            ImVec2(renderFrameCenter.x - 10.0f, renderFrameCenter.y),
+            ImVec2(renderFrameCenter.x + 10.0f, renderFrameCenter.y),
+            renderFrameFits ? RenderFrameColor : WarningColor,
+            2.0f
+        );
+
+        drawList->AddLine(
+            ImVec2(renderFrameCenter.x, renderFrameCenter.y - 10.0f),
+            ImVec2(renderFrameCenter.x, renderFrameCenter.y + 10.0f),
+            renderFrameFits ? RenderFrameColor : WarningColor,
+            2.0f
+        );
+
         drawList->AddText(
             ImVec2(renderFrameMin.x + 8.0f, renderFrameMin.y + 8.0f),
             renderFrameFits ? RenderFrameColor : WarningColor,
-            "撮影フレーム"
+            "撮影カメラ / 2D"
         );
 
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;

@@ -2,13 +2,15 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Mでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Nでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
-// ブラシ補間・手ぶれ補正・簡易入り抜きに対応します。
+// ブラシ補間・手ぶれ補正・簡易入り抜き、
+// 撮影用2Dカメラのパン・ズームに対応します。
 
 #pragma once
 
+#include "camera/ShotCamera2D.h"
 #include "drawing/AnimationFrame.h"
 #include "drawing/Brush.h"
 #include "drawing/DrawingLayer.h"
@@ -49,6 +51,13 @@ namespace perapera
         static constexpr int MaxUndoHistoryCount = 50;
 
         Brush brush_;
+
+        // 最終出力に使う撮影用2Dカメラ。
+        // 将来追加する3D補助カメラとは別概念として管理する。
+        ShotCamera2D shotCamera2D_;
+
+        // 撮影カメラの上下左右移動ボタンで使う移動量。
+        float shotCameraNudgePx_ = 100.0f;
 
         // 現在選択中の作画ツール。
         // Phase 3Jではペンと消しゴムを切り替えられるようにする。
@@ -237,6 +246,11 @@ namespace perapera
         void drawFramePanel(const RenderFormat& renderFormat);
 
         void drawTimelinePanel(const RenderFormat& renderFormat);
+
+        void drawShotCameraPanel(
+            const WorkCanvas& workCanvas,
+            const RenderFormat& renderFormat
+        );
 
         void drawLayerPanel();
 

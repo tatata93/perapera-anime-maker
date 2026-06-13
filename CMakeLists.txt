@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+﻿cmake_minimum_required(VERSION 3.22)
 
 project(PeraperaAnimeMaker VERSION 0.3.0 LANGUAGES CXX)
 
@@ -52,6 +52,8 @@ endforeach()
 
 add_executable(perapera_anime_maker
     src/app/main.cpp
+    src/camera/ShotCamera2D.h
+    src/camera/ShotCamera2D.cpp
 
     src/drawing/Brush.h
     src/drawing/Brush.cpp

@@ -1,12 +1,12 @@
 // src/export/PngExporter.cpp
 //
 // PNG保存処理の実装です。
-//
-// Phase 3Cでは、まだ高品質なアンチエイリアスは行いません。
 // Strokeの線分に沿って円を並べる簡易ラスタライズでPNG化します。
+// Phase 3Nでは、ShotCamera2Dのパン・ズームをPNG書き出しにも反映します。
 
 #include "export/PngExporter.h"
 
+#include "camera/ShotCamera2D.h"
 #include "drawing/Stroke.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -15,8 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <filesystem>
-#include <vector>
+#include <system_error>
 
 namespace perapera
 {
@@ -73,7 +72,6 @@ namespace perapera
 
             const float srcA = static_cast<float>(source.a) / 255.0f;
             const float dstA = static_cast<float>(destination.a) / 255.0f;
-
             const float outA = srcA + dstA * (1.0f - srcA);
 
             if (outA <= 0.0f)
@@ -112,7 +110,6 @@ namespace perapera
             const int maxX = static_cast<int>(std::ceil(centerX + radius));
             const int minY = static_cast<int>(std::floor(centerY - radius));
             const int maxY = static_cast<int>(std::ceil(centerY + radius));
-
             const float radiusSquared = radius * radius;
 
             for (int y = minY; y <= maxY; ++y)
@@ -133,8 +130,9 @@ namespace perapera
         void drawStrokeToImage(
             ImageRgba8& image,
             const Stroke& stroke,
-            float cropMinX,
-            float cropMinY,
+            const CanvasRect& cropRect,
+            float scaleX,
+            float scaleY,
             float layerOpacity
         )
         {
@@ -144,22 +142,22 @@ namespace perapera
             }
 
             const PixelRgba8 color = makePixel(stroke.color, layerOpacity);
-            const float radius = std::max(1.0f, stroke.radiusPx);
+            const float radiusScale = (scaleX + scaleY) * 0.5f;
+            const float radius = std::max(1.0f, stroke.radiusPx * radiusScale);
 
-            auto toImageX = [cropMinX](float canvasX)
+            auto toImageX = [cropRect, scaleX](float canvasX)
             {
-                return canvasX - cropMinX;
+                return (canvasX - cropRect.minX) * scaleX;
             };
 
-            auto toImageY = [cropMinY](float canvasY)
+            auto toImageY = [cropRect, scaleY](float canvasY)
             {
-                return canvasY - cropMinY;
+                return (canvasY - cropRect.minY) * scaleY;
             };
 
             if (stroke.points.size() == 1)
             {
                 const CanvasPoint point = stroke.points.front();
-
                 drawFilledCircle(
                     image,
                     toImageX(point.x),
@@ -167,7 +165,6 @@ namespace perapera
                     radius,
                     color
                 );
-
                 return;
             }
 
@@ -199,7 +196,6 @@ namespace perapera
                     const float t = static_cast<float>(j) / static_cast<float>(count);
                     const float x = ax + dx * t;
                     const float y = ay + dy * t;
-
                     drawFilledCircle(image, x, y, radius, color);
                 }
             }
@@ -220,6 +216,98 @@ namespace perapera
 
             std::fill(image.pixels.begin(), image.pixels.end(), background);
         }
+
+        bool writeImageToPng(
+            const std::filesystem::path& outputPath,
+            const ImageRgba8& image,
+            std::string& errorMessage
+        )
+        {
+            std::error_code errorCode;
+            std::filesystem::create_directories(outputPath.parent_path(), errorCode);
+
+            if (errorCode)
+            {
+                errorMessage = "保存先フォルダを作成できませんでした: " + errorCode.message();
+                return false;
+            }
+
+            const int strideBytes = image.width * 4;
+            const int result = stbi_write_png(
+                outputPath.string().c_str(),
+                image.width,
+                image.height,
+                4,
+                image.pixels.data(),
+                strideBytes
+            );
+
+            if (result == 0)
+            {
+                errorMessage = "PNG書き出しに失敗しました。";
+                return false;
+            }
+
+            return true;
+        }
+
+        bool exportCropRect(
+            const std::filesystem::path& outputPath,
+            const RenderFormat& renderFormat,
+            const CanvasRect& cropRect,
+            const std::vector<DrawingLayer>& layers,
+            const PngExportOptions& options,
+            std::string& errorMessage
+        )
+        {
+            errorMessage.clear();
+
+            if (renderFormat.outputWidthPx <= 0 || renderFormat.outputHeightPx <= 0)
+            {
+                errorMessage = "出力サイズが不正です。";
+                return false;
+            }
+
+            if (cropRect.width <= 0.0001f || cropRect.height <= 0.0001f)
+            {
+                errorMessage = "撮影カメラの範囲が不正です。";
+                return false;
+            }
+
+            ImageRgba8 image;
+            image.width = renderFormat.outputWidthPx;
+            image.height = renderFormat.outputHeightPx;
+            image.pixels.resize(static_cast<std::size_t>(image.width * image.height));
+
+            fillBackground(image, options.transparentBackground);
+
+            const float scaleX = static_cast<float>(renderFormat.outputWidthPx) / cropRect.width;
+            const float scaleY = static_cast<float>(renderFormat.outputHeightPx) / cropRect.height;
+
+            for (const DrawingLayer& layer : layers)
+            {
+                if (!layer.visible)
+                {
+                    continue;
+                }
+
+                const float layerOpacity = clamp01(layer.opacity);
+
+                for (const Stroke& stroke : layer.strokes)
+                {
+                    drawStrokeToImage(
+                        image,
+                        stroke,
+                        cropRect,
+                        scaleX,
+                        scaleY,
+                        layerOpacity
+                    );
+                }
+            }
+
+            return writeImageToPng(outputPath, image, errorMessage);
+        }
     }
 
     bool PngExporter::exportCenteredRenderFrame(
@@ -231,70 +319,43 @@ namespace perapera
         std::string& errorMessage
     )
     {
-        errorMessage.clear();
+        const CanvasRect cropRect{
+            (static_cast<float>(workCanvas.widthPx) - static_cast<float>(renderFormat.outputWidthPx)) * 0.5f,
+            (static_cast<float>(workCanvas.heightPx) - static_cast<float>(renderFormat.outputHeightPx)) * 0.5f,
+            static_cast<float>(renderFormat.outputWidthPx),
+            static_cast<float>(renderFormat.outputHeightPx)
+        };
 
-        if (renderFormat.outputWidthPx <= 0 || renderFormat.outputHeightPx <= 0)
-        {
-            errorMessage = "出力サイズが不正です。";
-            return false;
-        }
-
-        ImageRgba8 image;
-        image.width = renderFormat.outputWidthPx;
-        image.height = renderFormat.outputHeightPx;
-        image.pixels.resize(static_cast<std::size_t>(image.width * image.height));
-
-        fillBackground(image, options.transparentBackground);
-
-        const float cropMinX =
-            (static_cast<float>(workCanvas.widthPx) -
-             static_cast<float>(renderFormat.outputWidthPx)) * 0.5f;
-
-        const float cropMinY =
-            (static_cast<float>(workCanvas.heightPx) -
-             static_cast<float>(renderFormat.outputHeightPx)) * 0.5f;
-
-        for (const DrawingLayer& layer : layers)
-        {
-            if (!layer.visible)
-            {
-                continue;
-            }
-
-            const float layerOpacity = clamp01(layer.opacity);
-
-            for (const Stroke& stroke : layer.strokes)
-            {
-                drawStrokeToImage(image, stroke, cropMinX, cropMinY, layerOpacity);
-            }
-        }
-
-        std::error_code errorCode;
-        std::filesystem::create_directories(outputPath.parent_path(), errorCode);
-
-        if (errorCode)
-        {
-            errorMessage = "保存先フォルダを作成できませんでした: " + errorCode.message();
-            return false;
-        }
-
-        const int strideBytes = image.width * 4;
-
-        const int result = stbi_write_png(
-            outputPath.string().c_str(),
-            image.width,
-            image.height,
-            4,
-            image.pixels.data(),
-            strideBytes
+        return exportCropRect(
+            outputPath,
+            renderFormat,
+            cropRect,
+            layers,
+            options,
+            errorMessage
         );
+    }
 
-        if (result == 0)
-        {
-            errorMessage = "PNG書き出しに失敗しました。";
-            return false;
-        }
+    bool PngExporter::exportShotCameraFrame(
+        const std::filesystem::path& outputPath,
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat,
+        const ShotCamera2D& shotCamera,
+        const std::vector<DrawingLayer>& layers,
+        const PngExportOptions& options,
+        std::string& errorMessage
+    )
+    {
+        ShotCamera2D safeCamera = shotCamera;
+        safeCamera.clampToReasonableValues(workCanvas, renderFormat);
 
-        return true;
+        return exportCropRect(
+            outputPath,
+            renderFormat,
+            safeCamera.calculateViewportRect(renderFormat),
+            layers,
+            options,
+            errorMessage
+        );
     }
 }
