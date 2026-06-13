@@ -2,11 +2,11 @@
 //
 // DrawingCanvasPanelは、ImGui上に簡易作画キャンバスを表示するUIです。
 //
-// Phase 3Qでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
+// Phase 3Rでは、フレーム管理、レイヤー管理、PNG保存、オニオンスキン、
 // 再生プレビュー、PNG連番保存、プロジェクト保存/読み込み、
 // Undo/Redo、消しゴム、タイムラインUI、名前変更、
 // ブラシ補間・手ぶれ補正・簡易入り抜き、
-// 作画ビュー、撮影用2Dカメラ、長尺対応タイムラインに対応します。
+// 作画ビュー、撮影用2Dカメラ、タイムライン、MP4出力に対応します。
 
 #pragma once
 
@@ -17,11 +17,13 @@
 #include "drawing/Brush.h"
 #include "drawing/DrawingLayer.h"
 #include "drawing/Stroke.h"
+#include "export/FfmpegExporter.h"
 #include "export/PngExporter.h"
 #include "ui/EditorViewport2D.h"
 #include "timeline/TimelineController.h"
 #include "timeline/TimelineViewState.h"
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -176,6 +178,18 @@ namespace perapera
 
         bool lastPngSequenceExportSucceeded_ = false;
 
+        FfmpegSettings ffmpegSettings_;
+
+        int nextVideoExportNumber_ = 1;
+
+        bool keepVideoPngFrames_ = false;
+
+        std::string lastVideoExportMessage_;
+
+        std::string lastVideoExportLog_;
+
+        bool lastVideoExportSucceeded_ = false;
+
         // Phase 3Hでは、最初の保存/読み込みとして固定パスを使う。
         // ファイルダイアログは後のPhaseで追加する。
         std::string projectFilePath_ = "projects/current_project.perapera_project.txt";
@@ -329,6 +343,20 @@ namespace perapera
         );
 
         void exportAllFramesPngSequence(
+            const WorkCanvas& workCanvas,
+            const RenderFormat& renderFormat
+        );
+
+        bool exportPngSequenceToDirectory(
+            const std::filesystem::path& outputDirectory,
+            const WorkCanvas& workCanvas,
+            const RenderFormat& renderFormat,
+            bool transparentBackground,
+            int& exportedImageCount,
+            std::string& errorMessage
+        );
+
+        void exportVideoMp4(
             const WorkCanvas& workCanvas,
             const RenderFormat& renderFormat
         );

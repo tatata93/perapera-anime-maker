@@ -2,7 +2,7 @@
 //
 // DrawingCanvasPanelの実装です。
 //
-// Phase 3Qでは、長尺対応タイムラインとカメラキー編集に対応します。
+// Phase 3Rでは、外部FFmpegを使ったMP4動画出力に対応します。
 // frames_ がAnimationFrameの配列を持ち、
 // 各AnimationFrameがDrawingLayerの配列を持ちます。
 //
@@ -23,6 +23,7 @@
 // - 撮影用2Dカメラでパン・ズームした範囲をPNG/PNG連番へ書き出す
 // - 中ドラッグとホイールで作画ビューをパン・ズームする
 // - 撮影カメラモードでは黄色い撮影枠を左ドラッグで移動する
+// - PNG連番を外部FFmpegでH.264のMP4へ変換する
 
 #include "ui/DrawingCanvasPanel.h"
 
@@ -2113,80 +2114,23 @@ namespace perapera
         const std::filesystem::path outputDirectory =
             std::filesystem::path("exports") / directoryNameStream.str();
 
-        std::error_code createDirectoryError;
-        std::filesystem::create_directories(outputDirectory, createDirectoryError);
+        int exportedImageCount = 0;
+        std::string errorMessage;
 
-        if (createDirectoryError)
+        if (!exportPngSequenceToDirectory(
+            outputDirectory,
+            workCanvas,
+            renderFormat,
+            pngTransparentBackground_,
+            exportedImageCount,
+            errorMessage
+        ))
         {
             lastPngSequenceExportSucceeded_ = false;
             lastPngSequenceExportMessage_ =
-                "PNG連番保存失敗: 出力フォルダを作れません: "
-                + createDirectoryError.message();
+                "PNG連番保存失敗: " + errorMessage;
             return;
         }
-
-        PngExportOptions options;
-        options.transparentBackground = pngTransparentBackground_;
-
-        int outputFrameNumber = 1;
-
-        for (std::size_t sourceFrameIndex = 0; sourceFrameIndex < frames_.size(); ++sourceFrameIndex)
-        {
-            const AnimationFrame& frame = frames_[sourceFrameIndex];
-            const int holdFrames = std::max(1, frame.durationFrames);
-
-            for (int holdFrameIndex = 0; holdFrameIndex < holdFrames; ++holdFrameIndex)
-            {
-                std::ostringstream fileNameStream;
-
-                fileNameStream
-                    << "frame_"
-                    << std::setw(4)
-                    << std::setfill('0')
-                    << outputFrameNumber
-                    << ".png";
-
-                const std::filesystem::path outputPath =
-                    outputDirectory / fileNameStream.str();
-
-                std::string errorMessage;
-                ShotCamera2D exportCamera = shotCamera2D_;
-
-                if (shotCameraAnimationEnabled_ && !shotCameraAnimation_.empty())
-                {
-                    exportCamera = shotCameraAnimation_.evaluate(
-                        outputFrameNumber - 1,
-                        shotCamera2D_
-                    );
-                    exportCamera.clampToReasonableValues(workCanvas, renderFormat);
-                }
-
-                const bool succeeded = PngExporter::exportShotCameraFrame(
-                    outputPath,
-                    workCanvas,
-                    renderFormat,
-                    exportCamera,
-                    frame.layers,
-                    options,
-                    errorMessage
-                );
-
-                if (!succeeded)
-                {
-                    lastPngSequenceExportSucceeded_ = false;
-                    lastPngSequenceExportMessage_ =
-                        "PNG連番保存失敗: "
-                        + frame.name
-                        + " の書き出し中に失敗: "
-                        + errorMessage;
-                    return;
-                }
-
-                ++outputFrameNumber;
-            }
-        }
-
-        const int exportedImageCount = outputFrameNumber - 1;
 
         lastPngSequenceExportSucceeded_ = true;
         lastPngSequenceExportMessage_ =
@@ -2198,6 +2142,224 @@ namespace perapera
 
 
         ++nextPngSequenceExportNumber_;
+    }
+
+    bool DrawingCanvasPanel::exportPngSequenceToDirectory(
+        const std::filesystem::path& outputDirectory,
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat,
+        bool transparentBackground,
+        int& exportedImageCount,
+        std::string& errorMessage
+    )
+    {
+        exportedImageCount = 0;
+        errorMessage.clear();
+
+        if (frames_.empty())
+        {
+            errorMessage = "フレームがありません。";
+            return false;
+        }
+
+        std::error_code removeDirectoryError;
+        std::filesystem::remove_all(
+            outputDirectory,
+            removeDirectoryError
+        );
+
+        if (removeDirectoryError)
+        {
+            errorMessage =
+                "既存の出力フォルダーを初期化できません: "
+                + removeDirectoryError.message();
+            return false;
+        }
+
+        std::error_code createDirectoryError;
+        std::filesystem::create_directories(
+            outputDirectory,
+            createDirectoryError
+        );
+
+        if (createDirectoryError)
+        {
+            errorMessage =
+                "出力フォルダーを作成できません: "
+                + createDirectoryError.message();
+            return false;
+        }
+
+        PngExportOptions options;
+        options.transparentBackground = transparentBackground;
+
+        int outputFrameNumber = 1;
+
+        for (const AnimationFrame& frame : frames_)
+        {
+            const int holdFrames = std::max(1, frame.durationFrames);
+
+            for (int holdFrameIndex = 0;
+                holdFrameIndex < holdFrames;
+                ++holdFrameIndex)
+            {
+                static_cast<void>(holdFrameIndex);
+
+                std::ostringstream fileNameStream;
+                fileNameStream
+                    << "frame_"
+                    << std::setw(4)
+                    << std::setfill('0')
+                    << outputFrameNumber
+                    << ".png";
+
+                const std::filesystem::path outputPath =
+                    outputDirectory / fileNameStream.str();
+
+                ShotCamera2D exportCamera = shotCamera2D_;
+
+                if (shotCameraAnimationEnabled_
+                    && !shotCameraAnimation_.empty())
+                {
+                    exportCamera = shotCameraAnimation_.evaluate(
+                        outputFrameNumber - 1,
+                        shotCamera2D_
+                    );
+                    exportCamera.clampToReasonableValues(
+                        workCanvas,
+                        renderFormat
+                    );
+                }
+
+                std::string pngErrorMessage;
+
+                if (!PngExporter::exportShotCameraFrame(
+                    outputPath,
+                    workCanvas,
+                    renderFormat,
+                    exportCamera,
+                    frame.layers,
+                    options,
+                    pngErrorMessage
+                ))
+                {
+                    errorMessage =
+                        frame.name
+                        + " の書き出し中に失敗: "
+                        + pngErrorMessage;
+                    return false;
+                }
+
+                ++outputFrameNumber;
+            }
+        }
+
+        exportedImageCount = outputFrameNumber - 1;
+        return true;
+    }
+
+    void DrawingCanvasPanel::exportVideoMp4(
+        const WorkCanvas& workCanvas,
+        const RenderFormat& renderFormat
+    )
+    {
+        stopPlayback();
+        currentStroke_.points.clear();
+        isDrawing_ = false;
+
+        std::ostringstream baseNameStream;
+        baseNameStream
+            << "video_"
+            << std::setw(4)
+            << std::setfill('0')
+            << nextVideoExportNumber_;
+
+        const std::string baseName = baseNameStream.str();
+        const std::filesystem::path outputDirectory = "exports";
+        const std::filesystem::path framesDirectory =
+            outputDirectory / (baseName + "_frames");
+        const std::filesystem::path outputPath =
+            outputDirectory / (baseName + ".mp4");
+
+        int exportedImageCount = 0;
+        std::string pngErrorMessage;
+
+        if (!exportPngSequenceToDirectory(
+            framesDirectory,
+            workCanvas,
+            renderFormat,
+            false,
+            exportedImageCount,
+            pngErrorMessage
+        ))
+        {
+            lastVideoExportSucceeded_ = false;
+            lastVideoExportMessage_ =
+                "MP4保存失敗: PNG連番生成: " + pngErrorMessage;
+            lastVideoExportLog_.clear();
+            return;
+        }
+
+        ffmpegSettings_.framesPerSecond = std::clamp(
+            renderFormat.framesPerSecond,
+            1,
+            240
+        );
+
+        const std::filesystem::path inputPattern =
+            framesDirectory / "frame_%04d.png";
+        const FfmpegExportResult result =
+            FfmpegExporter::exportPngSequenceToMp4(
+                inputPattern,
+                outputPath,
+                ffmpegSettings_
+            );
+
+        lastVideoExportLog_ =
+            result.command
+            + (result.log.empty() ? std::string() : "\n\n" + result.log);
+
+        if (!result.succeeded)
+        {
+            lastVideoExportSucceeded_ = false;
+            lastVideoExportMessage_ =
+                "MP4保存失敗: "
+                + result.errorMessage
+                + " / PNG "
+                + std::to_string(exportedImageCount)
+                + "枚は "
+                + framesDirectory.string()
+                + " に残しました。";
+            return;
+        }
+
+        lastVideoExportSucceeded_ = true;
+        lastVideoExportMessage_ =
+            "MP4保存成功: "
+            + outputPath.string()
+            + " / "
+            + std::to_string(exportedImageCount)
+            + "枚 / "
+            + std::to_string(ffmpegSettings_.framesPerSecond)
+            + " fps";
+
+        if (!keepVideoPngFrames_)
+        {
+            std::error_code removeFramesError;
+            std::filesystem::remove_all(
+                framesDirectory,
+                removeFramesError
+            );
+
+            if (removeFramesError)
+            {
+                lastVideoExportMessage_ +=
+                    " / 一時PNG削除失敗: "
+                    + removeFramesError.message();
+            }
+        }
+
+        ++nextVideoExportNumber_;
     }
 
     void DrawingCanvasPanel::saveProjectFile(
@@ -3484,6 +3646,104 @@ namespace perapera
                     lastPngSequenceExportMessage_.c_str()
                 );
             }
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("MP4動画保存 / 外部FFmpeg");
+        ImGui::Text(
+            "PNG連番をFFmpegでH.264のMP4へ変換します。FPS: %d",
+            renderFormat.framesPerSecond
+        );
+
+        char ffmpegPathBuffer[512] = {};
+        copyStringToInputBuffer(
+            ffmpegSettings_.executablePath.string(),
+            ffmpegPathBuffer,
+            sizeof(ffmpegPathBuffer)
+        );
+
+        ImGui::SetNextItemWidth(420.0f);
+        if (ImGui::InputText(
+            "ffmpeg.exeのパス",
+            ffmpegPathBuffer,
+            sizeof(ffmpegPathBuffer)
+        ))
+        {
+            ffmpegSettings_.executablePath =
+                std::filesystem::path(ffmpegPathBuffer);
+        }
+
+        ImGui::SetNextItemWidth(180.0f);
+        ImGui::SliderInt(
+            "動画品質 CRF",
+            &ffmpegSettings_.constantRateFactor,
+            0,
+            51
+        );
+        ImGui::Text("CRFは小さいほど高画質です。通常は18～23を使用します。");
+
+        const char* presetItems[] = {
+            "ultrafast",
+            "fast",
+            "medium",
+            "slow"
+        };
+        int presetIndex = 2;
+
+        for (int index = 0; index < 4; ++index)
+        {
+            if (ffmpegSettings_.preset == presetItems[index])
+            {
+                presetIndex = index;
+                break;
+            }
+        }
+
+        ImGui::SetNextItemWidth(180.0f);
+        if (ImGui::Combo(
+            "圧縮速度",
+            &presetIndex,
+            presetItems,
+            4
+        ))
+        {
+            ffmpegSettings_.preset = presetItems[presetIndex];
+        }
+
+        ImGui::Checkbox(
+            "動画変換後も一時PNGを残す",
+            &keepVideoPngFrames_
+        );
+
+        if (ImGui::Button("全フレームをMP4動画保存"))
+        {
+            exportVideoMp4(workCanvas, renderFormat);
+        }
+
+        if (!lastVideoExportMessage_.empty())
+        {
+            ImGui::TextColored(
+                lastVideoExportSucceeded_
+                    ? ImVec4(0.45f, 1.0f, 0.55f, 1.0f)
+                    : ImVec4(1.0f, 0.45f, 0.25f, 1.0f),
+                "%s",
+                lastVideoExportMessage_.c_str()
+            );
+        }
+
+        if (!lastVideoExportLog_.empty()
+            && ImGui::TreeNode("FFmpeg実行ログ"))
+        {
+            ImGui::BeginChild(
+                "FfmpegLog",
+                ImVec2(0.0f, 180.0f),
+                true,
+                ImGuiWindowFlags_HorizontalScrollbar
+            );
+            ImGui::TextUnformatted(lastVideoExportLog_.c_str());
+            ImGui::EndChild();
+            ImGui::TreePop();
         }
 
         ImGui::Spacing();

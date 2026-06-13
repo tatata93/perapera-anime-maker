@@ -80,6 +80,8 @@ add_executable(perapera_anime_maker
 
     src/export/PngExporter.h
     src/export/PngExporter.cpp
+    src/export/FfmpegExporter.h
+    src/export/FfmpegExporter.cpp
 
     src/ui/CanvasPreview.h
     src/ui/CanvasPreview.cpp
