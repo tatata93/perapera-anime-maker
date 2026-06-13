@@ -45,15 +45,17 @@ target_include_directories(imgui PUBLIC
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
 foreach(CONFIG Debug Release RelWithDebInfo MinSizeRel)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG} ${CMAKE_BINARY_DIR}/bin)
 endforeach()
 
 add_executable(perapera_anime_maker
     src/app/main.cpp
+
     src/camera/ShotCamera2D.h
     src/camera/ShotCamera2D.cpp
+    src/camera/ShotCameraAnimation.h
+    src/camera/ShotCameraAnimation.cpp
 
     src/drawing/Brush.h
     src/drawing/Brush.cpp
