@@ -1,77 +1,129 @@
 # WORK_LOG
 
-## 2026-06-23 Phase 0 Fix: 日本語フォント安定化
+## 2026-06-23 Phase 0: リポジトリ初期化
 
 ### 作業概要
-- Windows標準フォントを使い、日本語UIが表示される状態にした。
-- Dear ImGuiのフォントアトラスを巨大化させないため、Phase 0で実際に使う文字だけを登録した。
+
+既存コードを引き継がない完全新規リポジトリとして、最小のC++20 / SDL3 / Dear ImGuiプロジェクトを開始する。
 
 ### 変更ファイル
-- src/app/main.cpp
-- WORK_LOG.md
+
+- `.gitignore`
+- `.gitattributes`
+- `README.md`
+- `WORK_LOG.md`
+- `DECISIONS.md`
+- `CMakeLists.txt`
+- `CMakePresets.json`
+- `src/app/main.cpp`
 
 ### 実装内容
-- `C:/Windows/Fonts/msgothic.ttc` などのWindows標準日本語フォントを検索。
-- 起動失敗を避けるため、最小限の日本語グリフだけを読み込み。
-- フォント読み込み状態を画面上に表示。
+
+- CMake + Ninja を前提にしたビルド構成を追加
+- FetchContentでSDL3、Dear ImGui、nlohmann/jsonを取得する構成を追加
+- SDL3ウィンドウとDear ImGuiデモを表示する最小エントリーポイントを追加
 
 ### 未完了
-- フォント選択UIは未実装。
+
+- 作画データ構造
+- CanvasBitmap
+- CanvasRenderer
+- 保存・読み込み
+- レイヤー、フレーム、セル管理
 
 ### 次にやること
-- Phase 1 Step 1-1 のデータ構造とJSON保存へ進む。
+
+Phase 1 Step 1-1として、UIや描画に依存しないcoreデータ構造とJSON保存形式を実装する。
 
 ### 判断待ち（私への確認事項）
-- なし。
 
-## 2026-06-23 Phase 1 Step 1-1: データ構造とJSON保存
+なし。
+
+---
+
+## 2026-06-23 Phase 1-Step 1-1: データ構造とJSON保存
 
 ### 作業概要
-- 仕様書に従い、作画ソフトの中核データ構造を追加した。
-- `Project / Cell / Frame / Layer / Stroke / StrokePoint` をUIや描画から独立したcore層として実装した。
-- `ProjectIO` を追加し、仕様書のフォルダ構成でJSON保存・読み込みできるようにした。
-- Phase 1開始時の修正として、モードタブに「4 撮影」を追加し、ImGuiデモの初期表示をOFFにした。
+
+core層にProject / Cell / Frame / Layer / Strokeの最小データ構造を追加し、io層に仕様書の保存形式でJSON保存・読み込みを行うProjectIOを追加する。
+UI・描画・SDL_Textureには触れず、Phase 1 Step 1-1の責務だけに限定する。
 
 ### 変更ファイル
-- CMakeLists.txt
-- WORK_LOG.md
-- src/app/main.cpp
-- src/core/StrokePoint.h
-- src/core/Stroke.h
-- src/core/Stroke.cpp
-- src/core/Layer.h
-- src/core/Layer.cpp
-- src/core/Frame.h
-- src/core/Frame.cpp
-- src/core/Cell.h
-- src/core/Cell.cpp
-- src/core/WorkCanvas.h
-- src/core/Project.h
-- src/core/Project.cpp
-- src/io/ProjectIO.h
-- src/io/ProjectIO.cpp
+
+- `CMakeLists.txt`
+- `src/core/StrokePoint.h`
+- `src/core/Stroke.h`
+- `src/core/Stroke.cpp`
+- `src/core/Layer.h`
+- `src/core/Layer.cpp`
+- `src/core/Frame.h`
+- `src/core/Frame.cpp`
+- `src/core/Cell.h`
+- `src/core/Cell.cpp`
+- `src/core/Project.h`
+- `src/core/Project.cpp`
+- `src/core/WorkCanvas.h`
+- `src/io/ProjectIO.h`
+- `src/io/ProjectIO.cpp`
 
 ### 実装内容
-- `Stroke::bounds()` でストロークの外接矩形を計算。
-- `Layer / Frame / Cell / Project` に仕様書の保存形式と対応するフィールドを追加。
-- `Project::createDefault()` で最小プロジェクトを作れるようにした。
-- `ProjectIO::save()` で以下を保存。
-  - `project.json`
-  - `cells/cell_001/cell.json`
-  - `cells/cell_001/frames/frame_001/frame.json`
-  - `cells/cell_001/frames/frame_001/layer_001.json`
-- `ProjectIO::load()` で上記JSONからデータ構造を復元。
-- `composite.png` は保存しない。点列JSONを正とする。
-- モードタブを `Project / Storyboard / Previs / Drawing / Shooting / Export` の6つに更新し、「④ 撮影」を追加。
-- `showImguiDemo` の初期値を `false` に変更。
+
+- Strokeの点列とbounds計算。
+- Layer / Frame / Cell / Projectのデフォルト生成と安全な参照補助。
+- ProjectIO::saveで`project.json`、`cell.json`、`frame.json`、`layer_NNN.json`を書き出し。
+- ProjectIO::loadで`project.json`と`layer_NNN.json`からProjectを復元。
+- `composite.png`は仕様どおり保存対象外。
 
 ### 未完了
-- 保存・読み込みUIへの接続は未実装。
-- JSON保存の画面操作確認はまだできない。
-- 描画、CanvasBitmap、ブラシエンジンは未実装。
+
+- UIから保存・読み込みを呼ぶ処理は未実装。
+- CanvasBitmapや描画への接続は未実装。
+- ProjectIOの実ファイル往復テストは次以降で追加予定。
 
 ### 次にやること
-- Phase 1 Step 1-2: CanvasBitmap と SimpleBrushEngine を追加する。
+
+- Phase 1 Step 1-2: CanvasBitmapとSimpleBrushEngineの追加。
+- または、先にProjectIOの小さな動作確認用コード/テストを追加する。
 
 ### 判断待ち（私への確認事項）
-- なし。
+
+なし。
+
+## 2026-06-23 Phase 1-Step 1-2: CanvasBitmapとSimpleBrushEngine
+
+### 作業概要
+
+render層に1レイヤー分のCanvasBitmapを追加し、brush層にBrushEngine抽象インターフェースとPhase 1用のSimpleBrushEngineを追加する。
+UIやCanvasRendererにはまだ接続せず、ペン確定時だけピクセルへ焼く土台を作る。
+
+### 変更ファイル
+
+- `CMakeLists.txt`
+- `src/render/CanvasBitmap.h`
+- `src/render/CanvasBitmap.cpp`
+- `src/brush/BrushEngine.h`
+- `src/brush/SimpleBrushEngine.h`
+- `src/brush/SimpleBrushEngine.cpp`
+
+### 実装内容
+
+- CanvasBitmapにRGBA8ピクセルバッファとSDL_Texture管理を追加。
+- ストロークをradius*0.5間隔で補間し、円スタンプでピクセルに焼く処理を追加。
+- dirty矩形だけSDL_Textureへアップロードする処理を追加。
+- 円形消しゴムと全クリア処理を追加。
+- BrushEngine抽象インターフェースを追加。
+- SimpleBrushEngineを追加し、CanvasBitmapへの焼き込み・消しゴムを橋渡し。
+
+### 未完了
+
+- CanvasRendererとの接続は未実装。
+- Appのペン入力との接続は未実装。
+- 画面上で線を引くUIはまだ未実装。
+
+### 次にやること
+
+Phase 1 Step 1-3として、CanvasRenderer、CanvasView、2Dカメラの土台を追加する。
+
+### 判断待ち（私への確認事項）
+
+なし。
