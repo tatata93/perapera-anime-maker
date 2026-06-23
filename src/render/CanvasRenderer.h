@@ -1,13 +1,11 @@
 #pragma once
 
-// src/render/CanvasRenderer.h
-//
-// Frame内のLayerをCanvasBitmapへ焼き、ImGuiのビューポートへ表示する。
-// UI入力やProject保存は知らず、表示用キャッシュと座標変換だけを担当する。
+// このファイルの役割:
+// CanvasBitmapをレイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
+// 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstdint>
 #include <unordered_map>
-#include <unordered_set>
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -18,50 +16,39 @@
 
 namespace perapera {
 
-// キャンバスを画面上へ表示するためのズーム・パン状態。
-// Step 1-4でUI入力と接続するまでは、CanvasRendererの補助型として置く。
+// ビューポートのパン・ズーム状態。
+// panX / panY は画面px単位の表示位置、zoom はキャンバスpxから画面pxへの倍率。
 struct CanvasView {
     float panX = 0.0f;
     float panY = 0.0f;
     float zoom = 1.0f;
 
-    ImVec2 canvasToScreen(float canvasX,
-                          float canvasY,
-                          ImVec2 areaMin,
-                          ImVec2 areaSize) const;
+    ImVec2 canvasToScreen(float canvasX, float canvasY,
+                          ImVec2 areaMin, ImVec2 areaSize) const;
+    ImVec2 screenToCanvas(float screenX, float screenY,
+                          ImVec2 areaMin, ImVec2 areaSize) const;
 
-    ImVec2 screenToCanvas(float screenX,
-                          float screenY,
-                          ImVec2 areaMin,
-                          ImVec2 areaSize) const;
+    void clampZoom();
 };
 
 class CanvasRenderer {
 public:
-    CanvasRenderer() = default;
-    ~CanvasRenderer() = default;
-
-    CanvasRenderer(const CanvasRenderer&) = delete;
-    CanvasRenderer& operator=(const CanvasRenderer&) = delete;
-
-    CanvasRenderer(CanvasRenderer&&) noexcept = default;
-    CanvasRenderer& operator=(CanvasRenderer&&) noexcept = default;
-
     void setRenderer(SDL_Renderer* renderer);
     void setCanvasSize(int width, int height);
 
-    // ストローク変更、消しゴム、Undo/Redo後に呼ぶ。
-    // dirty指定されたレイヤーだけ、次のdraw()でCanvasBitmapを再構築する。
+    // ストローク変更の通知。
+    // 指定レイヤーのBitmapを破棄し、次回draw時に点列から再構築する。
     void markDirty(int layerIndex);
     void markAllDirty();
 
-    // ストロークをビットマップへ焼く。ペン確定時に使う。
+    // ストロークをビットマップに焼く。
+    // Step 1-4のペン確定時に呼ぶ想定。
     void bakeStroke(int layerIndex, const Stroke& stroke, float opacity);
-    void eraseCircle(int layerIndex, float cx, float cy, float radius);
+    void eraseCircle(int layerIndex, float canvasX, float canvasY, float radius);
     void clearLayer(int layerIndex);
 
     // 毎フレーム呼ぶ描画メイン。
-    // currentStrokeはペン入力中のプレビューで、確定済みストロークとは別にDrawListで軽く描く。
+    // currentStroke はペン入力中のプレビュー。nullptrならプレビューなし。
     void draw(const Frame& frame,
               int activeLayerIndex,
               const Stroke* currentStroke,
@@ -72,7 +59,7 @@ public:
               ImDrawList* drawList);
 
     // オニオンスキン表示。
-    // isPrevious=trueなら青系、falseなら赤系の色を乗せる。
+    // isPrevious=trueなら青系、falseなら赤系で表示する。
     void drawOnionSkin(const Frame& frame,
                        int frameIndex,
                        bool isPrevious,
@@ -88,24 +75,20 @@ private:
     int canvasHeight_ = 0;
 
     std::unordered_map<int, CanvasBitmap> bitmaps_;
-    std::unordered_set<int> dirtyLayers_;
-    bool allLayersDirty_ = true;
-
     std::unordered_map<int, CanvasBitmap> onionBitmaps_;
     std::unordered_map<int, std::uint64_t> onionRevisions_;
 
     CanvasBitmap& bitmapForLayer(int layerIndex);
-    void ensureBitmapSize(CanvasBitmap& bitmap);
-    void rebuildLayerBitmap(int layerIndex, const Layer& layer);
-    void rebuildDirtyBitmaps(const Frame& frame);
+    void rebuildLayerBitmapIfNeeded(int layerIndex, const Layer& layer);
+    void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex);
 
-    std::uint64_t frameRevisionHint(const Frame& frame) const;
-    void rebuildOnionBitmap(int frameIndex, const Frame& frame);
-
-    void drawCanvasBounds(const CanvasView& view,
-                          ImVec2 areaMin,
-                          ImVec2 areaSize,
-                          ImDrawList* drawList) const;
+    void drawBitmap(CanvasBitmap& bitmap,
+                    float opacity,
+                    const CanvasView& view,
+                    ImVec2 areaMin,
+                    ImVec2 areaSize,
+                    ImDrawList* drawList,
+                    ImU32 tintColor);
 
     void drawCurrentStrokePreview(const Stroke& stroke,
                                   float opacity,
@@ -113,6 +96,8 @@ private:
                                   ImVec2 areaMin,
                                   ImVec2 areaSize,
                                   ImDrawList* drawList) const;
+
+    std::uint64_t frameRevisionHash(const Frame& frame) const;
 };
 
 } // namespace perapera
