@@ -1,0 +1,34 @@
+# Build outputs
+build/
+out/
+CMakeUserPresets.json
+
+# Visual Studio / VS Code user files
+.vs/
+.vscode/.browse.VC.db*
+.vscode/ipch/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Testing/
+
+# Runtime logs and exports
+*.log
+exports/
+**/composite.png
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Binary/package artifacts
+*.zip
+*.7z
+*.rar
