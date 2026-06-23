@@ -1,37 +1,36 @@
-# WORK LOG
+# WORK_LOG
 
-## 2026-06-23 Phase 1 Step 1-4: Runtime fix v2 - frame add/delete and MP4 diagnostics
+## Phase 1 Step 1-4 runtime fix v4
 
-### 作業概要
-- フレームの追加・削除が反応しない問題に対して、右パネルとタイムラインの両方から操作できるようにした。
-- ImGuiボタンID衝突を避けるため、各ボタンの内部IDを `##FramePanel_*` / `##Timeline_*` / `##Export_*` に分離した。
-- MP4出力失敗時に原因を追えるよう、FFmpeg実行ログを `exports/mp4/ffmpeg_last_run.log` に保存するようにした。
+### 目的
 
-### 変更ファイル
-- src/ui/panels/FramePanel.cpp
-- src/ui/panels/TimelinePanel.h
-- src/ui/panels/TimelinePanel.cpp
-- src/ui/AppDrawingMode.cpp
-- src/ui/AppOperations.cpp
-- src/ui/App.cpp
-- src/ui/panels/ExportPanel.cpp
-- src/io/FfmpegRunner.cpp
+- フレーム追加ボタン hover 時に出る Dear ImGui の conflicting ID 警告を解消する。
+- フレーム追加・削除ボタンを確実に動作させる。
+- MP4 書き出しで FFmpeg 実行前に失敗しても `exports/mp4/ffmpeg_last_run.log` を必ず作る。
+- ExportPanel の実行結果欄にログパスを含む失敗理由を表示する。
 
-### 実装内容
-- フレーム操作ボタンを右パネルとタイムラインへ配置。
-- フレーム追加・複製・削除後に `frame_001` 形式で名前を振り直す処理を追加。
-- 削除は最後の1フレームだけになった場合は無効化し、プロジェクトがフレーム0枚にならないようにした。
-- MP4出力前にPNG連番を必ず生成し、`frame_001.png` の存在確認後にFFmpegを実行。
-- FFmpegコマンドの標準出力・標準エラーをログファイルへ追記。
-- `ffmpeg` のようなPATH検索名は引用符なし、フルパスは引用符付きで実行するよう調整。
+### 変更
 
-### 未完了
-- ファイル選択ダイアログは未実装。
-- MP4失敗時のログ本文をアプリ内に表示する機能は未実装。
+- `src/ui/panels/FramePanel.cpp`
+  - ボタンIDを `PushID` で完全分離。
+  - `###` ラベル依存をやめ、表示名とIDを別スタックで管理。
+- `src/ui/panels/LayerPanel.cpp`
+  - レイヤー操作ボタンIDを完全分離。
+- `src/ui/panels/TimelinePanel.cpp`
+  - タイムライン操作ボタンIDを完全分離。
+- `src/ui/AppDrawingMode.cpp`
+  - 右サイドバー内のIDスタックを追加。
+  - 右サイドバーの縦横スクロール指定を維持。
+- `src/ui/panels/ExportPanel.cpp`
+  - ExportPanel内の入力欄・ボタンIDを完全分離。
+  - MP4ボタン直下の実行結果欄を維持。
+- `src/ui/App.cpp`
+  - `exportMp4()` の最初にMP4プリフライトログを作成。
+  - PNG連番作成で失敗した場合も `ffmpeg_last_run.log` に理由を書く。
 
-### 次にやること
-- 実機でフレーム追加・削除・MP4出力を確認する。
-- 失敗時は `exports/mp4/ffmpeg_last_run.log` の内容を見て原因を潰す。
+### 確認
 
-### 判断待ち（私への確認事項）
-- 消しゴムを「ストローク削除方式」のまま進めるか、「消しゴムストロークを保存する方式」にするか。
+- フレーム追加ボタンをhoverしてもDear ImGuiのID警告が出ないこと。
+- フレーム追加でフレーム数が増えること。
+- 2フレーム以上で削除ボタンが有効になり、削除できること。
+- MP4書き出しに失敗しても `exports/mp4/ffmpeg_last_run.log` が生成されること。

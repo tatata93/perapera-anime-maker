@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <utility>
 
 #include <imgui.h>
@@ -49,6 +50,54 @@ AppMode modeFromIndex(int index)
         return AppMode::Project;
     }
     return static_cast<AppMode>(index);
+}
+
+
+std::filesystem::path mp4LogPathForOutput(const std::filesystem::path& outputPath)
+{
+    const std::filesystem::path parent = outputPath.parent_path().empty()
+        ? std::filesystem::current_path()
+        : outputPath.parent_path();
+    return parent / "ffmpeg_last_run.log";
+}
+
+std::filesystem::path absolutePathForMessage(const std::filesystem::path& path)
+{
+    std::error_code errorCode;
+    const std::filesystem::path absolute = std::filesystem::absolute(path, errorCode);
+    return errorCode ? path : absolute;
+}
+
+void appendTextLog(const std::filesystem::path& logPath, const std::string& text)
+{
+    std::error_code errorCode;
+    std::filesystem::create_directories(logPath.parent_path(), errorCode);
+    std::ofstream log(logPath, std::ios::binary | std::ios::app);
+    if (log) {
+        log << text;
+    }
+}
+
+void resetMp4PreflightLog(const std::filesystem::path& logPath,
+                          const char* ffmpegPath,
+                          const char* pngFolder,
+                          const char* mp4Path,
+                          int fps)
+{
+    std::error_code errorCode;
+    std::filesystem::create_directories(logPath.parent_path(), errorCode);
+    std::ofstream log(logPath, std::ios::binary | std::ios::trunc);
+    if (!log) {
+        return;
+    }
+
+    log << "perapera-anime-maker MP4 preflight log\n";
+    log << "======================================\n\n";
+    log << "currentPath: " << std::filesystem::current_path(errorCode).string() << "\n";
+    log << "ffmpegPath: " << (ffmpegPath == nullptr ? "" : ffmpegPath) << "\n";
+    log << "pngFolder: " << (pngFolder == nullptr ? "" : pngFolder) << "\n";
+    log << "mp4Path: " << (mp4Path == nullptr ? "" : mp4Path) << "\n";
+    log << "fps: " << fps << "\n\n";
 }
 
 } // namespace
@@ -391,25 +440,40 @@ void App::exportMp4()
         return;
     }
 
-    // MP4はPNG連番を先に確実に作ってからFFmpegへ渡す。
-    // ここで失敗した場合はFFmpegを呼ばず、原因をステータスバーへ出す。
+    const std::filesystem::path mp4Output = std::filesystem::path(exportState_.mp4Path);
+    const std::filesystem::path logPath = mp4LogPathForOutput(mp4Output);
+    const std::string logForMessage = absolutePathForMessage(logPath).string();
+
+    // PNG連番で失敗した場合でも原因が見えるよう、FFmpeg呼び出し前に必ずログを作る。
+    resetMp4PreflightLog(logPath,
+                         exportState_.ffmpegPath,
+                         exportState_.exportFolder,
+                         exportState_.mp4Path,
+                         project_.output.fps);
+    appendTextLog(logPath, "Step 1: exporting PNG sequence before FFmpeg.\n");
+
     std::string error;
     if (!PngExporter::exportFrameSequence(*cell,
                                           exportState_.exportFolder,
                                           project_.canvas.width,
                                           project_.canvas.height,
                                           &error)) {
-        lastMessage_ = "MP4 failed before ffmpeg: " + error;
+        appendTextLog(logPath, "ERROR: PNG sequence export failed before FFmpeg.\n");
+        appendTextLog(logPath, "Reason: " + error + "\n");
+        lastMessage_ = "MP4 failed before ffmpeg: " + error + " log: " + logForMessage;
         return;
     }
+
+    const std::filesystem::path firstFrame = std::filesystem::path(exportState_.exportFolder) / "frame_001.png";
+    appendTextLog(logPath, "PNG sequence exported. Expected first frame: " + firstFrame.string() + "\n");
 
     const std::filesystem::path inputPattern = std::filesystem::path(exportState_.exportFolder) / "frame_%03d.png";
     if (FfmpegRunner::pngSequenceToMp4(exportState_.ffmpegPath,
                                        inputPattern,
                                        project_.output.fps,
-                                       exportState_.mp4Path,
+                                       mp4Output,
                                        &error)) {
-        lastMessage_ = "MP4 exported: " + std::filesystem::path(exportState_.mp4Path).string();
+        lastMessage_ = "MP4 exported: " + absolutePathForMessage(mp4Output).string();
     } else {
         lastMessage_ = "MP4 failed: " + error;
     }

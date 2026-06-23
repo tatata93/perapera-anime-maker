@@ -80,8 +80,11 @@ void App::drawDrawingMode()
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("DrawingRightSidebar", ImVec2(rightWidth, 0.0f), true);
+    ImGui::BeginChild("DrawingRightSidebar", ImVec2(rightWidth, 0.0f), true,
+        ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::PushID("DrawingRightSidebarContent_v4");
     drawRightSidebar();
+    ImGui::PopID();
     ImGui::EndChild();
 
     ImGui::EndChild();
