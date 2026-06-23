@@ -41,7 +41,7 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-# nlohmann/json: Phase 1以降の project.json 保存で使う。
+# nlohmann/json: project.json と layer_NNN.json 保存で使う。
 # MIT ライセンス。
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 FetchContent_Declare(
@@ -72,6 +72,12 @@ target_link_libraries(imgui_sdl3_renderer PUBLIC SDL3::SDL3)
 
 add_executable(perapera_anime_maker
     src/app/main.cpp
+    src/core/Stroke.cpp
+    src/core/Layer.cpp
+    src/core/Frame.cpp
+    src/core/Cell.cpp
+    src/core/Project.cpp
+    src/io/ProjectIO.cpp
 )
 
 target_include_directories(perapera_anime_maker PRIVATE
