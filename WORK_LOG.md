@@ -1,62 +1,22 @@
-# WORK_LOG
+# WORK_LOG.md 追記分
 
-## 2026-06-23 Phase 0: リポジトリ初期化
-
-### 作業概要
-完全新規リポジトリ用に、C++20 / CMake / SDL3 / Dear ImGui の最小アプリ骨格を作成した。
-
-### 変更ファイル
-- `.gitignore`
-- `.gitattributes`
-- `README.md`
-- `WORK_LOG.md`
-- `DECISIONS.md`
-- `CMakeLists.txt`
-- `CMakePresets.json`
-- `src/app/main.cpp`
-- `src/ui/Theme.h`
-
-### 実装内容
-- SDL3ウィンドウ作成
-- SDL3 Renderer作成
-- Dear ImGui初期化
-- ImGuiデモウィンドウ表示
-- ①〜⑤のモードタブ骨格
-- 各モード用の空パネル
-- ダークテーマ定数の定義と適用
-
-### 未完了
-- 作画データ構造
-- CanvasBitmap
-- レイヤー / フレーム / タイムライン
-- 保存 / 読み込み
-- PNG / MP4書き出し
-
-### 次にやること
-Phase 1 Step 1-1: データ構造とJSON保存を実装する。
-
-### 判断待ち（私への確認事項）
-なし。
-
-
-## 2026-06-23 Phase 0: ImGui通常版ビルド修正
+## 2026-06-23 Phase 0: 日本語フォント修正 Fix6
 
 ### 作業概要
-通常版 Dear ImGui v1.92.8 では `ImGui::SetNextWindowViewport` が使えないため、Phase 0 のメインレイアウト初期化から該当呼び出しを削除した。
+Fix5でアプリが起動しない問題に対応。日本語フォントの読み込み処理を安全側に戻し、巨大な日本語グリフ範囲を使わず、Phase 0のUIで実際に使う文字だけをフォントアトラスに登録する方式へ変更した。
 
 ### 変更ファイル
-- `src/app/main.cpp`
-- `WORK_LOG.md`
+- src/app/main.cpp
+- WORK_LOG.md
 
 ### 実装内容
-- `ImGui::SetNextWindowViewport(viewport->ID)` を削除
-- メインウィンドウの位置とサイズは `ImGui::SetNextWindowPos` と `ImGui::SetNextWindowSize` で維持
+- ImGuiの未対応APIは使用しない。
+- `io.Fonts->Build()` を明示呼び出ししない。
+- CJK全域・広い日本語範囲の読み込みをやめ、Phase 0 UI文字だけを `ImFontGlyphRangesBuilder::AddText()` で登録。
+- フォント読み込み失敗時もアプリが落ちず、英数字のステータス表示で原因を確認できるようにした。
 
 ### 未完了
-- なし
+- 日本語が表示されるかはユーザー環境で確認する。
 
 ### 次にやること
-- Phase 0 のビルドと起動確認
-
-### 判断待ち（私への確認事項）
-- なし
+- 起動確認後、日本語表示結果に応じてPhase 0をコミットする。
