@@ -75,7 +75,10 @@ add_executable(perapera_anime_maker
     src/core/Project.cpp
     src/io/ProjectIO.cpp
     src/render/CanvasBitmap.cpp
+    src/render/CanvasRenderer.cpp
     src/brush/SimpleBrushEngine.cpp
+    src/camera/ShotCamera2D.cpp
+    src/camera/CameraAnimation.cpp
 )
 
 target_include_directories(perapera_anime_maker PRIVATE
