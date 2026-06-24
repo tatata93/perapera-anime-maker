@@ -5,6 +5,7 @@
 // SDL初期化やImGui初期化は main.cpp に残し、このクラスはアプリ内部の責務だけを持つ。
 
 #include <array>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -94,6 +95,9 @@ private:
     void drawFingerPlaybackControls();
     void drawLightTableControls();
     void drawLightTableOverlay(ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList);
+
+    bool saveColorPalette(const std::filesystem::path& projectFolder, std::string* error) const;
+    bool loadColorPalette(const std::filesystem::path& projectFolder, std::string* error);
 
     void handleFrameShortcuts();
     void updateFramePlayback();

@@ -1,6 +1,6 @@
 // このファイルの役割:
 // カラーパレットUIを実装する。
-// 色を選ぶUIだけに責務を絞り、描画データや保存処理には直接触れない。
+// 色を選ぶUIだけに責務を絞り、描画データやプロジェクト保存処理には直接触れない。
 
 #include "ui/panels/ColorPanel.h"
 
@@ -27,10 +27,22 @@ std::array<float, 4> makeColor(float r, float g, float b, float a = 1.0f)
 
 bool sameRgb(const std::array<float, 4>& a, const std::array<float, 4>& b)
 {
-    const float tolerance = 0.001f;
+    constexpr float tolerance = 0.001f;
     return std::abs(a[0] - b[0]) < tolerance &&
            std::abs(a[1] - b[1]) < tolerance &&
            std::abs(a[2] - b[2]) < tolerance;
+}
+
+std::vector<ColorSwatch> defaultPalette()
+{
+    return {
+        {u8c(u8"主線"), u8c(u8"線画"), makeColor(0.05f, 0.05f, 0.05f)},
+        {u8c(u8"白"), u8c(u8"基本"), makeColor(1.0f, 1.0f, 1.0f)},
+        {u8c(u8"赤トレス"), u8c(u8"色トレス"), makeColor(1.0f, 0.18f, 0.15f)},
+        {u8c(u8"青トレス"), u8c(u8"色トレス"), makeColor(0.1f, 0.35f, 1.0f)},
+        {u8c(u8"黄緑トレス"), u8c(u8"色トレス"), makeColor(0.55f, 1.0f, 0.15f)},
+        {u8c(u8"影指定"), u8c(u8"ガイド"), makeColor(1.0f, 0.35f, 0.75f)},
+    };
 }
 
 void ensureDefaultPalette(ColorPanelState& state, const BrushSettings& brushSettings)
@@ -40,17 +52,14 @@ void ensureDefaultPalette(ColorPanelState& state, const BrushSettings& brushSett
     }
 
     state.editColor = brushSettings.color;
-    state.swatches = {
-        {u8c(u8"主線"), u8c(u8"線画"), makeColor(0.05f, 0.05f, 0.05f)},
-        {u8c(u8"白"), u8c(u8"基本"), makeColor(1.0f, 1.0f, 1.0f)},
-        {u8c(u8"赤トレス"), u8c(u8"色トレス"), makeColor(1.0f, 0.18f, 0.15f)},
-        {u8c(u8"青トレス"), u8c(u8"色トレス"), makeColor(0.1f, 0.35f, 1.0f)},
-        {u8c(u8"黄緑トレス"), u8c(u8"色トレス"), makeColor(0.55f, 1.0f, 0.15f)},
-        {u8c(u8"影指定"), u8c(u8"ガイド"), makeColor(1.0f, 0.35f, 0.75f)},
-    };
+    state.swatches = defaultPalette();
     state.recentColors.clear();
     state.selectedSwatchIndex = 0;
     state.initialized = true;
+    state.paletteDirty = false;
+    if (state.paletteStatus.empty()) {
+        state.paletteStatus = u8c(u8"デフォルトパレットを使用中。保存すると palettes/palette.json が作られます。");
+    }
 }
 
 void pushRecentColor(ColorPanelState& state, const std::array<float, 4>& color)
@@ -73,6 +82,7 @@ void pushRecentColor(ColorPanelState& state, const std::array<float, 4>& color)
     if (state.recentColors.size() > maxRecentColors) {
         state.recentColors.resize(maxRecentColors);
     }
+    state.paletteDirty = true;
 }
 
 void applyColorToBrush(ColorPanelState& state, BrushSettings& brushSettings, const std::array<float, 4>& color)
@@ -80,6 +90,19 @@ void applyColorToBrush(ColorPanelState& state, BrushSettings& brushSettings, con
     state.editColor = color;
     brushSettings.color = color;
     pushRecentColor(state, color);
+}
+
+void resetDefaultPalette(ColorPanelState& state, const BrushSettings& brushSettings)
+{
+    state.editColor = brushSettings.color;
+    state.swatches = defaultPalette();
+    state.recentColors.clear();
+    state.selectedSwatchIndex = 0;
+    std::snprintf(state.nameBuffer, sizeof(state.nameBuffer), "%s", "color");
+    std::snprintf(state.groupBuffer, sizeof(state.groupBuffer), "%s", "basic");
+    state.initialized = true;
+    state.paletteDirty = true;
+    state.paletteStatus = u8c(u8"デフォルトに戻しました。プロジェクト保存で palette.json に反映されます。");
 }
 
 void drawSwatchGrid(const char* label,
@@ -110,6 +133,8 @@ void drawSwatchGrid(const char* label,
             if (ImGui::MenuItem(u8c(u8"削除"))) {
                 swatches.erase(swatches.begin() + i);
                 state.selectedSwatchIndex = -1;
+                state.paletteDirty = true;
+                state.paletteStatus = u8c(u8"スウォッチを削除しました。プロジェクト保存で反映されます。");
                 ImGui::EndPopup();
                 ImGui::PopID();
                 break;
@@ -130,13 +155,14 @@ void drawColorPanel(ColorPanelState& state, BrushSettings& brushSettings)
 {
     ensureDefaultPalette(state, brushSettings);
 
-    ImGui::PushID("ColorPanel_v30_palette_foundation");
+    ImGui::PushID("ColorPanel_v31_palette_json");
     ImGui::TextUnformatted(u8c(u8"カラー"));
     ImGui::Separator();
 
     state.editColor = brushSettings.color;
     if (ImGui::ColorEdit4(u8c(u8"現在色"), state.editColor.data(), ImGuiColorEditFlags_NoInputs)) {
         brushSettings.color = state.editColor;
+        state.paletteDirty = true;
     }
 
     if (ImGui::Button(u8c(u8"ブラシ色へ反映"), ImVec2(-1.0f, 0.0f))) {
@@ -156,11 +182,16 @@ void drawColorPanel(ColorPanelState& state, BrushSettings& brushSettings)
         state.swatches.push_back(swatch);
         state.selectedSwatchIndex = static_cast<int>(state.swatches.size()) - 1;
         pushRecentColor(state, brushSettings.color);
+        state.paletteStatus = u8c(u8"スウォッチを追加しました。プロジェクト保存で palette.json に反映されます。");
+    }
+
+    if (ImGui::Button(u8c(u8"デフォルトに戻す"), ImVec2(-1.0f, 0.0f))) {
+        resetDefaultPalette(state, brushSettings);
     }
 
     if (ImGui::TreeNodeEx(u8c(u8"スウォッチ"), ImGuiTreeNodeFlags_DefaultOpen)) {
         drawSwatchGrid("palette", state.swatches, state, brushSettings, true);
-        ImGui::TextDisabled(u8c(u8"右クリックで削除。並べ替えと保存は次Stepで実装予定。"));
+        ImGui::TextDisabled(u8c(u8"右クリックで削除。プロジェクト保存時に palettes/palette.json へ保存。"));
         ImGui::TreePop();
     }
 
@@ -181,7 +212,11 @@ void drawColorPanel(ColorPanelState& state, BrushSettings& brushSettings)
         applyColorToBrush(state, brushSettings, makeColor(0.55f, 1.0f, 0.15f));
     }
 
-    ImGui::TextDisabled(u8c(u8"スポイトと palette.json 保存は後続Step。"));
+    if (!state.paletteStatus.empty()) {
+        ImGui::TextWrapped("%s", state.paletteStatus.c_str());
+    }
+    ImGui::TextDisabled(state.paletteDirty ? u8c(u8"未保存のパレット変更あり。") : u8c(u8"パレット変更なし。"));
+    ImGui::TextDisabled(u8c(u8"スポイトと並べ替えは後続Step。"));
     ImGui::PopID();
 }
 

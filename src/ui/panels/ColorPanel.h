@@ -20,12 +20,14 @@ struct ColorSwatch {
 
 struct ColorPanelState {
     bool initialized = false;
+    bool paletteDirty = false;
     int selectedSwatchIndex = -1;
     std::array<float, 4> editColor = {0.05f, 0.05f, 0.05f, 1.0f};
     std::vector<ColorSwatch> swatches;
     std::vector<ColorSwatch> recentColors;
     char nameBuffer[64] = "color";
     char groupBuffer[64] = "basic";
+    std::string paletteStatus;
 };
 
 void drawColorPanel(ColorPanelState& state, BrushSettings& brushSettings);

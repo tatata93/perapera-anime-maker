@@ -1,28 +1,41 @@
-# WORK_LOG
+## 2026-06-24 Phase 1.5 Step 8: palette.json 保存・読み込み
 
-## 2026-06-24 Phase 1.5-Step 7: 指パラ再生軽量化
 ### 作業概要
-タイムライン再生中のFPS低下を抑えるため、再生フレーム送りで全キャッシュを破棄しないようにし、再生中だけオニオンスキン/ライトテーブル等の補助表示を省略できる設定を追加した。
+ColorPanel のスウォッチと最近使った色を `palettes/palette.json` に保存・読み込みできるようにした。
+プロジェクト保存・読み込みの流れに追加し、描画データとは別責務の `AppPaletteIO.cpp` に分離した。
 
 ### 変更ファイル
-- src/ui/App.h
-- src/ui/AppInput.cpp
-- src/ui/AppDrawingMode.cpp
+- `CMakeLists.txt`
+- `WORK_LOG.md`
+- `src/ui/App.h`
+- `src/ui/AppDrawingMode.cpp`
+- `src/ui/AppProjectIO.cpp`
+- `src/ui/AppPaletteIO.cpp`
+- `src/ui/panels/ColorPanel.h`
+- `src/ui/panels/ColorPanel.cpp`
 
 ### 実装内容
-- 再生中の advancePlaybackFrame() から canvasRenderer_.markAllDirty() を削除
-- CanvasRenderer の Frame* 単位キャッシュを利用して、再生時の再焼き込みを減らす
-- 指パラUIに「再生中は補助非表示」を追加
-- 再生中はオニオンスキン/ライトテーブルを省略できるようにした
-- 手動フレーム移動・タイムラインクリック時の markAllDirty は維持
+- `src/ui/AppPaletteIO.cpp` を追加
+- `saveColorPalette()` / `loadColorPalette()` を追加
+- `palettes/palette.json` に以下を保存
+  - `brushColor`
+  - `editColor`
+  - `selectedSwatchIndex`
+  - `swatches`
+  - `recentColors`
+- プロジェクト保存時に palette.json も保存
+- プロジェクト読み込み時に palette.json を復元
+- palette.json が存在しない旧プロジェクトはデフォルトパレットで開く
+- ColorPanel に保存状態の表示と「デフォルトに戻す」ボタンを追加
 
 ### 未完了
-- 再生専用のプリレンダー/フレームキャッシュ固定化は未実装
-- 消しゴムプレビューの軽量実装は未実装
+- スウォッチ並べ替え
+- キャンバススポイト
+- palette.json の複数パレット管理
 
 ### 次にやること
-- palette.json 保存/読み込み
+- FloodFill（バケツ塗り）の土台
 - または軽量消しゴムプレビュー
 
 ### 判断待ち（私への確認事項）
-- 再生中の補助表示を常にOFFにするか、現状のチェックボックス方式で続けるか
+- 次にバケツ塗りへ進むか、先に消しゴムプレビューを入れるか。

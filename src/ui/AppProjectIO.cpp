@@ -33,6 +33,11 @@ void App::saveProject()
         return;
     }
 
+    if (!saveColorPalette(projectFolder, &error)) {
+        lastMessage_ = "project saved, but palette save failed: " + error;
+        return;
+    }
+
     Project reloaded;
     if (!ProjectIO::load(projectFolder, reloaded, &error)) {
         lastMessage_ = "save verify load failed: " + error;
@@ -90,6 +95,11 @@ void App::loadProject()
     activeLayerIndex_ = selection.layerIndex;
     redoStack_.clear();
     afterProjectChanged();
+    if (!loadColorPalette(projectFolder, &error)) {
+        lastMessage_ = "project loaded, but palette load failed: " + error;
+        canvasViewInitialized_ = false;
+        return;
+    }
     canvasViewInitialized_ = false;
 
     const appio::ProjectStats stats = appio::collectProjectStats(project_);
@@ -116,6 +126,11 @@ void App::saveLoadRoundTripCheck()
         return;
     }
 
+    if (!saveColorPalette(projectFolder, &error)) {
+        lastMessage_ = "round trip palette save failed: " + error;
+        return;
+    }
+
     Project loaded;
     if (!ProjectIO::load(projectFolder, loaded, &error)) {
         lastMessage_ = "round trip load failed: " + error;
@@ -135,6 +150,10 @@ void App::saveLoadRoundTripCheck()
         activeFrameIndex_ = selection.frameIndex;
         activeLayerIndex_ = selection.layerIndex;
         afterProjectChanged();
+        if (!loadColorPalette(projectFolder, &error)) {
+            lastMessage_ = "save/load check OK, but palette load failed: " + error;
+            return;
+        }
         lastMessage_ = "save/load check OK: " + appio::statsToText(afterStats) + " | " + appio::selectionText(selection);
     } else {
         lastMessage_ = "save/load check mismatch: before " + appio::statsToText(beforeStats) +

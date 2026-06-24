@@ -97,6 +97,7 @@ add_executable(perapera_anime_maker
     src/ui/AppLightTable.cpp
     src/ui/AppOperations.cpp
     src/ui/AppProjectIO.cpp
+    src/ui/AppPaletteIO.cpp
     src/ui/AppProjectIOSupport.cpp
     src/ui/CanvasView.cpp
     src/ui/panels/BrushPanel.cpp
