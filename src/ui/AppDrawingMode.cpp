@@ -124,7 +124,7 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
                                         bool& changed)
 {
     std::vector<Stroke> result;
-    const float spacing = std::max(0.5f, std::min(stroke.radiusPx, eraserRadius) * 0.25f);
+    const float spacing = std::max(1.0f, std::min(stroke.radiusPx, eraserRadius) * 0.5f);
     const std::vector<StrokePoint> sampledPoints = resampleStrokeForEraser(stroke, spacing);
     if (sampledPoints.empty()) { result.push_back(stroke); return result; }
 
@@ -375,23 +375,24 @@ void App::drawCanvasArea(float rightWidth)
     const ImU32 background = ImGui::ColorConvertFloat4ToU32(ui::themeColors().canvasBackground);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
 
-    const Stroke* preview = isDrawingStroke_ ? &currentStroke_ : nullptr;
-    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
-
-    ImDrawList* overlayDrawList = ImGui::GetForegroundDrawList();
+    // オニオンスキンを先に描く（現在フレームの下に敷く）
     const Cell* onionCell = activeCell();
     if (onionCell != nullptr && onionPrevious_ && activeFrameIndex_ > 0) {
         const Frame* previous = onionCell->frameOrNull(activeFrameIndex_ - 1);
         if (previous != nullptr) {
-            drawOnionFrameDirect(*previous, true, 0.85f, canvasView_, areaMin, areaSize, overlayDrawList);
+            drawOnionFrameDirect(*previous, true, 0.55f, canvasView_, areaMin, areaSize, drawList);
         }
     }
     if (onionCell != nullptr && onionNext_) {
         const Frame* next = onionCell->frameOrNull(activeFrameIndex_ + 1);
         if (next != nullptr) {
-            drawOnionFrameDirect(*next, false, 0.85f, canvasView_, areaMin, areaSize, overlayDrawList);
+            drawOnionFrameDirect(*next, false, 0.55f, canvasView_, areaMin, areaSize, drawList);
         }
     }
+
+    // 現在フレームをオニオンの上に描く
+    const Stroke* preview = isDrawingStroke_ ? &currentStroke_ : nullptr;
+    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
 
     handleCanvasInput(areaMin, areaSize);
 
