@@ -1,5 +1,4 @@
 // このファイルの役割:
-// 作画モードのレイアウト、CanvasRenderer接続、作画入力の確定処理を実装する。
 #include "ui/App.h"
 #include <algorithm>
 #include <cmath>
@@ -103,9 +102,26 @@ std::vector<StrokePoint> resampleStrokeForEraser(const Stroke& stroke, float spa
 }
 float eraserHitRadius(float strokeRadius, float eraserRadius)
 {
-    // ベクターストロークは中心線しか持たないので、判定には線幅の半分も含める。
-    // ただし線幅全体を足すと広すぎるため、消しゴム半径 + 描画線半径の半分にする。
-    return std::max(1.0f, eraserRadius + strokeRadius * 0.5f);
+    return std::max(2.0f, eraserRadius + strokeRadius * 0.35f);
+}
+void keepLocalEraserGap(std::vector<bool>& hitFlags,
+                        std::size_t closestIndex,
+                        float spacing,
+                        float eraserRadius,
+                        float strokeRadius)
+{
+    if (hitFlags.empty()) {
+        return;
+    }
+    std::fill(hitFlags.begin(), hitFlags.end(), false);
+    const float localGapRadius = std::max(2.0f, eraserRadius * 1.15f + strokeRadius * 0.25f);
+    const int gapSamples = std::max(1, static_cast<int>(std::ceil(localGapRadius / std::max(0.5f, spacing))));
+    const int begin = std::max(0, static_cast<int>(closestIndex) - gapSamples);
+    const int end = std::min(static_cast<int>(hitFlags.size()) - 1,
+                             static_cast<int>(closestIndex) + gapSamples);
+    for (int i = begin; i <= end; ++i) {
+        hitFlags[static_cast<std::size_t>(i)] = true;
+    }
 }
 void appendStrokePart(std::vector<Stroke>& output, const Stroke& source, std::vector<StrokePoint>& points)
 {
@@ -127,7 +143,7 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
         result.push_back(stroke);
         return result;
     }
-    const float spacing = std::max(0.75f, std::min(stroke.radiusPx, eraserRadius) * 0.35f);
+    const float spacing = std::max(1.0f, std::min(stroke.radiusPx, eraserRadius) * 0.5f);
     const std::vector<StrokePoint> sampledPoints = resampleStrokeForEraser(stroke, spacing);
     if (sampledPoints.empty()) {
         result.push_back(stroke);
@@ -154,20 +170,10 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
         result.push_back(stroke);
         return result;
     }
-    // 長い線で全サンプルがヒットした場合でも、ストローク全体削除にせず、
-    // 消しゴム軌跡に最も近い周辺だけを抜く。短い線は全消ししても自然なので許可する。
     const float targetLength = strokeApproxLength(stroke);
-    if (hitCount == static_cast<int>(sampledPoints.size()) &&
-        sampledPoints.size() >= 3U &&
-        targetLength > hitRadius * 4.0f) {
-        std::fill(hitFlags.begin(), hitFlags.end(), false);
-        const int gapSamples = std::max(1, static_cast<int>(std::ceil(hitRadius / spacing)));
-        const int begin = std::max(0, static_cast<int>(closestIndex) - gapSamples);
-        const int end = std::min(static_cast<int>(sampledPoints.size()) - 1,
-                                 static_cast<int>(closestIndex) + gapSamples);
-        for (int i = begin; i <= end; ++i) {
-            hitFlags[static_cast<std::size_t>(i)] = true;
-        }
+    const bool mostlyHit = hitCount >= static_cast<int>(sampledPoints.size() * 0.70f);
+    if (sampledPoints.size() >= 3U && targetLength > std::max(8.0f, eraserRadius * 2.5f) && mostlyHit) {
+        keepLocalEraserGap(hitFlags, closestIndex, spacing, eraserRadius, stroke.radiusPx);
     }
     std::vector<StrokePoint> currentPart;
     bool anyErasedPoint = false;
@@ -180,7 +186,19 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
         }
     }
     appendStrokePart(result, stroke, currentPart);
-    if (!anyErasedPoint) {
+    if (anyErasedPoint && result.empty()) {
+        keepLocalEraserGap(hitFlags, closestIndex, spacing, eraserRadius, stroke.radiusPx);
+        currentPart.clear();
+        for (std::size_t i = 0; i < sampledPoints.size(); ++i) {
+            if (hitFlags[i]) {
+                appendStrokePart(result, stroke, currentPart);
+            } else {
+                currentPart.push_back(sampledPoints[i]);
+            }
+        }
+        appendStrokePart(result, stroke, currentPart);
+    }
+    if (!anyErasedPoint || result.empty()) {
         result.clear();
         result.push_back(stroke);
         return result;
@@ -188,32 +206,24 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
     changed = true;
     return result;
 }
-ImU32 onionColor(bool isPrevious, float alpha)
+ImU32 onionColor(bool isPrevious, float opacity)
 {
-    const int alphaByte = static_cast<int>(std::lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f));
-    if (isPrevious) {
-        return IM_COL32(0, 150, 255, std::max(alphaByte, 170));
-    }
-    return IM_COL32(255, 80, 50, std::max(alphaByte, 170));
+    const int alpha = static_cast<int>(std::lround(std::clamp(opacity, 0.0f, 1.0f) * 255.0f));
+    return isPrevious ? IM_COL32(35, 170, 255, alpha) : IM_COL32(255, 95, 70, alpha);
 }
-void drawOnionStrokeDirect(const Stroke& stroke,
-                           bool isPrevious,
-                           float opacity,
-                           const CanvasView& view,
-                           ImVec2 areaMin,
-                           ImVec2 areaSize,
-                           ImDrawList* drawList)
+void drawOnionStrokeDirect(const Stroke& stroke, bool isPrevious, float opacity,
+                           const CanvasView& view, ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList)
 {
-    if (drawList == nullptr || stroke.points.empty()) {
+    if (drawList == nullptr || stroke.points.empty() || opacity <= 0.0f) {
         return;
     }
-    const float alpha = std::clamp(opacity * stroke.color[3], 0.0f, 1.0f);
-    const ImU32 color = onionColor(isPrevious, alpha);
-    const float radius = std::max(3.0f, stroke.radiusPx * std::clamp(view.zoom, 0.05f, 32.0f));
+    const ImU32 color = onionColor(isPrevious, opacity * std::max(0.15f, stroke.color[3]));
+    const float zoom = std::clamp(view.zoom, 0.05f, 32.0f);
+    const float width = std::max(2.5f, stroke.radiusPx * zoom * 2.2f);
     if (stroke.points.size() == 1U) {
         const StrokePoint& point = stroke.points.front();
-        const ImVec2 screenPoint = view.canvasToScreen(point.x, point.y, areaMin, areaSize);
-        drawList->AddCircleFilled(screenPoint, radius, color, 16);
+        const ImVec2 p = view.canvasToScreen(point.x, point.y, areaMin, areaSize);
+        drawList->AddCircleFilled(p, width * 0.5f, color, 16);
         return;
     }
     for (std::size_t index = 1; index < stroke.points.size(); ++index) {
@@ -222,16 +232,11 @@ void drawOnionStrokeDirect(const Stroke& stroke,
         const ImVec2 p0 = view.canvasToScreen(previous.x, previous.y, areaMin, areaSize);
         const ImVec2 p1 = view.canvasToScreen(current.x, current.y, areaMin, areaSize);
         const float pressure = std::max(0.1f, (previous.pressure + current.pressure) * 0.5f);
-        drawList->AddLine(p0, p1, color, std::max(2.5f, radius * pressure * 2.2f));
+        drawList->AddLine(p0, p1, color, std::max(2.5f, width * pressure));
     }
 }
-void drawOnionFrameDirect(const Frame& frame,
-                          bool isPrevious,
-                          float opacity,
-                          const CanvasView& view,
-                          ImVec2 areaMin,
-                          ImVec2 areaSize,
-                          ImDrawList* drawList)
+void drawOnionFrameDirect(const Frame& frame, bool isPrevious, float opacity,
+                          const CanvasView& view, ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList)
 {
     if (drawList == nullptr || opacity <= 0.0f) {
         return;
@@ -248,19 +253,27 @@ void drawOnionFrameDirect(const Frame& frame,
     }
     drawList->PopClipRect();
 }
-int countFrameStrokes(const Frame* frame)
+Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Stroke& eraserStroke)
 {
-    if (frame == nullptr) {
-        return 0;
+    Frame preview = frame;
+    if (eraserStroke.points.empty() || activeLayerIndex < 0 || activeLayerIndex >= static_cast<int>(preview.layers.size())) {
+        return preview;
     }
-    int count = 0;
-    for (const Layer& layer : frame->layers) {
-        if (!layer.visible || layer.opacity <= 0.0f) {
-            continue;
-        }
-        count += static_cast<int>(layer.strokes.size());
+    Layer& layer = preview.layers[static_cast<std::size_t>(activeLayerIndex)];
+    std::vector<Stroke> rewrittenStrokes;
+    rewrittenStrokes.reserve(layer.strokes.size());
+    bool changed = false;
+    const float radius = std::max(1.0f, eraserStroke.radiusPx);
+    for (const Stroke& stroke : layer.strokes) {
+        std::vector<Stroke> parts = splitStrokeByEraser(stroke, eraserStroke, radius, changed);
+        rewrittenStrokes.insert(rewrittenStrokes.end(),
+                                std::make_move_iterator(parts.begin()),
+                                std::make_move_iterator(parts.end()));
     }
-    return count;
+    if (changed) {
+        layer.strokes = std::move(rewrittenStrokes);
+    }
+    return preview;
 }
 } // namespace
 void App::drawDrawingMode()
@@ -315,7 +328,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Step 1-4 stability pass v19");
+    ImGui::TextDisabled("Step 1-4 stability pass v21");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -383,29 +396,33 @@ void App::drawCanvasArea(float rightWidth)
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const ImU32 background = ImGui::ColorConvertFloat4ToU32(ui::themeColors().canvasBackground);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
-    const Stroke* preview = isDrawingStroke_ ? &currentStroke_ : nullptr;
-    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
     const Cell* onionCell = activeCell();
     const Frame* previous = (onionCell != nullptr && activeFrameIndex_ > 0)
         ? onionCell->frameOrNull(activeFrameIndex_ - 1)
         : nullptr;
     const Frame* next = (onionCell != nullptr) ? onionCell->frameOrNull(activeFrameIndex_ + 1) : nullptr;
-    // v19: ここは確実に見える経路にする。
-    // 通常Texture描画の後にWindowDrawListへ重ね、さらに同じ座標系で描く。
     if (onionPrevious_ && previous != nullptr) {
-        drawOnionFrameDirect(*previous, true, 0.70f, canvasView_, areaMin, areaSize, drawList);
+        drawOnionFrameDirect(*previous, true, 0.72f, canvasView_, areaMin, areaSize, drawList);
     }
     if (onionNext_ && next != nullptr) {
-        drawOnionFrameDirect(*next, false, 0.70f, canvasView_, areaMin, areaSize, drawList);
+        drawOnionFrameDirect(*next, false, 0.72f, canvasView_, areaMin, areaSize, drawList);
     }
-    // オニオンが本当に参照できているかを画面上で判別できる軽い診断表示。
-    if (onionPrevious_ && previous != nullptr) {
-        const int previousStrokes = countFrameStrokes(previous);
-        if (previousStrokes > 0) {
-            drawList->AddText(ImVec2(areaMin.x + 10.0f, areaMin.y + 10.0f),
-                              IM_COL32(0, 150, 255, 230),
-                              "prev onion ON");
-        }
+    Frame eraserPreviewFrame;
+    const bool eraserPreview = isDrawingStroke_
+        && brushSettings_.tool == ui::ToolKind::Eraser
+        && !currentStroke_.points.empty();
+    const Frame* frameToDraw = frame;
+    if (eraserPreview) {
+        eraserPreviewFrame = previewFrameWithEraser(*frame, activeLayerIndex_, currentStroke_);
+        frameToDraw = &eraserPreviewFrame;
+    }
+    const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
+    canvasRenderer_.draw(*frameToDraw, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
+    if (eraserPreview && !currentStroke_.points.empty()) {
+        const StrokePoint& point = currentStroke_.points.back();
+        const ImVec2 screenPoint = canvasView_.canvasToScreen(point.x, point.y, areaMin, areaSize);
+        const float radius = std::max(2.0f, currentStroke_.radiusPx * std::clamp(canvasView_.zoom, 0.05f, 32.0f));
+        drawList->AddCircle(screenPoint, radius, IM_COL32(255, 80, 70, 210), 32, 2.0f);
     }
     handleCanvasInput(areaMin, areaSize);
     ImGui::Dummy(areaSize);
@@ -468,7 +485,7 @@ void App::removeIntersectingStrokes(const Stroke& eraserStroke)
     }
     if (changed) {
         layer->strokes = std::move(rewrittenStrokes);
-        lastMessage_ = "eraser applied: partial stroke split v19";
+        lastMessage_ = "eraser applied: partial stroke split v21";
     } else {
         lastMessage_ = "eraser applied: no hit, radius=" + std::to_string(radius) +
                        ", strokes=" + std::to_string(beforeCount);
