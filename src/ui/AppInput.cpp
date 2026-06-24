@@ -9,6 +9,8 @@
 
 #include <imgui.h>
 
+#include "fill/FloodFill.h"
+
 namespace perapera {
 namespace {
 
@@ -123,6 +125,19 @@ void App::handleFrameShortcuts()
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput || isDrawingStroke_) {
         return;
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_B)) {
+        brushSettings_.tool = ui::ToolKind::Brush;
+        lastMessage_ = "tool: brush";
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_E)) {
+        brushSettings_.tool = ui::ToolKind::Eraser;
+        lastMessage_ = "tool: eraser";
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_G)) {
+        brushSettings_.tool = ui::ToolKind::FloodFill;
+        lastMessage_ = "tool: flood fill";
     }
 
     if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
@@ -269,10 +284,57 @@ void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize)
     }
 }
 
+
+void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
+{
+    Frame* frame = activeFrame();
+    Layer* layer = activeLayer();
+    if (frame == nullptr || layer == nullptr) {
+        return;
+    }
+    if (layer->type != LayerType::Paint) {
+        lastMessage_ = "flood fill requires active Paint layer";
+        return;
+    }
+
+    const ImVec2 canvas = canvasView_.screenToCanvas(mouseScreen.x, mouseScreen.y, areaMin, areaSize);
+    fill::FloodFillSettings settings;
+    settings.tolerance = brushSettings_.fillTolerance;
+    settings.gapClosePx = brushSettings_.fillGapClosePx;
+
+    const fill::FloodFillResult result = fill::makeFloodFillStrokes(*frame,
+                                                                    activeLayerIndex_,
+                                                                    project_.canvas.width,
+                                                                    project_.canvas.height,
+                                                                    static_cast<int>(std::lround(canvas.x)),
+                                                                    static_cast<int>(std::lround(canvas.y)),
+                                                                    brushSettings_.color,
+                                                                    settings);
+    if (!result.success || result.strokes.empty()) {
+        lastMessage_ = "flood fill: " + result.message;
+        return;
+    }
+
+    pushUndoSnapshot();
+    Layer* targetLayer = activeLayer();
+    if (targetLayer == nullptr || targetLayer->type != LayerType::Paint) {
+        return;
+    }
+    targetLayer->strokes.insert(targetLayer->strokes.end(), result.strokes.begin(), result.strokes.end());
+    canvasRenderer_.markAllDirty();
+    lastMessage_ = "flood fill: " + std::to_string(result.filledPixelCount) +
+                   " px / " + std::to_string(result.strokes.size()) + " spans";
+}
+
 void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
 {
     Layer* layer = activeLayer();
     if (layer == nullptr) {
+        return;
+    }
+
+    if (brushSettings_.tool == ui::ToolKind::FloodFill) {
+        applyFloodFillAt(mouseScreen, areaMin, areaSize);
         return;
     }
 

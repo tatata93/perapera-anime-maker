@@ -107,6 +107,7 @@ private:
     void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize);
     void beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
     void updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
+    void applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
     void finishStroke();
     void cancelStroke();
     void fitCanvasToArea(ImVec2 areaSize);

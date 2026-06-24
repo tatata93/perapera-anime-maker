@@ -88,6 +88,8 @@ add_executable(perapera_anime_maker
 
     src/brush/SimpleBrushEngine.cpp
 
+    src/fill/FloodFill.cpp
+
     src/camera/ShotCamera2D.cpp
     src/camera/CameraAnimation.cpp
 

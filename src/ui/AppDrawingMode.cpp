@@ -334,7 +334,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 8 palette save/load");
+    ImGui::TextDisabled("Phase 1.5 Step 9 flood fill foundation");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();

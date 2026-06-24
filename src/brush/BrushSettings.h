@@ -11,6 +11,7 @@ namespace perapera::ui {
 enum class ToolKind {
     Brush,
     Eraser,
+    FloodFill,
 };
 
 enum class BrushEngineKind {
@@ -46,6 +47,11 @@ struct BrushSettings {
     float watercolorBleed = 0.0f;
     float colorMix = 0.0f;
     float dryRate = 1.0f;
+
+    // バケツ塗り用。
+    // tolerance は壁判定の感度、gapClosePx は小さな隙間閉じの半径px。
+    int fillTolerance = 24;
+    int fillGapClosePx = 0;
 
     std::array<float, 4> color = {0.05f, 0.05f, 0.05f, 1.0f};
 };

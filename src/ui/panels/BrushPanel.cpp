@@ -103,7 +103,12 @@ void drawBrushPanel(BrushSettings& settings)
     ImGui::TextUnformatted(u8c(u8"ブラシ"));
     ImGui::Separator();
 
-    int tool = settings.tool == ToolKind::Brush ? 0 : 1;
+    int tool = 0;
+    if (settings.tool == ToolKind::Eraser) {
+        tool = 1;
+    } else if (settings.tool == ToolKind::FloodFill) {
+        tool = 2;
+    }
     if (ImGui::RadioButton(u8c(u8"ブラシ"), tool == 0)) {
         tool = 0;
     }
@@ -111,8 +116,19 @@ void drawBrushPanel(BrushSettings& settings)
     if (ImGui::RadioButton(u8c(u8"消しゴム"), tool == 1)) {
         tool = 1;
     }
-    settings.tool = tool == 0 ? ToolKind::Brush : ToolKind::Eraser;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(u8c(u8"バケツ"), tool == 2)) {
+        tool = 2;
+    }
+    if (tool == 0) {
+        settings.tool = ToolKind::Brush;
+    } else if (tool == 1) {
+        settings.tool = ToolKind::Eraser;
+    } else {
+        settings.tool = ToolKind::FloodFill;
+    }
 
+    ImGui::TextDisabled(u8c(u8"B:ブラシ  E:消しゴム  G:バケツ"));
     ImGui::TextDisabled(u8c(u8"Engine: SimpleBrushEngine / libmypaintは次Step"));
 
     ImGui::TextUnformatted(u8c(u8"プリセット"));
@@ -166,6 +182,16 @@ void drawBrushPanel(BrushSettings& settings)
     settings.watercolorBleed = std::clamp(settings.watercolorBleed, 0.0f, 1.0f);
     settings.colorMix = std::clamp(settings.colorMix, 0.0f, 1.0f);
     settings.dryRate = std::clamp(settings.dryRate, 0.0f, 1.0f);
+    settings.fillTolerance = std::clamp(settings.fillTolerance, 0, 255);
+    settings.fillGapClosePx = std::clamp(settings.fillGapClosePx, 0, 6);
+
+    if (settings.tool == ToolKind::FloodFill) {
+        ImGui::Separator();
+        ImGui::TextUnformatted(u8c(u8"バケツ塗り"));
+        ImGui::SliderInt(u8c(u8"許容範囲"), &settings.fillTolerance, 0, 255);
+        ImGui::SliderInt(u8c(u8"隙間閉じpx"), &settings.fillGapClosePx, 0, 6);
+        ImGui::TextDisabled(u8c(u8"Paintレイヤー上でクリックして塗る"));
+    }
 
     ImGui::ColorEdit4(u8c(u8"色"), settings.color.data(), ImGuiColorEditFlags_NoInputs);
 }
