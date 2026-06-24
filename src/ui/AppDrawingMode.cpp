@@ -331,7 +331,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Step 1-4 stability pass v22");
+    ImGui::TextDisabled("Step 1-4 stability pass v23 timeline scroll");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -371,7 +371,8 @@ void App::drawTimelineArea()
     if (cell == nullptr) {
         return;
     }
-    ImGui::BeginChild("DrawingTimeline_v5", ImVec2(0.0f, 0.0f), true);
+    ImGui::BeginChild("DrawingTimeline_v23_scroll", ImVec2(0.0f, 0.0f), true,
+                      ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar);
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);
     if (timelineAction == ui::TimelinePanelAction::AddFrame) {
