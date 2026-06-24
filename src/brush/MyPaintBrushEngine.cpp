@@ -64,6 +64,8 @@ struct PeraperaMyPaintSurface {
     MyPaintSurface parent{};
     CanvasBitmap* canvas = nullptr;
     float strokeOpacity = 1.0f;
+    int dabCallCount = 0;
+    int visibleDabCount = 0;
 };
 
 PeraperaMyPaintSurface* toPeraperaSurface(MyPaintSurface* surface)
@@ -96,6 +98,8 @@ int surfaceDrawDab(MyPaintSurface* self,
         return 0;
     }
 
+    ++surface->dabCallCount;
+
     const float opacity = clamp01(opaque * surface->strokeOpacity);
     if (alphaEraser > 0.01f) {
         // libmypaint側で消しゴム設定が混ざった場合の保険。
@@ -104,14 +108,18 @@ int surfaceDrawDab(MyPaintSurface* self,
         return 1;
     }
 
+    const float safeRadius = std::max(0.5f, radius);
     surface->canvas->paintDab(x,
                               y,
-                              std::max(0.5f, radius),
+                              safeRadius,
                               colorR,
                               colorG,
                               colorB,
                               opacity,
                               hardness);
+    if (opacity > (1.0f / 255.0f) && safeRadius > 0.0f) {
+        ++surface->visibleDabCount;
+    }
     return 1;
 }
 
@@ -267,6 +275,12 @@ void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, 
     if (stroke.points.empty()) {
         return;
     }
+    if (stroke.points.size() <= 1U) {
+        // libmypaintは短い点押しストロークではdabを出さない場合がある。
+        // 確定時に線が消えるより、既存Simple互換の点を残す方を優先する。
+        canvas.bakeStroke(stroke, opacity);
+        return;
+    }
 
     MyPaintBrush* brush = mypaint_brush_new();
     if (brush == nullptr) {
@@ -308,7 +322,15 @@ void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, 
                                 dtime);
     }
 
+    const bool shouldFallbackToSimple = surface.visibleDabCount <= 0;
     mypaint_brush_unref(brush);
+
+    if (shouldFallbackToSimple) {
+        // libmypaintが検出されても、設定値・入力点列・環境差でdabが1つも出ない場合がある。
+        // その場合、ドラッグ中のDrawListプレビューだけ見えて、確定後に線が消える。
+        // ここでは描画結果の消失を防ぐため、保存形式はMyPaintのまま、ピクセル焼き込みだけSimpleへ退避する。
+        canvas.bakeStroke(stroke, opacity);
+    }
 #endif
 }
 
