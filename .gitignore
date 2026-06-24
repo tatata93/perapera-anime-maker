@@ -32,3 +32,9 @@ Thumbs.db
 *.zip
 *.7z
 *.rar
+
+vcpkg_installed/
+
+vcpkg-manifest-install.log
+
+vcpkg-manifest-root.log

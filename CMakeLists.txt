@@ -53,6 +53,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(SDL3 imgui nlohmann_json)
 
+# libmypaint: Phase 1.5で導入するブラシエンジンライブラリ。
+# まだStep 12ではスタブだけを追加し、見つからない環境でも既存Simpleブラシでビルドを通す。
+find_package(libmypaint CONFIG QUIET)
+if (libmypaint_FOUND)
+    message(STATUS "libmypaint found: MyPaintBrushEngine stub will report available")
+else()
+    message(STATUS "libmypaint not found: MyPaintBrushEngine stub will use Simple fallback")
+endif()
+
 add_library(imgui_sdl3_renderer STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -87,6 +96,7 @@ add_executable(perapera_anime_maker
     src/render/CanvasRenderer.cpp
 
     src/brush/SimpleBrushEngine.cpp
+    src/brush/MyPaintBrushEngine.cpp
 
     src/fill/FloodFill.cpp
 
@@ -119,6 +129,15 @@ target_link_libraries(perapera_anime_maker PRIVATE
     imgui_sdl3_renderer
     nlohmann_json::nlohmann_json
 )
+
+if (libmypaint_FOUND)
+    target_compile_definitions(perapera_anime_maker PRIVATE PERAPERA_HAS_LIBMYPAINT=1)
+    if (TARGET libmypaint::libmypaint)
+        target_link_libraries(perapera_anime_maker PRIVATE libmypaint::libmypaint)
+    elseif (TARGET libmypaint)
+        target_link_libraries(perapera_anime_maker PRIVATE libmypaint)
+    endif()
+endif()
 
 if (MSVC)
     target_compile_options(perapera_anime_maker PRIVATE /W4 /permissive- /utf-8)

@@ -78,3 +78,54 @@
 
 ### 判断待ち（私への確認事項）
 - libmypaint導入を次に行うか、先にColorTrace出力置換や消しゴムの設計修正を行うか。
+
+
+## 2026-06-25 Phase 1.5-Step 11c: FloodFill leak guard adjustment
+
+### 作業概要
+- シード点やキャンバス端到達だけで漏れ扱いしないようにし、背景塗りや端付近の小さい図形を塗れるようにした。
+
+### 変更ファイル
+- src/fill/FloodFill.cpp
+
+### 実装内容
+- 漏れ防止の中止条件を面積超過のみに整理。
+- queue.size() の上限判定を >= から > に調整。
+
+### 未完了
+- バケツ塗りのPaint専用ピクセルデータ化は未実装。
+
+### 次にやること
+- libmypaint導入スタブへ進む。
+
+## 2026-06-25 Phase 1.5-Step 12: libmypaint導入スタブ
+
+### 作業概要
+- libmypaintを使うMyPaintBrushEngineのビルド経路とスタブを追加した。
+- 既存のSimpleBrushEngineを壊さず、BrushPanelからSimple/MyPaintを切り替えられる土台を作った。
+
+### 変更ファイル
+- WORK_LOG.md
+- DECISIONS.md
+- CMakeLists.txt
+- src/brush/BrushSettings.h
+- src/brush/MyPaintBrushEngine.h
+- src/brush/MyPaintBrushEngine.cpp
+- src/ui/AppDrawingMode.cpp
+- src/ui/panels/BrushPanel.cpp
+
+### 実装内容
+- CMakeLists.txt に find_package(libmypaint CONFIG QUIET) を追加。
+- libmypaintが無い環境でもビルドが通るように、MyPaintBrushEngineはSimple互換フォールバックにした。
+- libmypaintが検出された場合は PERAPERA_HAS_LIBMYPAINT を定義し、利用可能状態をUIに表示する。
+- BrushPanelにブラシエンジン切り替えUIを追加。
+
+### 未完了
+- libmypaintのdraw_dabコールバック接続は未実装。
+- MyPaintのブラシ設定ファイル読み込みは未実装。
+
+### 次にやること
+- Step 13でMyPaintBrushEngineの実描画接続を行う。
+
+### 判断待ち（私への確認事項）
+- Step 13でlibmypaintの実API接続へ進むか、先にvcpkg環境の確認を行うか。

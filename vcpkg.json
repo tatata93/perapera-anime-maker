@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "perapera-anime-maker",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "libmypaint"
+  ],
+  "builtin-baseline": "930ecc42b512b564571d767f70775d284a6fa307"
+}

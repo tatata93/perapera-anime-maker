@@ -18,6 +18,18 @@ const char* u8c(const char8_t* text)
 
 } // namespace
 
+
+const char* brushEngineKindLabel(BrushEngineKind kind)
+{
+    switch (kind) {
+    case BrushEngineKind::Simple:
+        return "SimpleBrushEngine";
+    case BrushEngineKind::MyPaint:
+        return "MyPaintBrushEngine";
+    }
+    return "SimpleBrushEngine";
+}
+
 const char* brushPresetLabel(BrushPreset preset)
 {
     switch (preset) {
@@ -129,7 +141,26 @@ void drawBrushPanel(BrushSettings& settings)
     }
 
     ImGui::TextDisabled(u8c(u8"B:ブラシ  E:消しゴム  G:バケツ"));
-    ImGui::TextDisabled(u8c(u8"Engine: SimpleBrushEngine / libmypaintは次Step"));
+
+    ImGui::Separator();
+    ImGui::TextUnformatted(u8c(u8"ブラシエンジン"));
+    const char* engineItems[] = {"SimpleBrushEngine", "MyPaintBrushEngine"};
+    int engineIndex = settings.engine == BrushEngineKind::MyPaint ? 1 : 0;
+    ImGui::SetNextItemWidth(190.0f);
+    if (ImGui::Combo(u8c(u8"エンジン"), &engineIndex, engineItems, IM_ARRAYSIZE(engineItems))) {
+        settings.engine = engineIndex == 1 ? BrushEngineKind::MyPaint : BrushEngineKind::Simple;
+    }
+#ifdef PERAPERA_HAS_LIBMYPAINT
+    ImGui::TextDisabled(u8c(u8"libmypaint: 検出済み / Step 13で実描画接続"));
+#else
+    if (settings.engine == BrushEngineKind::MyPaint) {
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f),
+            u8c(u8"libmypaint未検出: 現在はSimple互換のスタブ動作"));
+    } else {
+        ImGui::TextDisabled(u8c(u8"libmypaint未検出: vcpkg導入後に有効化"));
+    }
+#endif
+    ImGui::TextDisabled("Current: %s", brushEngineKindLabel(settings.engine));
 
     ImGui::TextUnformatted(u8c(u8"プリセット"));
     if (ImGui::Button(u8c(u8"ペン"))) {
@@ -195,7 +226,7 @@ void drawBrushPanel(BrushSettings& settings)
         ImGui::SliderInt(u8c(u8"はみ出し防止px"), &settings.fillInsetPx, 0, 8);
         ImGui::SliderInt(u8c(u8"漏れ防止%"), &settings.fillLeakGuardPercent, 0, 100);
         ImGui::TextDisabled(u8c(u8"Paintレイヤー上でクリックして塗る"));
-        ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。ON時はキャンバス端へ漏れた塗りも止める。"));
+        ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。ON時は面積が指定%を超えた塗りを止める。"));
     }
 
     ImGui::ColorEdit4(u8c(u8"色"), settings.color.data(), ImGuiColorEditFlags_NoInputs);

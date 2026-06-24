@@ -390,7 +390,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 10 lightweight eraser preview");
+    ImGui::TextDisabled("Phase 1.5 Step 12 libmypaint stub");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
