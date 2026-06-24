@@ -1,35 +1,25 @@
-## 2026-06-25 Phase 1.5-Step 9: FloodFill foundation
+## 2026-06-25 Phase 1.5-Step 10: Lightweight eraser preview
 
 ### 作業概要
-- バケツ塗りツールの土台を追加した。
-- ToolKind に FloodFill を追加し、左サイドバーから選択できるようにした。
-- Paint レイヤー上でクリックした位置から塗り広げる処理を追加した。
+- 以前の重い消しゴムプレビュー方式を復活させず、描画ループ中に全ストローク再分割しない軽量プレビューを追加した。
+- 消しゴムドラッグ中は、現在なぞっている軌跡だけをキャンバス背景色で上から薄くマスクし、消える予定の範囲をリアルタイムに見せる。
 
 ### 変更ファイル
-- CMakeLists.txt
-- src/brush/BrushSettings.h
-- src/fill/FloodFill.h
-- src/fill/FloodFill.cpp
-- src/ui/App.h
-- src/ui/AppInput.cpp
+- WORK_LOG.md
 - src/ui/AppDrawingMode.cpp
-- src/ui/panels/BrushPanel.cpp
 
 ### 実装内容
-- src/fill/FloodFill.h/.cpp を新規作成。
-- Normal / ColorTrace レイヤーのストロークを壁マスクとして扱う。
-- Paint レイヤーには横方向の塗りストローク列として結果を追加する。
-- B / E / G ショートカットでブラシ / 消しゴム / バケツを切り替えられる。
-- BrushPanel に許容範囲と隙間閉じpxのUIを追加した。
+- drawLightweightEraserPreview() を追加。
+- drawCanvasArea() で現在フレーム描画後、消しゴムドラッグ中だけ軽量プレビューを描画。
+- previewFrameWithEraser() によるフレーム複製・全ストローク再計算は使わない。
+- 既存の消しゴム確定処理 removeIntersectingStrokes() は変更しない。
 
 ### 未完了
-- 塗り結果はまだベクター風の横ストローク表現であり、専用PaintBitmapではない。
-- はみ出し防止の縮小処理は未実装。
-- 既存Paint色との許容範囲比較は未実装。
+- 実際の削除結果を完全に再現するプレビューではなく、消しゴム軌跡の視覚マスク表示。
+- ストローク単位の削除予定ハイライトは未実装。
 
 ### 次にやること
-- FloodFillの使い勝手確認後、Paintレイヤー専用の保存形式や塗りキャッシュ方式を検討する。
-- または軽量消しゴムプレビューへ進む。
+- FloodFill改善、ColorTrace出力時置換、またはlibmypaint導入へ進む。
 
 ### 判断待ち（私への確認事項）
-- バケツ塗り結果を今後もストローク正本として持つか、Paint専用のピクセル/領域データとして分けるか。
+- この軽量プレビューの見え方で十分か、さらに「削除予定ストロークだけ赤く光らせる」方向へ進めるか。

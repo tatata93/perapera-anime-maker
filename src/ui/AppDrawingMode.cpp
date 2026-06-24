@@ -255,6 +255,62 @@ void drawOnionFrameDirect(const Frame& frame, bool isPrevious, float opacity, co
     }
     drawList->PopClipRect();
 }
+
+void drawLightweightEraserPreview(const Stroke& eraserStroke,
+                                  const CanvasView& view,
+                                  ImVec2 areaMin,
+                                  ImVec2 areaSize,
+                                  ImDrawList* drawList)
+{
+    if (drawList == nullptr || eraserStroke.points.empty()) {
+        return;
+    }
+
+    // 消しゴムプレビューは、確定後の全ストローク分割を毎フレーム再計算しない。
+    // 代わりに現在なぞっている軌跡だけをキャンバス背景色で上から薄く塗り、
+    // 「このあたりが消える」という結果を軽く見せる。
+    const float zoom = std::clamp(view.zoom, 0.05f, 32.0f);
+    const float radius = std::max(2.0f, eraserStroke.radiusPx * zoom);
+    const float strokeWidth = radius * 2.0f;
+
+    ImVec4 maskColor = ui::themeColors().canvasBackground;
+    maskColor.w = 0.92f;
+    const ImU32 mask = ImGui::ColorConvertFloat4ToU32(maskColor);
+    const ImU32 guide = IM_COL32(255, 80, 70, 145);
+
+    const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
+    drawList->PushClipRect(areaMin, areaMax, true);
+
+    const auto toScreen = [&](const StrokePoint& point) {
+        return view.canvasToScreen(point.x, point.y, areaMin, areaSize);
+    };
+
+    if (eraserStroke.points.size() == 1U) {
+        const ImVec2 p = toScreen(eraserStroke.points.front());
+        drawList->AddCircleFilled(p, radius, mask, 28);
+        drawList->AddCircle(p, radius, guide, 28, 1.5f);
+        drawList->PopClipRect();
+        return;
+    }
+
+    ImVec2 previous = toScreen(eraserStroke.points.front());
+    drawList->AddCircleFilled(previous, radius, mask, 24);
+    for (std::size_t i = 1; i < eraserStroke.points.size(); ++i) {
+        const ImVec2 current = toScreen(eraserStroke.points[i]);
+        drawList->AddLine(previous, current, mask, strokeWidth);
+        drawList->AddCircleFilled(current, radius, mask, 24);
+        previous = current;
+    }
+
+    previous = toScreen(eraserStroke.points.front());
+    for (std::size_t i = 1; i < eraserStroke.points.size(); ++i) {
+        const ImVec2 current = toScreen(eraserStroke.points[i]);
+        drawList->AddLine(previous, current, guide, 1.5f);
+        previous = current;
+    }
+
+    drawList->PopClipRect();
+}
 Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Stroke& eraserStroke)
 {
     Frame preview = frame;
@@ -334,7 +390,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 9 flood fill foundation");
+    ImGui::TextDisabled("Phase 1.5 Step 10 lightweight eraser preview");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -427,6 +483,9 @@ void App::drawCanvasArea(float rightWidth)
     }
     const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
     canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
+    if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
+        drawLightweightEraserPreview(currentStroke_, canvasView_, areaMin, areaSize, drawList);
+    }
     const bool eraserCursor = isDrawingStroke_
         && brushSettings_.tool == ui::ToolKind::Eraser
         && !currentStroke_.points.empty();
