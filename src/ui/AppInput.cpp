@@ -80,7 +80,10 @@ bool App::advancePlaybackFrame()
 
     activeFrameIndex_ = nextIndex;
     clampSelection();
-    canvasRenderer_.markAllDirty();
+
+    // 再生中のフレーム送りでは markAllDirty() を呼ばない。
+    // CanvasRenderer は Frame* ごとにキャッシュを持つため、
+    // ここで全キャッシュを破棄すると毎コマ全レイヤー再焼き込みになりFPSが落ちる。
     return true;
 }
 
@@ -221,6 +224,8 @@ void App::drawFingerPlaybackControls()
     }
     ImGui::SameLine();
     ImGui::Checkbox(u8c(u8"ピンポン"), &playbackPingPong_);
+    ImGui::SameLine();
+    ImGui::Checkbox(u8c(u8"再生中は補助非表示"), &playbackSkipAssistOverlays_);
     ImGui::SameLine();
     ImGui::Text("%d/%d", frameCount > 0 ? activeFrameIndex_ + 1 : 0, frameCount);
     ImGui::TextDisabled(u8c(u8"Shift+←/→: 前後   Home/End: 先頭/末尾"));

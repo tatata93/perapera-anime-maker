@@ -63,6 +63,7 @@ private:
 
     bool isPlayingFrames_ = false;
     bool playbackPingPong_ = false;
+    bool playbackSkipAssistOverlays_ = true;
     int playbackDirection_ = 1;
     float playbackSpeed_ = 1.0f;
     float playbackAccumulator_ = 0.0f;

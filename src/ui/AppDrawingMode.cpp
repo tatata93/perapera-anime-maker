@@ -334,7 +334,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 6 color palette foundation");
+    ImGui::TextDisabled("Phase 1.5 Step 7 playback performance");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -410,18 +410,21 @@ void App::drawCanvasArea(float rightWidth)
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const ImU32 background = ImGui::ColorConvertFloat4ToU32(ui::themeColors().canvasBackground);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
-    const Cell* onionCell = activeCell();
-    const Frame* previous = (onionCell != nullptr && activeFrameIndex_ > 0)
-        ? onionCell->frameOrNull(activeFrameIndex_ - 1)
-        : nullptr;
-    const Frame* next = (onionCell != nullptr) ? onionCell->frameOrNull(activeFrameIndex_ + 1) : nullptr;
-    if (onionPrevious_ && previous != nullptr) {
-        drawOnionFrameDirect(*previous, true, 0.72f, canvasView_, areaMin, areaSize, drawList);
+    const bool drawAssistOverlays = !isPlayingFrames_ || !playbackSkipAssistOverlays_;
+    if (drawAssistOverlays) {
+        const Cell* onionCell = activeCell();
+        const Frame* previous = (onionCell != nullptr && activeFrameIndex_ > 0)
+            ? onionCell->frameOrNull(activeFrameIndex_ - 1)
+            : nullptr;
+        const Frame* next = (onionCell != nullptr) ? onionCell->frameOrNull(activeFrameIndex_ + 1) : nullptr;
+        if (onionPrevious_ && previous != nullptr) {
+            drawOnionFrameDirect(*previous, true, 0.72f, canvasView_, areaMin, areaSize, drawList);
+        }
+        if (onionNext_ && next != nullptr) {
+            drawOnionFrameDirect(*next, false, 0.72f, canvasView_, areaMin, areaSize, drawList);
+        }
+        drawLightTableOverlay(areaMin, areaSize, drawList);
     }
-    if (onionNext_ && next != nullptr) {
-        drawOnionFrameDirect(*next, false, 0.72f, canvasView_, areaMin, areaSize, drawList);
-    }
-    drawLightTableOverlay(areaMin, areaSize, drawList);
     const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
     canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
     const bool eraserCursor = isDrawingStroke_

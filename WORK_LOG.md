@@ -1,32 +1,28 @@
-## 2026-06-24 Phase 1.5 Step 6: カラーパレット土台
+# WORK_LOG
+
+## 2026-06-24 Phase 1.5-Step 7: 指パラ再生軽量化
 ### 作業概要
-Phase 1.5の彩色基礎として、作画モード左サイドバーにColorPanelを追加した。
-ブラシ色、スウォッチ、最近使った色、色トレス用の基本色をUIから扱えるようにした。
+タイムライン再生中のFPS低下を抑えるため、再生フレーム送りで全キャッシュを破棄しないようにし、再生中だけオニオンスキン/ライトテーブル等の補助表示を省略できる設定を追加した。
 
 ### 変更ファイル
-- CMakeLists.txt
-- WORK_LOG.md
 - src/ui/App.h
+- src/ui/AppInput.cpp
 - src/ui/AppDrawingMode.cpp
-- src/ui/panels/ColorPanel.h
-- src/ui/panels/ColorPanel.cpp
 
 ### 実装内容
-- ColorPanelState / ColorSwatch を追加
-- デフォルトスウォッチ（主線、白、赤/青/黄緑トレス、影指定）を追加
-- 現在色のColorEdit4を追加
-- 現在色をスウォッチへ追加できるUIを追加
-- スウォッチクリックでbrushSettings_.colorへ反映
-- 最近使った色の履歴を追加
+- 再生中の advancePlaybackFrame() から canvasRenderer_.markAllDirty() を削除
+- CanvasRenderer の Frame* 単位キャッシュを利用して、再生時の再焼き込みを減らす
+- 指パラUIに「再生中は補助非表示」を追加
+- 再生中はオニオンスキン/ライトテーブルを省略できるようにした
+- 手動フレーム移動・タイムラインクリック時の markAllDirty は維持
 
 ### 未完了
-- palettes/palette.jsonへの保存/読み込み
-- スウォッチのドラッグ並べ替え
-- キャンバススポイト
+- 再生専用のプリレンダー/フレームキャッシュ固定化は未実装
+- 消しゴムプレビューの軽量実装は未実装
 
 ### 次にやること
-- バケツ塗りへ進む前に、ColorPanelのpalette.json保存を入れる
-- または、再生中FPS低下対策として指パラ再生の軽量化を入れる
+- palette.json 保存/読み込み
+- または軽量消しゴムプレビュー
 
 ### 判断待ち（私への確認事項）
-- 次を「パレット保存」か「指パラ再生軽量化」のどちらにするか
+- 再生中の補助表示を常にOFFにするか、現状のチェックボックス方式で続けるか
