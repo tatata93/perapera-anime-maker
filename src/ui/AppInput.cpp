@@ -12,6 +12,11 @@
 namespace perapera {
 namespace {
 
+const char* u8c(const char8_t* text)
+{
+    return reinterpret_cast<const char*>(text);
+}
+
 float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 {
     const float dx = a.x - b.x;
@@ -25,6 +30,202 @@ bool isPointInside(ImVec2 point, ImVec2 min, ImVec2 size)
 }
 
 } // namespace
+
+
+bool App::stepActiveFrame(int delta)
+{
+    Cell* cell = activeCell();
+    if (cell == nullptr || cell->frames.empty()) {
+        return false;
+    }
+
+    const int previousIndex = activeFrameIndex_;
+    const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
+    activeFrameIndex_ = std::clamp(activeFrameIndex_ + delta, 0, lastIndex);
+
+    if (activeFrameIndex_ == previousIndex) {
+        return false;
+    }
+
+    clampSelection();
+    canvasRenderer_.markAllDirty();
+    lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
+    return true;
+}
+
+bool App::advancePlaybackFrame()
+{
+    Cell* cell = activeCell();
+    if (cell == nullptr || cell->frames.size() <= 1U) {
+        isPlayingFrames_ = false;
+        return false;
+    }
+
+    const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
+    int nextIndex = activeFrameIndex_ + playbackDirection_;
+
+    if (nextIndex < 0 || nextIndex > lastIndex) {
+        if (playbackPingPong_) {
+            playbackDirection_ = -playbackDirection_;
+            nextIndex = activeFrameIndex_ + playbackDirection_;
+        } else {
+            nextIndex = nextIndex > lastIndex ? 0 : lastIndex;
+        }
+    }
+
+    nextIndex = std::clamp(nextIndex, 0, lastIndex);
+    if (nextIndex == activeFrameIndex_) {
+        return false;
+    }
+
+    activeFrameIndex_ = nextIndex;
+    clampSelection();
+    canvasRenderer_.markAllDirty();
+    return true;
+}
+
+void App::updateFramePlayback()
+{
+    if (!isPlayingFrames_) {
+        playbackAccumulator_ = 0.0f;
+        return;
+    }
+    if (isDrawingStroke_) {
+        return;
+    }
+
+    Cell* cell = activeCell();
+    if (cell == nullptr || cell->frames.size() <= 1U) {
+        isPlayingFrames_ = false;
+        playbackAccumulator_ = 0.0f;
+        return;
+    }
+
+    const Frame* frame = activeFrame();
+    const int durationFrames = frame == nullptr ? 1 : std::max(1, frame->durationFrames);
+    const float baseFps = 24.0f;
+    const float secondsPerStep = std::max(1.0f / 60.0f, static_cast<float>(durationFrames) / (baseFps * playbackSpeed_));
+    playbackAccumulator_ += std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+
+    while (playbackAccumulator_ >= secondsPerStep) {
+        playbackAccumulator_ -= secondsPerStep;
+        if (!advancePlaybackFrame()) {
+            break;
+        }
+    }
+}
+
+void App::handleFrameShortcuts()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantTextInput || isDrawingStroke_) {
+        return;
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
+        isPlayingFrames_ = !isPlayingFrames_;
+        playbackAccumulator_ = 0.0f;
+        lastMessage_ = isPlayingFrames_ ? "finger preview playing" : "finger preview stopped";
+    }
+
+    if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
+        isPlayingFrames_ = false;
+        playbackAccumulator_ = 0.0f;
+        stepActiveFrame(-1);
+    }
+    if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
+        isPlayingFrames_ = false;
+        playbackAccumulator_ = 0.0f;
+        stepActiveFrame(1);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
+        Cell* cell = activeCell();
+        if (cell != nullptr && !cell->frames.empty() && activeFrameIndex_ != 0) {
+            isPlayingFrames_ = false;
+            activeFrameIndex_ = 0;
+            clampSelection();
+            canvasRenderer_.markAllDirty();
+        }
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_End)) {
+        Cell* cell = activeCell();
+        if (cell != nullptr && !cell->frames.empty()) {
+            const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
+            if (activeFrameIndex_ != lastIndex) {
+                isPlayingFrames_ = false;
+                activeFrameIndex_ = lastIndex;
+                clampSelection();
+                canvasRenderer_.markAllDirty();
+            }
+        }
+    }
+}
+
+void App::drawFingerPlaybackControls()
+{
+    Cell* cell = activeCell();
+    const int frameCount = cell == nullptr ? 0 : static_cast<int>(cell->frames.size());
+
+    ImGui::PushID("FingerPlayback_v28_controls");
+    ImGui::TextUnformatted(u8c(u8"指パラ"));
+    ImGui::SameLine();
+    if (ImGui::Button("|<")) {
+        if (cell != nullptr && !cell->frames.empty()) {
+            isPlayingFrames_ = false;
+            activeFrameIndex_ = 0;
+            clampSelection();
+            canvasRenderer_.markAllDirty();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("<")) {
+        isPlayingFrames_ = false;
+        stepActiveFrame(-1);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(isPlayingFrames_ ? u8c(u8"停止 Space") : u8c(u8"再生 Space"))) {
+        isPlayingFrames_ = !isPlayingFrames_;
+        playbackAccumulator_ = 0.0f;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(">")) {
+        isPlayingFrames_ = false;
+        stepActiveFrame(1);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(">|")) {
+        if (cell != nullptr && !cell->frames.empty()) {
+            isPlayingFrames_ = false;
+            activeFrameIndex_ = static_cast<int>(cell->frames.size()) - 1;
+            clampSelection();
+            canvasRenderer_.markAllDirty();
+        }
+    }
+
+    const char* speedItems[] = {"0.25x", "0.5x", "1x", "2x"};
+    int speedIndex = 2;
+    if (playbackSpeed_ <= 0.26f) {
+        speedIndex = 0;
+    } else if (playbackSpeed_ <= 0.51f) {
+        speedIndex = 1;
+    } else if (playbackSpeed_ >= 1.99f) {
+        speedIndex = 3;
+    }
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(90.0f);
+    if (ImGui::Combo(u8c(u8"速度"), &speedIndex, speedItems, IM_ARRAYSIZE(speedItems))) {
+        const float speeds[] = {0.25f, 0.5f, 1.0f, 2.0f};
+        playbackSpeed_ = speeds[std::clamp(speedIndex, 0, 3)];
+        playbackAccumulator_ = 0.0f;
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox(u8c(u8"ピンポン"), &playbackPingPong_);
+    ImGui::SameLine();
+    ImGui::Text("%d/%d", frameCount > 0 ? activeFrameIndex_ + 1 : 0, frameCount);
+    ImGui::TextDisabled(u8c(u8"Shift+←/→: 前後   Home/End: 先頭/末尾"));
+    ImGui::PopID();
+}
 
 void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize)
 {

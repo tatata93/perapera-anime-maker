@@ -54,6 +54,12 @@ private:
     bool onionPrevious_ = true;
     bool onionNext_ = false;
 
+    bool isPlayingFrames_ = false;
+    bool playbackPingPong_ = false;
+    int playbackDirection_ = 1;
+    float playbackSpeed_ = 1.0f;
+    float playbackAccumulator_ = 0.0f;
+
     std::vector<Project> undoStack_;
     std::vector<Project> redoStack_;
     std::string lastMessage_ = "Phase 1 Step 1-4: ready";
@@ -77,6 +83,12 @@ private:
     void drawLeftSidebar();
     void drawRightSidebar();
     void drawTimelineArea();
+    void drawFingerPlaybackControls();
+
+    void handleFrameShortcuts();
+    void updateFramePlayback();
+    bool stepActiveFrame(int delta);
+    bool advancePlaybackFrame();
 
     void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize);
     void beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);

@@ -282,6 +282,8 @@ Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Str
 void App::drawDrawingMode()
 {
     clampSelection();
+    handleFrameShortcuts();
+    updateFramePlayback();
     ImGui::BeginChild("DrawingWorkspace", ImVec2(0.0f, -28.0f), true);
     const float sideWidth = 245.0f;
     const float rightWidth = 315.0f;
@@ -331,7 +333,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 1 brush settings base");
+    ImGui::TextDisabled("Phase 1.5 Step 4 finger preview");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -371,6 +373,8 @@ void App::drawTimelineArea()
     if (cell == nullptr) {
         return;
     }
+    drawFingerPlaybackControls();
+    ImGui::Separator();
     ImGui::BeginChild("DrawingTimeline_v23_scroll", ImVec2(0.0f, 0.0f), true,
                       ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar);
     const int prevFrameIndex = activeFrameIndex_;
