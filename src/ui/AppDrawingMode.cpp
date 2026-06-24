@@ -331,7 +331,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Step 1-4 stability pass v23 timeline scroll");
+    ImGui::TextDisabled("Phase 1.5 Step 1 brush settings base");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();

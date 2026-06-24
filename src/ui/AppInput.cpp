@@ -103,9 +103,18 @@ void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
         return;
     }
 
-    const float minDistance = std::max(1.0f, brushSettings_.radiusPx * 0.25f);
-    if (distanceSquared(currentStroke_.points.back(), point) >= minDistance * minDistance) {
-        currentStroke_.points.push_back(point);
+    StrokePoint filteredPoint = point;
+    if (brushSettings_.tool == ui::ToolKind::Brush && brushSettings_.stabilizer > 0.0f) {
+        const StrokePoint& previous = currentStroke_.points.back();
+        // 手ぶれ補正は「前の点に少し寄せる」だけにして、既存の描画感を壊さない。
+        const float follow = 1.0f - std::clamp(brushSettings_.stabilizer, 0.0f, 1.0f) * 0.85f;
+        filteredPoint.x = previous.x + (point.x - previous.x) * follow;
+        filteredPoint.y = previous.y + (point.y - previous.y) * follow;
+    }
+
+    const float minDistance = std::max(0.5f, brushSettings_.radiusPx * brushSettings_.spacing);
+    if (distanceSquared(currentStroke_.points.back(), filteredPoint) >= minDistance * minDistance) {
+        currentStroke_.points.push_back(filteredPoint);
     }
 }
 
