@@ -195,7 +195,7 @@ void drawBrushPanel(BrushSettings& settings)
         ImGui::SliderInt(u8c(u8"はみ出し防止px"), &settings.fillInsetPx, 0, 8);
         ImGui::SliderInt(u8c(u8"漏れ防止%"), &settings.fillLeakGuardPercent, 0, 100);
         ImGui::TextDisabled(u8c(u8"Paintレイヤー上でクリックして塗る"));
-        ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。閉じていない領域の巨大塗りを止める。"));
+        ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。ON時はキャンバス端へ漏れた塗りも止める。"));
     }
 
     ImGui::ColorEdit4(u8c(u8"色"), settings.color.data(), ImGuiColorEditFlags_NoInputs);

@@ -1,3 +1,26 @@
+
+## 2026-06-24 Phase 1.5 Step 11b: FloodFill leak guard stronger
+### 作業概要
+漏れ防止%が大きな面積判定だけでは効きにくかったため、キャンバス端へ到達した塗りも漏れ扱いにする。
+
+### 変更ファイル
+- src/brush/BrushSettings.h
+- src/fill/FloodFill.h
+- src/fill/FloodFill.cpp
+- src/ui/panels/BrushPanel.cpp
+- WORK_LOG.md
+
+### 実装内容
+- leakGuardPercent の初期値を 45 に変更
+- FloodFill 探索中に面積上限を超えたら即中止
+- 漏れ防止が有効な時、塗りがキャンバス端へ到達したら中止
+- UI説明文をキャンバス端漏れ対応に更新
+
+### 未完了
+- 背景全体を塗る専用モードは未実装。必要な時は漏れ防止%を0にする。
+
+### 次にやること
+- libmypaint導入スタブ
 ## 2026-06-25 Phase 1.5-Step 10: Lightweight eraser preview
 
 ### 作業概要

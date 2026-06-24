@@ -25,8 +25,9 @@ struct FloodFillSettings {
     int insetPx = 1;
 
     // 閉じていない領域で塗りが画面全体へ流れた時の安全弁。
-    // 0なら無効、85ならキャンバスの85%以上を塗ろうとした時点で中止する。
-    int leakGuardPercent = 85;
+    // 0なら無効。45ならキャンバスの45%以上を塗ろうとした時点で中止する。
+    // 0以外なら、塗りがキャンバス端へ到達した時も「閉じていない」と判断して中止する。
+    int leakGuardPercent = 45;
 };
 
 struct FloodFillResult {

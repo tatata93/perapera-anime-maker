@@ -52,10 +52,11 @@ struct BrushSettings {
     // tolerance は壁判定の感度、gapClosePx は小さな隙間閉じの半径px。
     // fillInsetPx は塗り領域を境界から内側に少し縮め、線へ食い込む塗りを防ぐ。
     // leakGuardPercent は閉じていない領域をクリックした時の巨大塗りを止める安全弁。
+    // 0以外なら、塗りがキャンバス端まで到達した場合も漏れ扱いで止める。
     int fillTolerance = 24;
     int fillGapClosePx = 0;
     int fillInsetPx = 1;
-    int fillLeakGuardPercent = 85;
+    int fillLeakGuardPercent = 45;
 
     std::array<float, 4> color = {0.05f, 0.05f, 0.05f, 1.0f};
 };

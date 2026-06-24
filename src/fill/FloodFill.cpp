@@ -144,6 +144,25 @@ int countMaskPixels(const std::vector<std::uint8_t>& mask)
     return static_cast<int>(std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1U)));
 }
 
+bool maskTouchesCanvasEdge(const std::vector<std::uint8_t>& mask, int width, int height)
+{
+    if (mask.empty() || width <= 0 || height <= 0) {
+        return false;
+    }
+
+    for (int x = 0; x < width; ++x) {
+        if (mask[indexOf(x, 0, width)] != 0U || mask[indexOf(x, height - 1, width)] != 0U) {
+            return true;
+        }
+    }
+    for (int y = 0; y < height; ++y) {
+        if (mask[indexOf(0, y, width)] != 0U || mask[indexOf(width - 1, y, width)] != 0U) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void insetFilledMask(std::vector<std::uint8_t>& filled,
                      const std::vector<std::uint8_t>& wall,
                      int width,
@@ -281,11 +300,28 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
     queue.push_back(static_cast<int>(seedIndex));
     filled[seedIndex] = 1U;
 
+    const int leakGuardPercent = std::clamp(settings.leakGuardPercent, 0, 100);
+    const int maxAllowedPixels = (leakGuardPercent > 0)
+        ? std::max(1, width * height * leakGuardPercent / 100)
+        : 0;
+
+    bool touchedCanvasEdge = (seedX == 0 || seedY == 0 || seedX == width - 1 || seedY == height - 1);
     std::size_t head = 0U;
     while (head < queue.size()) {
         const int current = queue[head++];
         const int x = current % width;
         const int y = current / width;
+
+        if (x == 0 || y == 0 || x == width - 1 || y == height - 1) {
+            touchedCanvasEdge = true;
+        }
+
+        // 漏れ防止は、最後まで塗ってから判定するだけだと巨大な塗りストロークを
+        // 作る直前まで進んでしまう。探索中にも面積上限を超えたらすぐ止める。
+        if (maxAllowedPixels > 0 && static_cast<int>(queue.size()) >= maxAllowedPixels) {
+            result.message = "fill leaked: area exceeded guard percent";
+            return result;
+        }
 
         const int neighbors[4][2] = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
         for (const auto& neighbor : neighbors) {
@@ -309,11 +345,16 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    const int leakGuardPercent = std::clamp(settings.leakGuardPercent, 0, 100);
     if (leakGuardPercent > 0) {
-        const int maxAllowedPixels = std::max(1, width * height * leakGuardPercent / 100);
-        if (rawFilledPixelCount >= maxAllowedPixels) {
-            result.message = "fill looks leaked; close the line or raise leak guard";
+        // 閉じていない図形から外へ漏れた場合、面積が45%未満でもキャンバス端へ到達することが多い。
+        // そのため、漏れ防止が有効な時は「端に到達した塗り」も中止する。
+        // 背景全体を意図的に塗りたい場合は、漏れ防止%を0にして安全弁を外す。
+        if (touchedCanvasEdge || maskTouchesCanvasEdge(filled, width, height)) {
+            result.message = "fill leaked to canvas edge; close gap or set leak guard to 0";
+            return result;
+        }
+        if (maxAllowedPixels > 0 && rawFilledPixelCount >= maxAllowedPixels) {
+            result.message = "fill leaked: area exceeded guard percent";
             return result;
         }
     }
