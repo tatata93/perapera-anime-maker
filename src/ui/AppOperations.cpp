@@ -91,13 +91,12 @@ void App::addFrame()
     cell->frames.insert(cell->frames.begin() + insertIndex, Frame::createDefault(insertIndex + 1));
     renumberFrames(*cell);
 
-    // 追加直後にキャンバスを空白へ切り替えない。
-    // 新規フレームへ描く時はタイムラインから frame_XXX を選択する。
+    activeFrameIndex_ = insertIndex;
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
     clampSelection();
     canvasRenderer_.markAllDirty();
-    lastMessage_ = "blank frame added after current. select it on timeline to draw.";
+    lastMessage_ = "blank frame added and selected.";
 }
 
 void App::duplicateFrame()

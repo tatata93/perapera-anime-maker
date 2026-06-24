@@ -373,8 +373,12 @@ void App::drawTimelineArea()
     }
     ImGui::BeginChild("DrawingTimeline_v23_scroll", ImVec2(0.0f, 0.0f), true,
                       ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar);
+    const int prevFrameIndex = activeFrameIndex_;
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);
+    if (activeFrameIndex_ != prevFrameIndex) {
+        canvasRenderer_.markAllDirty();
+    }
     if (timelineAction == ui::TimelinePanelAction::AddFrame) {
         addFrame();
     } else if (timelineAction == ui::TimelinePanelAction::DuplicateFrame) {
@@ -411,18 +415,12 @@ void App::drawCanvasArea(float rightWidth)
     if (onionNext_ && next != nullptr) {
         drawOnionFrameDirect(*next, false, 0.72f, canvasView_, areaMin, areaSize, drawList);
     }
-    Frame eraserPreviewFrame;
-    const bool eraserPreview = isDrawingStroke_
+    const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
+    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
+    const bool eraserCursor = isDrawingStroke_
         && brushSettings_.tool == ui::ToolKind::Eraser
         && !currentStroke_.points.empty();
-    const Frame* frameToDraw = frame;
-    if (eraserPreview) {
-        eraserPreviewFrame = previewFrameWithEraser(*frame, activeLayerIndex_, currentStroke_);
-        frameToDraw = &eraserPreviewFrame;
-    }
-    const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
-    canvasRenderer_.draw(*frameToDraw, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
-    if (eraserPreview && !currentStroke_.points.empty()) {
+    if (eraserCursor) {
         const StrokePoint& point = currentStroke_.points.back();
         const ImVec2 screenPoint = canvasView_.canvasToScreen(point.x, point.y, areaMin, areaSize);
         const float radius = std::max(2.0f, currentStroke_.radiusPx * std::clamp(canvasView_.zoom, 0.05f, 32.0f));
