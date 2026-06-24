@@ -482,7 +482,7 @@ void App::drawCanvasArea(float rightWidth)
         drawLightTableOverlay(areaMin, areaSize, drawList);
     }
     const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
-    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
+    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, 1.0f, canvasView_, areaMin, areaSize, drawList);
     if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
         drawLightweightEraserPreview(currentStroke_, canvasView_, areaMin, areaSize, drawList);
     }

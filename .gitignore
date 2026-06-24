@@ -44,3 +44,9 @@ vcpkg_installed/
 vcpkg-manifest-install.log
 
 vcpkg-manifest-root.log
+
+vcpkg_installed/
+
+vcpkg-manifest-install.log
+
+vcpkg-manifest-root.log

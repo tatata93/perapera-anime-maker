@@ -346,6 +346,14 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     currentStroke_.brushEngine = brushSettings_.engine == ui::BrushEngineKind::MyPaint
         ? StrokeBrushEngine::MyPaint
         : StrokeBrushEngine::Simple;
+    currentStroke_.opacity = std::clamp(brushSettings_.opacity, 0.05f, 1.0f);
+    currentStroke_.hardness = std::clamp(brushSettings_.hardness, 0.0f, 1.0f);
+    currentStroke_.spacing = std::clamp(brushSettings_.spacing, 0.05f, 1.0f);
+    currentStroke_.pressureToSize = std::clamp(brushSettings_.pressureToSize, 0.0f, 1.0f);
+    currentStroke_.pressureToOpacity = std::clamp(brushSettings_.pressureToOpacity, 0.0f, 1.0f);
+    currentStroke_.watercolorBleed = std::clamp(brushSettings_.watercolorBleed, 0.0f, 1.0f);
+    currentStroke_.colorMix = std::clamp(brushSettings_.colorMix, 0.0f, 1.0f);
+    currentStroke_.dryRate = std::clamp(brushSettings_.dryRate, 0.0f, 1.0f);
 
     if (brushSettings_.tool == ui::ToolKind::Eraser) {
         // 消しゴムはプレビュー用に赤色で表示するが、
@@ -385,7 +393,7 @@ void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
         filteredPoint.y = previous.y + (point.y - previous.y) * follow;
     }
 
-    const float minDistance = std::max(0.5f, brushSettings_.radiusPx * brushSettings_.spacing);
+    const float minDistance = std::max(0.5f, currentStroke_.radiusPx * currentStroke_.spacing);
     if (distanceSquared(currentStroke_.points.back(), filteredPoint) >= minDistance * minDistance) {
         currentStroke_.points.push_back(filteredPoint);
     }

@@ -70,12 +70,14 @@ std::uint64_t hashString(const char* value)
 
 void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacity)
 {
+    const float strokeOpacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
+    const float combinedOpacity = std::clamp(opacity * strokeOpacity, 0.0f, 1.0f);
     if (stroke.brushEngine == StrokeBrushEngine::MyPaint) {
         MyPaintBrushEngine engine;
-        engine.bakeStroke(bitmap, stroke, opacity);
+        engine.bakeStroke(bitmap, stroke, combinedOpacity);
         return;
     }
-    bitmap.bakeStroke(stroke, opacity);
+    bitmap.bakeStroke(stroke, combinedOpacity);
 }
 
 std::size_t pointerHash(const void* pointer)
@@ -362,7 +364,7 @@ void CanvasRenderer::drawCurrentStrokePreview(const Stroke& stroke,
         return;
     }
 
-    const float alpha = stroke.color[3] * opacity;
+    const float alpha = stroke.color[3] * std::clamp(stroke.opacity, 0.05f, 1.0f) * opacity;
     const ImU32 color = colorWithAlpha(stroke.color[0], stroke.color[1], stroke.color[2], alpha);
     const float radius = std::max(1.0f, stroke.radiusPx * std::clamp(view.zoom, kMinZoom, kMaxZoom));
 
@@ -394,6 +396,14 @@ std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
     for (const Stroke& stroke : layer.strokes) {
         hashCombine(seed, hashFloat(stroke.radiusPx));
         hashCombine(seed, hashString(strokeBrushEngineToString(stroke.brushEngine)));
+        hashCombine(seed, hashFloat(stroke.opacity));
+        hashCombine(seed, hashFloat(stroke.hardness));
+        hashCombine(seed, hashFloat(stroke.spacing));
+        hashCombine(seed, hashFloat(stroke.pressureToSize));
+        hashCombine(seed, hashFloat(stroke.pressureToOpacity));
+        hashCombine(seed, hashFloat(stroke.watercolorBleed));
+        hashCombine(seed, hashFloat(stroke.colorMix));
+        hashCombine(seed, hashFloat(stroke.dryRate));
         for (float component : stroke.color) {
             hashCombine(seed, hashFloat(component));
         }

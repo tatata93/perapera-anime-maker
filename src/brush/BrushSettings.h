@@ -44,8 +44,8 @@ struct BrushSettings {
     float pressureToSize = 0.0f;
     float pressureToOpacity = 0.0f;
 
-    // MyPaintBrushEngineへ渡す予定のパラメータ。
-    // Step 12ではUIとスタブのみ。実際のdraw_dab接続は次Step以降。
+    // MyPaintBrushEngineへ渡すパラメータ。
+    // Step 14以降はStrokeへ保存し、保存/読み込み後も描き味を復元する。
     float watercolorBleed = 0.0f;
     float colorMix = 0.0f;
     float dryRate = 1.0f;

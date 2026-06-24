@@ -3,6 +3,7 @@
 // Phase 1.5 Step 13では、MyPaintSurface::draw_dab を CanvasBitmap::paintDab へ接続する。
 // libmypaintが見つからない環境では、従来のSimple互換へ安全にフォールバックする。
 // Step 13dでは、交差部分が欠けるのを避けるため、alpha_eraserを無視し、細いSimple連続芯を後段で足す。
+// Step 14では、Strokeに保存された硬さ・間隔・筆圧・水彩系パラメータをlibmypaint設定へ反映する。
 
 #include "brush/MyPaintBrushEngine.h"
 
@@ -28,6 +29,11 @@ namespace {
 float clamp01(float value)
 {
     return std::clamp(value, 0.0f, 1.0f);
+}
+
+float lerp(float a, float b, float t)
+{
+    return a + (b - a) * clamp01(t);
 }
 
 std::array<float, 3> rgbToHsv(float r, float g, float b)
@@ -221,8 +227,12 @@ void bakeSimpleContinuityCore(CanvasBitmap& canvas, const Stroke& stroke, float 
     }
 
     Stroke continuityStroke = stroke;
-    continuityStroke.radiusPx = std::max(0.5f, stroke.radiusPx * 0.55f);
-    canvas.bakeStroke(continuityStroke, opacity);
+    const float hardness = clamp01(stroke.hardness);
+    const float watercolor = clamp01(stroke.watercolorBleed);
+    const float coreScale = lerp(0.24f, 0.42f, hardness) * lerp(1.0f, 0.72f, watercolor);
+    continuityStroke.radiusPx = std::max(0.45f, stroke.radiusPx * coreScale);
+    continuityStroke.opacity = 1.0f;
+    canvas.bakeStroke(continuityStroke, std::clamp(opacity * lerp(0.35f, 0.70f, hardness), 0.0f, 1.0f));
 }
 
 void configureBrush(MyPaintBrush* brush, const Stroke& stroke, float opacity)
@@ -234,29 +244,42 @@ void configureBrush(MyPaintBrush* brush, const Stroke& stroke, float opacity)
     const float radiusLog = std::log(std::max(0.5f, stroke.radiusPx));
     const auto hsv = rgbToHsv(stroke.color[0], stroke.color[1], stroke.color[2]);
     const float strokeOpacity = clamp01(stroke.color[3] * opacity);
+    const float hardness = clamp01(stroke.hardness);
+    const float spacing = std::clamp(stroke.spacing, 0.05f, 1.0f);
+    const float pressureToSize = clamp01(stroke.pressureToSize);
+    const float pressureToOpacity = clamp01(stroke.pressureToOpacity);
+    const float watercolor = clamp01(stroke.watercolorBleed);
+    const float colorMix = clamp01(stroke.colorMix);
+    const float dryRate = clamp01(stroke.dryRate);
+
+    // Step 14: UIで見えているブラシ設定をMyPaintへ反映する。
+    // spacingは小さいほどdab密度が高くなるように変換する。
+    const float dabDensity = std::clamp(1.0f / std::max(0.05f, spacing), 1.0f, 12.0f);
+    const float smudgeStrength = std::clamp(watercolor * lerp(0.35f, 1.0f, colorMix), 0.0f, 1.0f);
+    const float smudgeLength = std::clamp(lerp(0.05f, 0.75f, watercolor) * lerp(1.0f, 0.45f, dryRate), 0.0f, 1.0f);
 
     setBaseValue(brush, "radius_logarithmic", radiusLog);
     setBaseValue(brush, "opaque", strokeOpacity);
     setBaseValue(brush, "opaque_multiply", 1.0f);
-    setBaseValue(brush, "hardness", 0.80f);
+    setBaseValue(brush, "hardness", hardness);
     setBaseValue(brush, "anti_aliasing", 1.0f);
-    setBaseValue(brush, "dabs_per_actual_radius", 2.5f);
-    setBaseValue(brush, "dabs_per_basic_radius", 2.5f);
+    setBaseValue(brush, "dabs_per_actual_radius", dabDensity);
+    setBaseValue(brush, "dabs_per_basic_radius", dabDensity);
     setBaseValue(brush, "dabs_per_second", 0.0f);
     setBaseValue(brush, "eraser", 0.0f);
     setBaseValue(brush, "paint_mode", 0.0f);
-    setBaseValue(brush, "smudge", 0.0f);
-    setBaseValue(brush, "smudge_length", 0.0f);
+    setBaseValue(brush, "smudge", smudgeStrength);
+    setBaseValue(brush, "smudge_length", smudgeLength);
     setBaseValue(brush, "colorize", 0.0f);
     setBaseValue(brush, "lock_alpha", 0.0f);
     setBaseValue(brush, "color_h", hsv[0]);
     setBaseValue(brush, "color_s", hsv[1]);
     setBaseValue(brush, "color_v", hsv[2]);
 
-    // 現在のStrokePoint::pressureを活かす最低限の筆圧マッピング。
+    // 現在のStrokePoint::pressureを活かす筆圧マッピング。
     // マウス入力はpressure=1.0なので既存挙動に近い。
-    setPressureMapping(brush, "radius_logarithmic", radiusLog - 0.7f, radiusLog);
-    setPressureMapping(brush, "opaque", strokeOpacity * 0.35f, strokeOpacity);
+    setPressureMapping(brush, "radius_logarithmic", radiusLog - 0.9f * pressureToSize, radiusLog);
+    setPressureMapping(brush, "opaque", strokeOpacity * lerp(1.0f, 0.25f, pressureToOpacity), strokeOpacity);
 }
 
 #endif // PERAPERA_HAS_LIBMYPAINT

@@ -41,6 +41,17 @@ struct Stroke {
     // JSONでは文字列で保存し、古いデータには影響を出さない。
     StrokeBrushEngine brushEngine = StrokeBrushEngine::Simple;
 
+    // Phase 1.5 Step 14: ブラシ設定をストロークへ保存する。
+    // これにより、保存/読み込み後やキャッシュ再構築後もMyPaintの描き味が復元される。
+    float opacity = 1.0f;
+    float hardness = 1.0f;
+    float spacing = 0.25f;
+    float pressureToSize = 0.0f;
+    float pressureToOpacity = 0.0f;
+    float watercolorBleed = 0.0f;
+    float colorMix = 0.0f;
+    float dryRate = 1.0f;
+
     std::vector<StrokePoint> points;
 
     bool empty() const;

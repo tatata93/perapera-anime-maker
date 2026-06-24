@@ -83,6 +83,14 @@ json toJson(const Stroke& stroke)
         {"color", stroke.color},
         {"radiusPx", stroke.radiusPx},
         {"brushEngine", strokeBrushEngineToString(stroke.brushEngine)},
+        {"opacity", stroke.opacity},
+        {"hardness", stroke.hardness},
+        {"spacing", stroke.spacing},
+        {"pressureToSize", stroke.pressureToSize},
+        {"pressureToOpacity", stroke.pressureToOpacity},
+        {"watercolorBleed", stroke.watercolorBleed},
+        {"colorMix", stroke.colorMix},
+        {"dryRate", stroke.dryRate},
         {"points", points},
     };
 }
@@ -96,6 +104,14 @@ Stroke strokeFromJson(const json& value)
     }
     stroke.radiusPx = value.value("radiusPx", 4.0f);
     stroke.brushEngine = strokeBrushEngineFromString(value.value("brushEngine", std::string("Simple")));
+    stroke.opacity = std::clamp(value.value("opacity", 1.0f), 0.05f, 1.0f);
+    stroke.hardness = std::clamp(value.value("hardness", 1.0f), 0.0f, 1.0f);
+    stroke.spacing = std::clamp(value.value("spacing", 0.25f), 0.05f, 1.0f);
+    stroke.pressureToSize = std::clamp(value.value("pressureToSize", 0.0f), 0.0f, 1.0f);
+    stroke.pressureToOpacity = std::clamp(value.value("pressureToOpacity", 0.0f), 0.0f, 1.0f);
+    stroke.watercolorBleed = std::clamp(value.value("watercolorBleed", 0.0f), 0.0f, 1.0f);
+    stroke.colorMix = std::clamp(value.value("colorMix", 0.0f), 0.0f, 1.0f);
+    stroke.dryRate = std::clamp(value.value("dryRate", 1.0f), 0.0f, 1.0f);
 
     if (value.contains("points") && value.at("points").is_array()) {
         for (const json& pointJson : value.at("points")) {

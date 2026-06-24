@@ -238,3 +238,27 @@
 
 ### 次にやること
 - 交差欠けが消えたか確認し、問題なければMyPaint設定UI反映を進める。
+
+## Phase 1.5 Step 14: MyPaint brush settings mapping
+
+### Summary
+- Reflected BrushPanel settings into persisted Stroke data.
+- Connected opacity / hardness / spacing / pressure mapping / watercolor-like parameters to MyPaintBrushEngine.
+- Fixed brush opacity so committed strokes preserve the UI opacity after cache rebuild and save/load.
+- Kept SimpleBrushEngine as fallback and kept the Step 13d continuity core, but reduced it so MyPaint dab output remains visible.
+
+### Changed files
+- src/core/Stroke.h
+- src/io/ProjectIO.cpp
+- src/render/CanvasRenderer.cpp
+- src/brush/BrushSettings.h
+- src/brush/MyPaintBrushEngine.cpp
+- src/ui/AppInput.cpp
+- src/ui/AppDrawingMode.cpp
+- src/ui/panels/BrushPanel.cpp
+
+### Runtime verification
+- Full clean build with vcpkg toolchain.
+- Select MyPaintBrushEngine and compare Pen/Pencil/Watercolor/Airbrush presets.
+- Confirm opacity and hardness changes remain after frame switch, save/load, and restart.
+- Confirm SimpleBrushEngine still draws normally.

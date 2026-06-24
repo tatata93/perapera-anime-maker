@@ -197,7 +197,7 @@ void drawBrushPanel(BrushSettings& settings)
         ImGui::SliderFloat(u8c(u8"にじみ"), &settings.watercolorBleed, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat(u8c(u8"色混ぜ"), &settings.colorMix, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat(u8c(u8"乾き速度"), &settings.dryRate, 0.0f, 1.0f, "%.2f");
-        ImGui::TextDisabled(u8c(u8"水彩パラメータは今後MyPaint設定へ段階接続"));
+        ImGui::TextDisabled(u8c(u8"MyPaint選択時は描画と保存へ反映"));
         ImGui::TreePop();
     }
 
