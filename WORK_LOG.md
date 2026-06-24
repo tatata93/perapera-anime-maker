@@ -1,25 +1,22 @@
-# WORK_LOG
+# WORK LOG
 
-## Phase 1 Step 1-4 stability v16: real visual-order onion and less aggressive eraser
+## Phase 1 Step 1-4 stability pass v17
 
-### 変更内容
+### Purpose
+- Fix eraser behavior based on the actual current repository code path.
+- Fix onion skin visibility by drawing onion strokes on the foreground draw list, clipped to the canvas area.
+
+### Changes
 - `src/ui/AppDrawingMode.cpp`
-  - オニオンスキンを通常キャンバス描画の後に重ねて描くよう変更。
-  - 前フレーム青 / 次フレーム赤のDirect DrawList表示を維持。
-  - 消しゴムの当たり判定から `stroke.radiusPx` 加算を外し、`eraserStroke.radiusPx` そのものを判定半径に使用。
-  - 消しゴム分割用のサンプリング間隔を細かくし、触れた部分だけ抜けやすくした。
+  - Added `distancePointToStrokePathSquared()` for a stable eraser-path distance test.
+  - Reworked `splitStrokeByEraser()` to prevent a whole stroke from disappearing when every sampled point is hit.
+  - If all sampled points would be erased, the eraser now cuts only a local gap around the closest hit.
+  - Onion strokes are drawn via `ImGui::GetForegroundDrawList()` after the normal canvas texture draw.
+  - Onion colors and minimum stroke widths were strengthened to make visibility unambiguous.
+  - Runtime marker updated to `Step 1-4 stability pass v17`.
 
-### 目的
-- オニオンスキンがTexture描画で隠れて見えない環境を避ける。
-- 消しゴムがストローク全体を消したように見える過剰判定を避ける。
-
-### ビルド
-```powershell
-cmake --build .\build
-```
-
-### 実行確認
-- `③ 作画` を開く。
-- `Step 1-4 stability pass v16` 表示を確認。
-- 1フレーム目に線、2フレーム目を選択して前オニオンONで青い線が見える。
-- 消しゴムで線の中央だけをなぞり、線全体ではなく触れた部分だけ抜ける。
+### Verification requested
+- Build and launch.
+- Confirm the right sidebar marker shows `Step 1-4 stability pass v17`.
+- Draw a long stroke, erase the middle, and confirm only a local gap is removed.
+- Create two frames, draw on frame 1, select frame 2, enable previous onion, and confirm frame 1 appears as a blue overlay.
