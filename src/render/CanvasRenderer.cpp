@@ -1,7 +1,7 @@
 // このファイルの役割:
 // CanvasRendererの実装。
 // 1レイヤー=1枚のCanvasBitmapという仕様を守り、毎フレーム全ストロークをDrawListへ積まない。
-// v13: オニオンスキンが背景塗りで隠れないようにし、専用色のBitmapとして焼く。
+// v14: OnionCacheKeyからFrame*を外し、vector再アロケーション後も安全にする。
 
 #include "render/CanvasRenderer.h"
 
@@ -61,7 +61,7 @@ bool CanvasRenderer::LayerCacheKey::operator==(const LayerCacheKey& other) const
 
 bool CanvasRenderer::OnionCacheKey::operator==(const OnionCacheKey& other) const noexcept
 {
-    return frame == other.frame && frameIndex == other.frameIndex && isPrevious == other.isPrevious;
+    return frameIndex == other.frameIndex && isPrevious == other.isPrevious;
 }
 
 std::size_t CanvasRenderer::LayerCacheKeyHash::operator()(const LayerCacheKey& key) const noexcept
@@ -73,8 +73,7 @@ std::size_t CanvasRenderer::LayerCacheKeyHash::operator()(const LayerCacheKey& k
 
 std::size_t CanvasRenderer::OnionCacheKeyHash::operator()(const OnionCacheKey& key) const noexcept
 {
-    std::size_t seed = pointerHash(key.frame);
-    seed ^= std::hash<int>{}(key.frameIndex) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+    std::size_t seed = std::hash<int>{}(key.frameIndex);
     seed ^= std::hash<bool>{}(key.isPrevious) + 0x85ebca6bU + (seed << 6U) + (seed >> 2U);
     return seed;
 }
@@ -224,7 +223,7 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
     }
 
     rebuildOnionBitmapIfNeeded(frame, frameIndex, isPrevious, opacity);
-    CanvasBitmap& bitmap = onionBitmaps_.at(OnionCacheKey{&frame, frameIndex, isPrevious});
+    CanvasBitmap& bitmap = onionBitmaps_.at(OnionCacheKey{frameIndex, isPrevious});
     if (!bitmap.uploadIfDirty(renderer_)) {
         return;
     }
@@ -264,7 +263,7 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerInd
 
 void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity)
 {
-    const OnionCacheKey key{&frame, frameIndex, isPrevious};
+    const OnionCacheKey key{frameIndex, isPrevious};
     CanvasBitmap& bitmap = onionBitmaps_.try_emplace(key).first->second;
     std::uint64_t revision = frameRevisionHash(frame);
     hashCombine(revision, isPrevious ? 1ULL : 0ULL);

@@ -2,7 +2,7 @@
 
 // このファイルの役割:
 // CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
-// v13: オニオンスキンは黒ストロークへの単純tintではなく、専用色でBitmapへ焼く。
+// v14: オニオンキャッシュのキーからFrame*を外し、frameIndex+前後種別だけで管理する。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -74,7 +74,6 @@ private:
     };
 
     struct OnionCacheKey {
-        const Frame* frame = nullptr;
         int frameIndex = 0;
         bool isPrevious = false;
 

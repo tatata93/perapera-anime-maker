@@ -4,16 +4,9 @@
 #include "ui/App.h"
 
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
-#include <utility>
 
 #include <imgui.h>
 
-#include "io/FfmpegRunner.h"
-#include "io/PngExporter.h"
-#include "io/ProjectIO.h"
 #include "ui/Theme.h"
 #include "ui/panels/ExportPanel.h"
 
@@ -54,69 +47,6 @@ AppMode modeFromIndex(int index)
 }
 
 
-std::filesystem::path mp4LogPathForOutput(const std::filesystem::path& outputPath)
-{
-    const std::filesystem::path parent = outputPath.parent_path().empty()
-        ? std::filesystem::current_path()
-        : outputPath.parent_path();
-    return parent / "ffmpeg_last_run.log";
-}
-
-std::filesystem::path absolutePathForMessage(const std::filesystem::path& path)
-{
-    std::error_code errorCode;
-    const std::filesystem::path absolute = std::filesystem::absolute(path, errorCode);
-    return errorCode ? path : absolute;
-}
-
-void appendTextLog(const std::filesystem::path& logPath, const std::string& text)
-{
-    std::error_code errorCode;
-    std::filesystem::create_directories(logPath.parent_path(), errorCode);
-    std::ofstream log(logPath, std::ios::binary | std::ios::app);
-    if (log) {
-        log << text;
-    }
-}
-
-std::string readLogForStatus(const std::filesystem::path& logPath)
-{
-    std::ifstream file(logPath, std::ios::binary);
-    if (!file) {
-        return {};
-    }
-    std::string text;
-    text.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-    if (text.size() > 1200U) {
-        text = text.substr(text.size() - 1200U);
-    }
-    std::replace(text.begin(), text.end(), '\r', ' ');
-    std::replace(text.begin(), text.end(), '\n', ' ');
-    return text;
-}
-
-void resetMp4PreflightLog(const std::filesystem::path& logPath,
-                          const char* ffmpegPath,
-                          const char* pngFolder,
-                          const char* mp4Path,
-                          int fps)
-{
-    std::error_code errorCode;
-    std::filesystem::create_directories(logPath.parent_path(), errorCode);
-    std::ofstream log(logPath, std::ios::binary | std::ios::trunc);
-    if (!log) {
-        return;
-    }
-
-    log << "perapera-anime-maker MP4 preflight log v10\n";
-    log << "======================================\n\n";
-    log << "currentPath: " << std::filesystem::current_path(errorCode).string() << "\n";
-    log << "ffmpegPath: " << (ffmpegPath == nullptr ? "" : ffmpegPath) << "\n";
-    log << "pngFolder: " << (pngFolder == nullptr ? "" : pngFolder) << "\n";
-    log << "mp4Path: " << (mp4Path == nullptr ? "" : mp4Path) << "\n";
-    log << "fps: " << fps << "\n\n";
-}
-
 } // namespace
 
 App::App()
@@ -124,7 +54,7 @@ App::App()
 {
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
 
-    lastMessage_ = "Phase 1 Step 1-4 v10: ready";
+    lastMessage_ = "Phase 1 Step 1-4 stability v11: ready";
 }
 
 void App::setRenderer(SDL_Renderer* renderer)
@@ -392,106 +322,6 @@ void App::clampSelection()
         frame->layers.push_back(Layer::createDefault(1));
     }
     activeLayerIndex_ = std::clamp(activeLayerIndex_, 0, static_cast<int>(frame->layers.size()) - 1);
-}
-
-void App::saveProject()
-{
-    std::string error;
-    if (ProjectIO::save(project_, exportState_.projectFolder, &error)) {
-        lastMessage_ = "project saved";
-    } else {
-        lastMessage_ = "save failed: " + error;
-    }
-}
-
-void App::loadProject()
-{
-    Project loaded;
-    std::string error;
-    if (ProjectIO::load(exportState_.projectFolder, loaded, &error)) {
-        pushUndoSnapshot();
-        project_ = std::move(loaded);
-        afterProjectChanged();
-        lastMessage_ = "project loaded";
-    } else {
-        lastMessage_ = "load failed: " + error;
-    }
-}
-
-void App::exportActivePng()
-{
-    const Frame* frame = activeFrame();
-    if (frame == nullptr) {
-        lastMessage_ = "export failed: no active frame";
-        return;
-    }
-
-    std::filesystem::path output = std::filesystem::path(exportState_.exportFolder) / "active_frame.png";
-    std::string error;
-    if (PngExporter::exportFrame(*frame, output, project_.canvas.width, project_.canvas.height, &error)) {
-        lastMessage_ = "PNG exported: " + output.string();
-    } else {
-        lastMessage_ = "PNG export failed: " + error;
-    }
-}
-
-void App::exportPngSequence()
-{
-    const Cell* cell = activeCell();
-    if (cell == nullptr) {
-        lastMessage_ = "export failed: no active cell";
-        return;
-    }
-
-    const std::filesystem::path pngFolder = std::filesystem::absolute(exportState_.exportFolder);
-    std::string error;
-    if (PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height, &error)) {
-        lastMessage_ = "PNG sequence exported: " + pngFolder.string();
-    } else {
-        lastMessage_ = "PNG sequence failed: " + error;
-    }
-}
-
-void App::exportMp4()
-{
-    const Cell* cell = activeCell();
-    if (cell == nullptr) {
-        lastMessage_ = "MP4 failed: no active cell";
-        return;
-    }
-
-    const std::filesystem::path pngFolder = std::filesystem::absolute(exportState_.exportFolder);
-    const std::filesystem::path mp4Output = std::filesystem::absolute(exportState_.mp4Path);
-    const std::filesystem::path logPath = mp4LogPathForOutput(mp4Output);
-    const std::string pngFolderString = pngFolder.string();
-    const std::string mp4OutputString = mp4Output.string();
-    const std::string logForMessage = absolutePathForMessage(logPath).string();
-
-    resetMp4PreflightLog(logPath,
-                         exportState_.ffmpegPath,
-                         pngFolderString.c_str(),
-                         mp4OutputString.c_str(),
-                         project_.output.fps);
-    appendTextLog(logPath, "V10 Step 1: exporting PNG sequence before FFmpeg.\n");
-
-    std::string error;
-    if (!PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height, &error)) {
-        appendTextLog(logPath, "ERROR: PNG sequence export failed before FFmpeg.\n");
-        appendTextLog(logPath, "Reason: " + error + "\n");
-        lastMessage_ = "MP4 failed before ffmpeg: " + error + " log: " + logForMessage;
-        return;
-    }
-
-    const std::filesystem::path firstFrame = pngFolder / "frame_001.png";
-    appendTextLog(logPath, "PNG sequence exported. Expected first frame: " + firstFrame.string() + "\n");
-
-    const std::filesystem::path inputPattern = pngFolder / "frame_%03d.png";
-    if (FfmpegRunner::pngSequenceToMp4(exportState_.ffmpegPath, inputPattern, project_.output.fps, mp4Output, &error)) {
-        lastMessage_ = "MP4 exported: " + mp4Output.string();
-    } else {
-        const std::string logText = readLogForStatus(logPath);
-        lastMessage_ = logText.empty() ? "MP4 failed: " + error : "MP4 failed: " + error + " | log: " + logText;
-    }
 }
 
 } // namespace perapera

@@ -9,6 +9,7 @@ enum class ExportPanelAction {
     None,
     SaveProject,
     LoadProject,
+    VerifyProjectRoundTrip,
     ExportActivePng,
     ExportPngSequence,
     ExportMp4,

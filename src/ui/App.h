@@ -51,7 +51,7 @@ private:
     Stroke currentStroke_;
     bool isDrawingStroke_ = false;
     bool canvasViewInitialized_ = false;
-    bool onionPrevious_ = false;
+    bool onionPrevious_ = true;
     bool onionNext_ = false;
 
     std::vector<Project> undoStack_;
@@ -101,6 +101,7 @@ private:
 
     void saveProject();
     void loadProject();
+    void saveLoadRoundTripCheck();
     void exportActivePng();
     void exportPngSequence();
     void exportMp4();

@@ -75,6 +75,9 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     currentStroke_.radiusPx = brushSettings_.radiusPx;
 
     if (brushSettings_.tool == ui::ToolKind::Eraser) {
+        // 消しゴムはプレビュー用に赤色で表示するが、
+        // radiusPx は brushSettings_.radiusPx をそのまま使う。
+        // ここで color だけ変えて radiusPx は変えない。
         currentStroke_.color = {1.0f, 0.2f, 0.2f, 0.75f};
     }
 
