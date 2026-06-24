@@ -2,7 +2,7 @@
 
 // このファイルの役割:
 // CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
-// v14: オニオンキャッシュのキーからFrame*を外し、frameIndex+前後種別だけで管理する。
+// Phase 1.5 Step 3: Roughは半透明表示、ShadowGuideは参照用として表示できる。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>

@@ -1,15 +1,16 @@
-# Phase 1.5 Step 2: LayerType foundation
+# Phase 1.5 Step 3: Rough / ShadowGuide display-output control
 
 ## 変更
-- `LayerType` を `Layer` に追加。
-- `Normal / Rough / ColorTrace / Paint / ShadowGuide` を定義。
-- `layer_NNN.json` に `type` を保存・読み込み。
-- レイヤーパネルで選択中レイヤーの種別を変更できるようにした。
+- `Rough` レイヤーは表示上の不透明度を最大50%に制限。
+- `ShadowGuide` レイヤーはPNG/MP4用のPNG連番出力から除外。
+- レイヤーパネルに「ラフのみ表示」「ラフを隠す」「全レイヤー表示」を追加。
+- レイヤー種別変更時に `Rough` は50%、`ShadowGuide` は75%へ初期表示不透明度を寄せる。
+- `CanvasRenderer` のキャッシュ判定に `LayerType` を含めた。
 
 ## 範囲
-- 今回はデータモデルとUI土台のみ。
-- 色トレス出力時消去、バケツ塗り、影指定の非出力化は次以降。
+- 既存のNormal描画、保存、読み込み、消しゴム、PNG/MP4出力の入口は維持。
+- バケツ塗り、色トレス線の出力時消去、libmypaint導入は未実装。
 
 ## 確認
-- 既存プロジェクトは `type` が無ければ `Normal` として読む。
-- 新規保存では `type` が layer JSON に出る。
+- Roughにしたレイヤーが半透明で見える。
+- ShadowGuideにしたレイヤーは作画画面では見えるが、書き出しPNG/MP4には入らない。

@@ -1,6 +1,7 @@
 // このファイルの役割:
 // PNG書き出しを実装する。
 // 外部ライブラリ追加を避けるため、zlibの非圧縮deflateブロックを使う最小PNGエンコーダを内蔵する。
+// Phase 1.5 Step 3: ShadowGuideレイヤーは最終出力に含めない。
 
 #include "io/PngExporter.h"
 
@@ -121,6 +122,13 @@ void rasterizeStroke(ImageRgba& image, const Stroke& stroke, float opacity)
     }
 }
 
+bool shouldExportLayer(const Layer& layer)
+{
+    // ShadowGuide は作画指示・影指定のための参照レイヤー。
+    // 仕様どおり、PNG連番やMP4素材になる最終出力には含めない。
+    return layer.type != LayerType::ShadowGuide;
+}
+
 ImageRgba rasterizeFrame(const Frame& frame, int width, int height)
 {
     ImageRgba image;
@@ -129,7 +137,7 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height)
     image.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
 
     for (const Layer& layer : frame.layers) {
-        if (!layer.visible || layer.opacity <= 0.0f) {
+        if (!layer.visible || layer.opacity <= 0.0f || !shouldExportLayer(layer)) {
             continue;
         }
         for (const Stroke& stroke : layer.strokes) {

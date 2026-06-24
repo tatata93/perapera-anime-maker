@@ -1,7 +1,7 @@
 // このファイルの役割:
 // CanvasRendererの実装。
 // 1レイヤー=1枚のCanvasBitmapという仕様を守り、毎フレーム全ストロークをDrawListへ積まない。
-// v14: OnionCacheKeyからFrame*を外し、vector再アロケーション後も安全にする。
+// Phase 1.5 Step 3: Roughを半透明にし、LayerTypeを表示キャッシュの判定に含める。
 
 #include "render/CanvasRenderer.h"
 
@@ -26,6 +26,19 @@ float clamp01(float value)
 std::uint8_t alphaByte(float opacity)
 {
     return static_cast<std::uint8_t>(std::lround(clamp01(opacity) * 255.0f));
+}
+
+// Rough は下書き用なので、表示上は常に半透明上限をかける。
+// レイヤー自体の opacity を下げた場合は、その値を優先する。
+float displayOpacityForLayer(const Layer& layer)
+{
+    if (layer.type == LayerType::Rough) {
+        return std::min(layer.opacity, 0.50f);
+    }
+    if (layer.type == LayerType::ShadowGuide) {
+        return std::min(layer.opacity, 0.75f);
+    }
+    return layer.opacity;
 }
 
 ImU32 colorWithAlpha(float r, float g, float b, float a)
@@ -191,7 +204,8 @@ void CanvasRenderer::draw(const Frame& frame,
                 continue;
             }
 
-            drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, alphaByte(layer.opacity)));
+            const float displayOpacity = displayOpacityForLayer(layer);
+            drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, alphaByte(displayOpacity)));
         }
     }
 
@@ -295,7 +309,7 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
             } else {
                 onionStroke.color = {1.0f, 0.30f, 0.25f, 1.0f};
             }
-            bitmap.bakeStroke(onionStroke, opacity * layer.opacity);
+            bitmap.bakeStroke(onionStroke, opacity * displayOpacityForLayer(layer));
         }
     }
     onionRevisions_[key] = revision;
@@ -356,6 +370,7 @@ std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
     std::uint64_t seed = 1099511628211ULL;
     hashCombine(seed, layer.visible ? 1ULL : 0ULL);
     hashCombine(seed, hashFloat(layer.opacity));
+    hashCombine(seed, static_cast<std::uint64_t>(layer.type));
     hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
 
     for (const Stroke& stroke : layer.strokes) {
