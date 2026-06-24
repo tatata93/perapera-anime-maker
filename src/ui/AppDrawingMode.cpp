@@ -122,7 +122,7 @@ void App::drawRightSidebar()
         return;
     }
 
-    ImGui::TextDisabled("Step 1-4 runtime fix v10");
+    ImGui::TextDisabled("Step 1-4 stability pass v12");
 
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
@@ -149,6 +149,8 @@ void App::drawRightSidebar()
         saveProject();
     } else if (exportAction == ui::ExportPanelAction::LoadProject) {
         loadProject();
+    } else if (exportAction == ui::ExportPanelAction::VerifyProjectRoundTrip) {
+        saveLoadRoundTripCheck();
     } else if (exportAction == ui::ExportPanelAction::ExportActivePng) {
         exportActivePng();
     } else if (exportAction == ui::ExportPanelAction::ExportPngSequence) {

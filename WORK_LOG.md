@@ -1,57 +1,52 @@
-# WORK_LOG - Phase 1 Step 1-4 runtime fix v10
+# WORK_LOG
 
-## 目的
+## Phase 1 Step 1-4 stability pass v12
 
-Phase 1 Step 1-4 の作画UI配線後に発生していた以下を、コード全体の整合を取り直して修正する。
+### 目的
 
-- フレームを追加するとキャンバス表示が不自然に切り替わる。
-- 1つのフレームへ描いた線が他フレームにも見える。
-- MP4出力失敗時にFFmpeg本体のエラーがログに残らない。
-- Dear ImGui のID衝突を避けるため、ポインタID依存を減らす。
+再起動後に「読み込み」を押しても作画内容が見えない問題を修正する。
+前回v11では保存/読み込み処理を分離したが、相対パスの基準と起動後の選択フレーム復元が弱かった。
 
-## 修正内容
+### 原因
 
-### フレーム別キャンバス修正
+- `my_anime_project` のような相対プロジェクトパスが、起動時カレントディレクトリに依存していた。
+  - VS Codeから起動した時と、exe位置/別のカレントディレクトリから起動した時で別フォルダを読みに行く危険があった。
+- `ProjectIO` は作画データを保存するが、現在選択中のセル/フレーム/レイヤーは保存していなかった。
+  - 再起動後に読み込んでも、空白フレームが選ばれていると「復元していない」ように見える。
+- 保存後の即時検証が弱く、保存したストローク数と読み直したストローク数をステータスで確認しにくかった。
 
-- `CanvasRenderer` のBitmapキャッシュキーを `layerIndex` だけから、`Frame* + layerIndex` に変更した。
-- これにより、同じレイヤー番号でも別フレームのBitmapを共有しない。
-- `finishStroke()` では即時Bitmap焼き込みをやめ、Project内のストローク点列を正本として、`markAllDirty()` 後に次回drawで再構築するよう変更した。
-- オニオンスキンが通常描画と誤認されやすいため、初期値をOFFにした。
+### 変更内容
 
-### フレーム操作修正
+- `src/ui/AppProjectIOSupport.h` を追加。
+- `src/ui/AppProjectIOSupport.cpp` を追加。
+- `CMakeLists.txt` に `src/ui/AppProjectIOSupport.cpp` を追加。
+- 相対パスの基準を安定化した。
+  - `CMakeLists.txt` と `src/` を持つリポジトリルートを上位探索し、相対パスの基準にする。
+  - `my_anime_project` / `exports/png` / `exports/mp4/output.mp4` が起動方法でずれにくくなる。
+- 保存時に `app_state.json` をプロジェクトフォルダへ書くようにした。
+  - `activeCellIndex`
+  - `activeFrameIndex`
+  - `activeLayerIndex`
+  - 保存時の統計値
+- 読み込み時に `app_state.json` の選択状態を復元するようにした。
+- 保存時に `ProjectIO::save()` 後、即 `ProjectIO::load()` して統計と署名を照合するようにした。
+- 読み込み後、選択フレームが空白で、別フレームに線がある場合は最初の非空フレームを表示するようにした。
+- 右サイドバーの表示を `Step 1-4 stability pass v12` に更新した。
 
-- `addFrame()` は空白フレームを現在フレームの後ろへ挿入するが、表示中フレームを勝手に切り替えない。
-- 新しい空白フレームへ描く場合はタイムラインから選択する。
-- `FramePanel` / `LayerPanel` / `TimelinePanel` / `ExportPanel` のポインタ `PushID` を廃止し、固定IDに整理した。
+### 変更ファイル
 
-### MP4出力修正
-
-- Windowsでは `cmd` / batch を経由せず、`CreateProcessW` でFFmpegを直接起動するようにした。
-- `frame_%03d.png` の `%` がbatchで壊れる問題を避けた。
-- FFmpegの標準出力・標準エラーを `exports/mp4/ffmpeg_last_run.log` へ直接リダイレクトするようにした。
-
-## 変更ファイル
-
-- `src/ui/App.h`
-- `src/ui/App.cpp`
-- `src/ui/AppDrawingMode.cpp`
-- `src/ui/AppOperations.cpp`
-- `src/ui/panels/FramePanel.cpp`
-- `src/ui/panels/LayerPanel.cpp`
-- `src/ui/panels/TimelinePanel.cpp`
-- `src/ui/panels/ExportPanel.h`
-- `src/ui/panels/ExportPanel.cpp`
-- `src/render/CanvasRenderer.h`
-- `src/render/CanvasRenderer.cpp`
-- `src/render/CanvasBitmap.h`
-- `src/render/CanvasBitmap.cpp`
-- `src/brush/BrushEngine.h`
-- `src/brush/SimpleBrushEngine.h`
-- `src/brush/SimpleBrushEngine.cpp`
-- `src/io/FfmpegRunner.cpp`
+- `CMakeLists.txt`
 - `WORK_LOG.md`
+- `src/ui/AppProjectIO.cpp`
+- `src/ui/AppProjectIOSupport.h`
+- `src/ui/AppProjectIOSupport.cpp`
+- `src/ui/AppDrawingMode.cpp`
 
-## ビルド確認
+### 確認項目
 
-この環境ではWindows/MSVC/SDL3/ImGui実ビルドは実行していない。
-ただし、ヘッダと実装の不一致を避けるため、過去に不整合が出た `CanvasBitmap` / `BrushEngine` も同梱している。
+- ビルドが通ること。
+- ③ 作画で `Step 1-4 stability pass v12` が表示されること。
+- 1フレーム目に線を描き、保存できること。
+- ステータスに `project saved+verified` と `strokes=` が表示されること。
+- アプリを閉じて再起動し、読み込み後に線が復元されること。
+- `my_anime_project/app_state.json` が作られること。
