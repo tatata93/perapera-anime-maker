@@ -54,6 +54,11 @@ private:
     bool onionPrevious_ = true;
     bool onionNext_ = false;
 
+    bool lightTableEnabled_ = false;
+    float lightTableOpacity_ = 0.35f;
+    int lightTableColorMode_ = 0;
+    std::vector<int> lightTableFrameIndices_;
+
     bool isPlayingFrames_ = false;
     bool playbackPingPong_ = false;
     int playbackDirection_ = 1;
@@ -84,6 +89,8 @@ private:
     void drawRightSidebar();
     void drawTimelineArea();
     void drawFingerPlaybackControls();
+    void drawLightTableControls();
+    void drawLightTableOverlay(ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList);
 
     void handleFrameShortcuts();
     void updateFramePlayback();

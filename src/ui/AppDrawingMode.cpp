@@ -214,8 +214,7 @@ ImU32 onionColor(bool isPrevious, float opacity)
     const int alpha = static_cast<int>(std::lround(std::clamp(opacity, 0.0f, 1.0f) * 255.0f));
     return isPrevious ? IM_COL32(35, 170, 255, alpha) : IM_COL32(255, 95, 70, alpha);
 }
-void drawOnionStrokeDirect(const Stroke& stroke, bool isPrevious, float opacity,
-                           const CanvasView& view, ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList)
+void drawOnionStrokeDirect(const Stroke& stroke, bool isPrevious, float opacity, const CanvasView& view, ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList)
 {
     if (drawList == nullptr || stroke.points.empty() || opacity <= 0.0f) {
         return;
@@ -238,8 +237,7 @@ void drawOnionStrokeDirect(const Stroke& stroke, bool isPrevious, float opacity,
         drawList->AddLine(p0, p1, color, std::clamp(width * pressure, 1.2f, 4.0f));
     }
 }
-void drawOnionFrameDirect(const Frame& frame, bool isPrevious, float opacity,
-                          const CanvasView& view, ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList)
+void drawOnionFrameDirect(const Frame& frame, bool isPrevious, float opacity, const CanvasView& view, ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList)
 {
     if (drawList == nullptr || opacity <= 0.0f) {
         return;
@@ -374,6 +372,7 @@ void App::drawTimelineArea()
         return;
     }
     drawFingerPlaybackControls();
+    drawLightTableControls();
     ImGui::Separator();
     ImGui::BeginChild("DrawingTimeline_v23_scroll", ImVec2(0.0f, 0.0f), true,
                       ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar);
@@ -419,6 +418,7 @@ void App::drawCanvasArea(float rightWidth)
     if (onionNext_ && next != nullptr) {
         drawOnionFrameDirect(*next, false, 0.72f, canvasView_, areaMin, areaSize, drawList);
     }
+    drawLightTableOverlay(areaMin, areaSize, drawList);
     const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
     canvasRenderer_.draw(*frame, activeLayerIndex_, preview, brushSettings_.opacity, canvasView_, areaMin, areaSize, drawList);
     const bool eraserCursor = isDrawingStroke_
