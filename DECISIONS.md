@@ -1,51 +1,27 @@
 # DECISIONS
 
-## Decision 001: 完全新規リポジトリとして開始
-日付: 2026-06-23
+## Phase 1.5 Step 14b
 
-理由:
-既存コードの描画経路が複雑化し、仕様書 v3.0 で「既存コードは一切引き継がない」と定めたため。
+### 決定: 応答性を優先し、重いMyPaint処理を制限する
 
-影響:
-Phase 0 から順番に、C++20 / CMake / SDL3 / Dear ImGui を土台として再構築する。
+Step 14でMyPaintブラシ設定を反映したが、`smudge` / 水彩系と高密度dabにより、ストローク確定時の処理が長くなった。
 
-## Decision 002: libmypaintは任意検出のスタブから導入する
-日付: 2026-06-25
+現段階では、作画アプリとして「線を引いたあと止まらない」ことを優先する。
+そのため、以下を採用する。
 
-理由:
-Phase 1.5ではlibmypaintを導入するが、vcpkg環境が未設定の状態で既存の作画・保存・出力を壊さないため。
-まずMyPaintBrushEngineのクラスとCMake検出だけを追加し、libmypaintが無い環境ではSimple互換フォールバックでビルドを通す。
+- dab密度を控えめに制限する。
+- get_colorによる周辺ピクセルサンプリングを暫定停止する。
+- smudge / 水彩混色はUI値保存のみ行い、実描画ではいったん無効化する。
+- 長すぎるストロークや重すぎる条件ではSimple互換へ退避する。
 
-影響:
-Step 12ではブラシエンジン切り替えUIとスタブだけが追加される。
-実際のdraw_dab接続、MyPaintブラシ設定読み込み、水彩表現はStep 13以降で追加する。
+### 理由
 
-## Decision 013: MyPaintBrushEngineはストローク単位で保存する
-日付: 2026-06-25
-理由: CanvasRendererは保存済みストローク点列からレイヤーキャッシュを再構築するため、現在のUI設定だけで描画エンジンを判定すると、過去に描いた線の見た目が後から変わってしまう。
-影響: `Stroke` に `StrokeBrushEngine` を追加し、JSONでは `brushEngine` として保存する。旧データはSimple扱いにして互換性を保つ。
+- CPU上のCanvasBitmapに対して、毎dabで周辺色を読むとコストが大きい。
+- 現在の仕様では、毎フレーム重い処理を避ける方針がある。
+- ストローク確定時でも、作画テンポを止める処理は避けるべき。
 
-## Decision 014: MyPaint描画が0dabの場合はSimple焼き込みへ退避する
-日付: 2026-06-25
-理由: libmypaintが検出済みでも、短いストロークや設定値・環境差でdraw_dabが1つも出ない場合、ドラッグ中のプレビューだけ見えて確定後に線が消える。作画ソフトとして「描いた線が消えない」ことを最優先にするため。
-影響: ストロークの保存形式はMyPaintのまま維持するが、表示可能dabが0個の場合だけCanvasBitmapへの焼き込みをSimpleへ退避する。MyPaintらしい描き味調整は後続Stepで行う。
+### 後続課題
 
-
-## Decision 015: MyPaint描画には確定時のみSimple連続芯を足す
-日付: 2026-06-25
-理由: libmypaintのdabだけでは、交差箇所や急な方向転換で線が遮られたように欠ける場合がある。作画ソフトとして、まず線が確実に残ることを優先するため。
-影響: MyPaintBrushEngineの線には、確定時だけ細いSimple芯が重なる。これは毎フレーム処理ではないため、60fps方針には影響しない。純粋なMyPaint描き味調整は後続Stepで行う。
-
-## Phase 1.5 Step 14: Store brush settings on Stroke
-
-Decision:
-- Store brush opacity, hardness, spacing, pressure mapping and watercolor-like settings directly on Stroke.
-
-Reason:
-- Cached rendering and save/load rebuild strokes from Project data, not from current BrushPanel UI state.
-- If MyPaint settings stay only in BrushPanel, saved strokes cannot reproduce their original drawing behavior.
-
-Performance note:
-- No per-frame all-stroke DrawList rendering was added.
-- The MyPaint settings are used only during bitmap cache rebuild / stroke bake.
-- The continuity core remains a stroke-commit/cache-bake step and is intentionally thinner than Step 13d.
+- 軽量な色サンプリングキャッシュ。
+- MyPaint水彩/混色の限定的再有効化。
+- 長大ストロークの分割確定、またはバックグラウンド焼き込み。

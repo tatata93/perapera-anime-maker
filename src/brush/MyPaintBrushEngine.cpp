@@ -4,6 +4,8 @@
 // libmypaintが見つからない環境では、従来のSimple互換へ安全にフォールバックする。
 // Step 13dでは、交差部分が欠けるのを避けるため、alpha_eraserを無視し、細いSimple連続芯を後段で足す。
 // Step 14では、Strokeに保存された硬さ・間隔・筆圧・水彩系パラメータをlibmypaint設定へ反映する。
+// Step 14bでは、1ストローク確定時に固まる問題を避けるため、重いsmudge/過密dabを抑制し、
+// 長いストロークはSimple互換へ安全に退避する。
 
 #include "brush/MyPaintBrushEngine.h"
 
@@ -34,6 +36,57 @@ float clamp01(float value)
 float lerp(float a, float b, float t)
 {
     return a + (b - a) * clamp01(t);
+}
+
+float distanceBetween(const StrokePoint& a, const StrokePoint& b)
+{
+    const float dx = b.x - a.x;
+    const float dy = b.y - a.y;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+float strokePathLength(const Stroke& stroke)
+{
+    if (stroke.points.size() <= 1U) {
+        return 0.0f;
+    }
+
+    float length = 0.0f;
+    for (std::size_t index = 1; index < stroke.points.size(); ++index) {
+        length += distanceBetween(stroke.points[index - 1U], stroke.points[index]);
+    }
+    return length;
+}
+
+bool shouldUseFastSimpleFallback(const Stroke& stroke)
+{
+    if (stroke.points.size() <= 1U) {
+        return true;
+    }
+
+    // Step 14b:
+    // libmypaintはストローク確定時に多数のdabを生成する。
+    // 大きい半径・長い線・細かいspacingが重なると、1ストローク確定でUIが止まる。
+    // ここでは確定時フリーズを避けるため、重すぎる入力だけSimple互換へ退避する。
+    const float lengthPx = strokePathLength(stroke);
+    const float radius = std::max(0.5f, stroke.radiusPx);
+    const float spacing = std::clamp(stroke.spacing, 0.08f, 1.0f);
+    const float estimatedDabs = lengthPx / std::max(1.0f, radius * spacing);
+    const float estimatedPixelVisits = estimatedDabs * radius * radius;
+
+    if (stroke.points.size() > 420U) {
+        return true;
+    }
+    if (lengthPx > 3600.0f) {
+        return true;
+    }
+    if (estimatedPixelVisits > 180000.0f) {
+        return true;
+    }
+    if (radius > 24.0f && lengthPx > 800.0f) {
+        return true;
+    }
+    return false;
 }
 
 std::array<float, 3> rgbToHsv(float r, float g, float b)
@@ -133,27 +186,25 @@ void surfaceGetColor(MyPaintSurface* self,
                      float* colorB,
                      float* colorA)
 {
-    float r = 0.0f;
-    float g = 0.0f;
-    float b = 0.0f;
-    float a = 0.0f;
+    (void)self;
+    (void)x;
+    (void)y;
+    (void)radius;
 
-    PeraperaMyPaintSurface* surface = toPeraperaSurface(self);
-    if (surface != nullptr && surface->canvas != nullptr) {
-        surface->canvas->sampleAverageColor(x, y, radius, r, g, b, a);
-    }
-
+    // Step 14b:
+    // get_colorで毎dab周辺ピクセルを走査すると、長いストローク確定時の停止感が大きい。
+    // 本格smudge/水彩混色は後続Stepに回し、現段階では透明色を返して重いサンプリングを止める。
     if (colorR != nullptr) {
-        *colorR = r;
+        *colorR = 0.0f;
     }
     if (colorG != nullptr) {
-        *colorG = g;
+        *colorG = 0.0f;
     }
     if (colorB != nullptr) {
-        *colorB = b;
+        *colorB = 0.0f;
     }
     if (colorA != nullptr) {
-        *colorA = a;
+        *colorA = 0.0f;
     }
 }
 
@@ -253,10 +304,18 @@ void configureBrush(MyPaintBrush* brush, const Stroke& stroke, float opacity)
     const float dryRate = clamp01(stroke.dryRate);
 
     // Step 14: UIで見えているブラシ設定をMyPaintへ反映する。
-    // spacingは小さいほどdab密度が高くなるように変換する。
-    const float dabDensity = std::clamp(1.0f / std::max(0.05f, spacing), 1.0f, 12.0f);
-    const float smudgeStrength = std::clamp(watercolor * lerp(0.35f, 1.0f, colorMix), 0.0f, 1.0f);
-    const float smudgeLength = std::clamp(lerp(0.05f, 0.75f, watercolor) * lerp(1.0f, 0.45f, dryRate), 0.0f, 1.0f);
+    // Step 14b: spacingをそのまま高密度dabへ変換すると、1ストローク確定時に重くなる。
+    // まず応答性を優先し、dab密度を控えめに抑える。
+    const float dabDensity = std::clamp(1.0f / std::max(0.12f, spacing), 1.0f, 4.0f);
+
+    // Step 14b:
+    // smudge/watercolorはget_colorの周辺サンプリングが必要で、現状のCPU CanvasBitmapでは重い。
+    // UI値は保存するが、libmypaint実描画ではいったん無効化して操作停止を防ぐ。
+    (void)watercolor;
+    (void)colorMix;
+    (void)dryRate;
+    const float smudgeStrength = 0.0f;
+    const float smudgeLength = 0.0f;
 
     setBaseValue(brush, "radius_logarithmic", radiusLog);
     setBaseValue(brush, "opaque", strokeOpacity);
@@ -308,9 +367,10 @@ void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, 
     if (stroke.points.empty()) {
         return;
     }
-    if (stroke.points.size() <= 1U) {
-        // libmypaintは短い点押しストロークではdabを出さない場合がある。
-        // 確定時に線が消えるより、既存Simple互換の点を残す方を優先する。
+    if (shouldUseFastSimpleFallback(stroke)) {
+        // Step 14b:
+        // 重すぎるストロークは、確定時にUIを止めるよりSimple互換で即時確定する。
+        // 保存上のbrushEngineはMyPaintのままなので、後続Stepで再レンダリング品質を改善できる。
         canvas.bakeStroke(stroke, opacity);
         return;
     }
@@ -337,13 +397,17 @@ void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, 
                             0.0f,
                             0.01);
 
+    StrokePoint previousSubmitted = first;
+    const float inputStepPx = std::max(1.0f, stroke.radiusPx * 0.18f);
     for (std::size_t index = 1; index < stroke.points.size(); ++index) {
-        const StrokePoint& previous = stroke.points[index - 1U];
         const StrokePoint& current = stroke.points[index];
-        const float dx = current.x - previous.x;
-        const float dy = current.y - previous.y;
-        const float distancePx = std::sqrt(dx * dx + dy * dy);
-        const double dtime = std::clamp(static_cast<double>(distancePx) / 240.0, 0.002, 0.050);
+        const bool isLastPoint = index + 1U >= stroke.points.size();
+        const float distancePx = distanceBetween(previousSubmitted, current);
+        if (!isLastPoint && distancePx < inputStepPx) {
+            continue;
+        }
+
+        const double dtime = std::clamp(static_cast<double>(distancePx) / 180.0, 0.006, 0.080);
 
         mypaint_brush_stroke_to(brush,
                                 &surface.parent,
@@ -353,6 +417,7 @@ void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, 
                                 0.0f,
                                 0.0f,
                                 dtime);
+        previousSubmitted = current;
     }
 
     const bool shouldFallbackToSimple = surface.visibleDabCount <= 0;
