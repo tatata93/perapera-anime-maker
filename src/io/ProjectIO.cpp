@@ -111,6 +111,7 @@ json toJson(const Layer& layer)
         {"visible", layer.visible},
         {"opacity", layer.opacity},
         {"blendMode", layer.blendMode},
+        {"type", layerTypeToString(layer.type)},
         {"strokes", strokes},
     };
 }
@@ -123,6 +124,7 @@ Layer layerFromJson(const json& value)
     layer.visible = value.value("visible", true);
     layer.opacity = value.value("opacity", 1.0f);
     layer.blendMode = value.value("blendMode", std::string("normal"));
+    layer.type = layerTypeFromString(value.value("type", std::string("Normal")));
 
     if (value.contains("strokes") && value.at("strokes").is_array()) {
         for (const json& strokeJson : value.at("strokes")) {
