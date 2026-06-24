@@ -343,6 +343,9 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     currentStroke_ = Stroke{};
     currentStroke_.color = brushSettings_.color;
     currentStroke_.radiusPx = brushSettings_.radiusPx;
+    currentStroke_.brushEngine = brushSettings_.engine == ui::BrushEngineKind::MyPaint
+        ? StrokeBrushEngine::MyPaint
+        : StrokeBrushEngine::Simple;
 
     if (brushSettings_.tool == ui::ToolKind::Eraser) {
         // 消しゴムはプレビュー用に赤色で表示するが、

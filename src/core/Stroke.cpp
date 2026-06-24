@@ -5,8 +5,28 @@
 #include "core/Stroke.h"
 
 #include <algorithm>
+#include <string>
 
 namespace perapera {
+
+const char* strokeBrushEngineToString(StrokeBrushEngine engine)
+{
+    switch (engine) {
+    case StrokeBrushEngine::Simple:
+        return "Simple";
+    case StrokeBrushEngine::MyPaint:
+        return "MyPaint";
+    }
+    return "Simple";
+}
+
+StrokeBrushEngine strokeBrushEngineFromString(const std::string& value)
+{
+    if (value == "MyPaint" || value == "MyPaintBrushEngine") {
+        return StrokeBrushEngine::MyPaint;
+    }
+    return StrokeBrushEngine::Simple;
+}
 
 bool Stroke::empty() const
 {

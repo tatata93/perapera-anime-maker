@@ -34,6 +34,15 @@ public:
     // 円形消しゴム。指定範囲のアルファを0に近づける。
     void eraseCircle(float cx, float cy, float radius);
 
+    // libmypaintなど外部ブラシエンジンから1つのdabを押すための入口。
+    // stampCircleは内部用の硬い円スタンプなので、外部用には硬さと不透明度を受ける薄い口を用意する。
+    void paintDab(float cx, float cy, float radius,
+                  float r, float g, float b, float opacity, float hardness);
+
+    // smudge系ブラシが色を拾うための平均色。現段階ではMyPaint接続の最低限実装に使う。
+    void sampleAverageColor(float cx, float cy, float radius,
+                            float& r, float& g, float& b, float& a) const;
+
     // ピクセルバッファを透明でクリアする。
     void clear();
 

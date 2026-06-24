@@ -1,6 +1,6 @@
 // このファイルの役割:
 // ブラシ設定パネルの実装。
-// Phase 1.5 Step 1ではlibmypaintをまだ導入せず、描き味調整UIだけを追加する。
+// Phase 1.5 Step 13ではlibmypaintの実描画接続状態も表示する。
 
 #include "ui/panels/BrushPanel.h"
 
@@ -151,11 +151,11 @@ void drawBrushPanel(BrushSettings& settings)
         settings.engine = engineIndex == 1 ? BrushEngineKind::MyPaint : BrushEngineKind::Simple;
     }
 #ifdef PERAPERA_HAS_LIBMYPAINT
-    ImGui::TextDisabled(u8c(u8"libmypaint: 検出済み / Step 13で実描画接続"));
+    ImGui::TextDisabled(u8c(u8"libmypaint: 検出済み / 実描画接続済み"));
 #else
     if (settings.engine == BrushEngineKind::MyPaint) {
         ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.35f, 1.0f),
-            u8c(u8"libmypaint未検出: 現在はSimple互換のスタブ動作"));
+            u8c(u8"libmypaint未検出: Simple互換フォールバック"));
     } else {
         ImGui::TextDisabled(u8c(u8"libmypaint未検出: vcpkg導入後に有効化"));
     }
@@ -197,7 +197,7 @@ void drawBrushPanel(BrushSettings& settings)
         ImGui::SliderFloat(u8c(u8"にじみ"), &settings.watercolorBleed, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat(u8c(u8"色混ぜ"), &settings.colorMix, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat(u8c(u8"乾き速度"), &settings.dryRate, 0.0f, 1.0f, "%.2f");
-        ImGui::TextDisabled(u8c(u8"水彩の実描画はlibmypaint導入後に接続"));
+        ImGui::TextDisabled(u8c(u8"水彩パラメータは今後MyPaint設定へ段階接続"));
         ImGui::TreePop();
     }
 

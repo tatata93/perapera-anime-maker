@@ -129,3 +129,44 @@
 
 ### 判断待ち（私への確認事項）
 - Step 13でlibmypaintの実API接続へ進むか、先にvcpkg環境の確認を行うか。
+
+## 2026-06-25 Phase 1.5 Step 13: MyPaintBrushEngine 実接続
+### 作業概要
+- libmypaint の `MyPaintSurface::draw_dab` を `CanvasBitmap::paintDab` へ接続した。
+- MyPaintBrushEngine 選択時のストロークは `brushEngine: "MyPaint"` として保存する。
+- 既存の SimpleBrushEngine と旧プロジェクトの挙動は維持する。
+
+### 変更ファイル
+- CMakeLists.txt
+- WORK_LOG.md
+- DECISIONS.md
+- src/core/Stroke.h
+- src/core/Stroke.cpp
+- src/io/ProjectIO.cpp
+- src/render/CanvasBitmap.h
+- src/render/CanvasBitmap.cpp
+- src/render/CanvasRenderer.h
+- src/render/CanvasRenderer.cpp
+- src/brush/MyPaintBrushEngine.h
+- src/brush/MyPaintBrushEngine.cpp
+- src/ui/AppInput.cpp
+- src/ui/AppDrawingMode.cpp
+- src/ui/panels/BrushPanel.cpp
+
+### 実装内容
+- `StrokeBrushEngine` を追加し、ストローク単位で Simple / MyPaint を保持。
+- `layer_NNN.json` に `brushEngine` を保存・読み込み。
+- `CanvasBitmap::paintDab()` と `sampleAverageColor()` を追加。
+- libmypaint の surface コールバックを `CanvasBitmap` へ接続。
+- CMake は CONFIG 検出と pkg-config 検出の両方に対応。
+
+### 未完了
+- MyPaint の `.myb` ブラシプリセット読み込み。
+- 水彩・にじみ・色混ぜパラメータの詳細接続。
+- タブレット筆圧の実入力取得。
+
+### 次にやること
+- MyPaint 設定値のUI反映を増やす、または ColorTrace 出力時置換に進む。
+
+### 判断待ち（私への確認事項）
+- なし。

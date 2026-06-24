@@ -54,12 +54,28 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3 imgui nlohmann_json)
 
 # libmypaint: Phase 1.5で導入するブラシエンジンライブラリ。
-# まだStep 12ではスタブだけを追加し、見つからない環境でも既存Simpleブラシでビルドを通す。
+# vcpkgのlibmypaint portはpkg-config情報だけを持つ構成があるため、CONFIGとpkg-configの両方を見る。
 find_package(libmypaint CONFIG QUIET)
+find_package(PkgConfig QUIET)
+if (PkgConfig_FOUND)
+    pkg_check_modules(LIBMYPAINT QUIET IMPORTED_TARGET libmypaint)
+    if (NOT LIBMYPAINT_FOUND)
+        pkg_check_modules(LIBMYPAINT QUIET IMPORTED_TARGET libmypaint-1.6)
+    endif()
+    if (NOT LIBMYPAINT_FOUND)
+        pkg_check_modules(LIBMYPAINT QUIET IMPORTED_TARGET libmypaint-2.0)
+    endif()
+endif()
+
+set(PERAPERA_LIBMYPAINT_AVAILABLE OFF)
 if (libmypaint_FOUND)
-    message(STATUS "libmypaint found: MyPaintBrushEngine stub will report available")
+    set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
+    message(STATUS "libmypaint found by CMake config")
+elseif (LIBMYPAINT_FOUND)
+    set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
+    message(STATUS "libmypaint found by pkg-config: ${LIBMYPAINT_VERSION}")
 else()
-    message(STATUS "libmypaint not found: MyPaintBrushEngine stub will use Simple fallback")
+    message(STATUS "libmypaint not found: MyPaintBrushEngine will use Simple fallback")
 endif()
 
 add_library(imgui_sdl3_renderer STATIC
@@ -130,12 +146,18 @@ target_link_libraries(perapera_anime_maker PRIVATE
     nlohmann_json::nlohmann_json
 )
 
-if (libmypaint_FOUND)
+if (PERAPERA_LIBMYPAINT_AVAILABLE)
     target_compile_definitions(perapera_anime_maker PRIVATE PERAPERA_HAS_LIBMYPAINT=1)
     if (TARGET libmypaint::libmypaint)
         target_link_libraries(perapera_anime_maker PRIVATE libmypaint::libmypaint)
     elseif (TARGET libmypaint)
         target_link_libraries(perapera_anime_maker PRIVATE libmypaint)
+    elseif (TARGET PkgConfig::LIBMYPAINT)
+        target_link_libraries(perapera_anime_maker PRIVATE PkgConfig::LIBMYPAINT)
+    else()
+        target_include_directories(perapera_anime_maker PRIVATE ${LIBMYPAINT_INCLUDE_DIRS})
+        target_link_directories(perapera_anime_maker PRIVATE ${LIBMYPAINT_LIBRARY_DIRS})
+        target_link_libraries(perapera_anime_maker PRIVATE ${LIBMYPAINT_LIBRARIES})
     endif()
 endif()
 

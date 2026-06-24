@@ -79,7 +79,12 @@ json toJson(const Stroke& stroke)
         points.push_back(toJson(point));
     }
 
-    return json{{"color", stroke.color}, {"radiusPx", stroke.radiusPx}, {"points", points}};
+    return json{
+        {"color", stroke.color},
+        {"radiusPx", stroke.radiusPx},
+        {"brushEngine", strokeBrushEngineToString(stroke.brushEngine)},
+        {"points", points},
+    };
 }
 Stroke strokeFromJson(const json& value)
 {
@@ -90,6 +95,7 @@ Stroke strokeFromJson(const json& value)
         }
     }
     stroke.radiusPx = value.value("radiusPx", 4.0f);
+    stroke.brushEngine = strokeBrushEngineFromString(value.value("brushEngine", std::string("Simple")));
 
     if (value.contains("points") && value.at("points").is_array()) {
         for (const json& pointJson : value.at("points")) {

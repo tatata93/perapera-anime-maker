@@ -5,11 +5,14 @@
 
 #include "render/CanvasRenderer.h"
 
+#include "brush/MyPaintBrushEngine.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string_view>
 
 namespace perapera {
 namespace {
@@ -58,6 +61,21 @@ void hashCombine(std::uint64_t& seed, std::uint64_t value)
 std::uint64_t hashFloat(float value)
 {
     return std::hash<int>{}(static_cast<int>(std::lround(value * 1000.0f)));
+}
+
+std::uint64_t hashString(const char* value)
+{
+    return std::hash<std::string_view>{}(std::string_view(value));
+}
+
+void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacity)
+{
+    if (stroke.brushEngine == StrokeBrushEngine::MyPaint) {
+        MyPaintBrushEngine engine;
+        engine.bakeStroke(bitmap, stroke, opacity);
+        return;
+    }
+    bitmap.bakeStroke(stroke, opacity);
 }
 
 std::size_t pointerHash(const void* pointer)
@@ -270,7 +288,7 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerInd
     bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
     bitmap.clear();
     for (const Stroke& stroke : layer.strokes) {
-        bitmap.bakeStroke(stroke, 1.0f);
+        bakeStrokeByEngine(bitmap, stroke, 1.0f);
     }
     layerRevisions_[key] = revision;
 }
@@ -309,7 +327,7 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
             } else {
                 onionStroke.color = {1.0f, 0.30f, 0.25f, 1.0f};
             }
-            bitmap.bakeStroke(onionStroke, opacity * displayOpacityForLayer(layer));
+            bakeStrokeByEngine(bitmap, onionStroke, opacity * displayOpacityForLayer(layer));
         }
     }
     onionRevisions_[key] = revision;
@@ -375,6 +393,7 @@ std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
 
     for (const Stroke& stroke : layer.strokes) {
         hashCombine(seed, hashFloat(stroke.radiusPx));
+        hashCombine(seed, hashString(strokeBrushEngineToString(stroke.brushEngine)));
         for (float component : stroke.color) {
             hashCombine(seed, hashFloat(component));
         }

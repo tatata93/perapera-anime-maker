@@ -158,6 +158,103 @@ void CanvasBitmap::eraseCircle(float cx, float cy, float radius)
     expandDirty(x0, y0, x1, y1);
 }
 
+
+void CanvasBitmap::paintDab(float cx, float cy, float radius,
+                            float r, float g, float b, float opacity, float hardness)
+{
+    if (width_ <= 0 || height_ <= 0 || radius <= 0.0f || opacity <= 0.0f) {
+        return;
+    }
+
+    const int x0 = std::max(0, static_cast<int>(std::floor(cx - radius - 1.0f)));
+    const int y0 = std::max(0, static_cast<int>(std::floor(cy - radius - 1.0f)));
+    const int x1 = std::min(width_, static_cast<int>(std::ceil(cx + radius + 1.0f)));
+    const int y1 = std::min(height_, static_cast<int>(std::ceil(cy + radius + 1.0f)));
+
+    // hardness は libmypaint の dab から渡ってくる硬さ。
+    // 0に近いほど外周を柔らかく、1に近いほど従来の円スタンプに近くする。
+    const float safeHardness = std::clamp(hardness, 0.02f, 1.0f);
+    const std::uint8_t rb = toByte(r);
+    const std::uint8_t gb = toByte(g);
+    const std::uint8_t bb = toByte(b);
+
+    for (int y = y0; y < y1; ++y) {
+        for (int x = x0; x < x1; ++x) {
+            const float dx = (static_cast<float>(x) + 0.5f) - cx;
+            const float dy = (static_cast<float>(y) + 0.5f) - cy;
+            const float dist = std::sqrt(dx * dx + dy * dy);
+            if (dist > radius + 0.5f) {
+                continue;
+            }
+
+            const float normalized = std::clamp(dist / std::max(0.5f, radius), 0.0f, 1.0f);
+            const float hardEdge = safeHardness;
+            float coverage = 1.0f;
+            if (normalized > hardEdge) {
+                const float t = (normalized - hardEdge) / std::max(0.001f, 1.0f - hardEdge);
+                coverage = 1.0f - std::clamp(t, 0.0f, 1.0f);
+            }
+
+            const std::uint8_t ab = toByte(opacity * coverage);
+            blendPixel(x, y, rb, gb, bb, ab);
+        }
+    }
+
+    expandDirty(x0, y0, x1, y1);
+}
+
+void CanvasBitmap::sampleAverageColor(float cx, float cy, float radius,
+                                      float& r, float& g, float& b, float& a) const
+{
+    r = 0.0f;
+    g = 0.0f;
+    b = 0.0f;
+    a = 0.0f;
+
+    if (width_ <= 0 || height_ <= 0 || radius <= 0.0f || pixels_.empty()) {
+        return;
+    }
+
+    const int x0 = std::max(0, static_cast<int>(std::floor(cx - radius)));
+    const int y0 = std::max(0, static_cast<int>(std::floor(cy - radius)));
+    const int x1 = std::min(width_, static_cast<int>(std::ceil(cx + radius)));
+    const int y1 = std::min(height_, static_cast<int>(std::ceil(cy + radius)));
+
+    float totalWeight = 0.0f;
+    float sumR = 0.0f;
+    float sumG = 0.0f;
+    float sumB = 0.0f;
+    float sumA = 0.0f;
+
+    for (int y = y0; y < y1; ++y) {
+        for (int x = x0; x < x1; ++x) {
+            const float dx = (static_cast<float>(x) + 0.5f) - cx;
+            const float dy = (static_cast<float>(y) + 0.5f) - cy;
+            const float dist = std::sqrt(dx * dx + dy * dy);
+            if (dist > radius) {
+                continue;
+            }
+            const float weight = 1.0f - std::clamp(dist / std::max(0.5f, radius), 0.0f, 1.0f);
+            const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width_) +
+                                        static_cast<std::size_t>(x)) * 4U;
+            sumR += (static_cast<float>(pixels_[offset + 0U]) / 255.0f) * weight;
+            sumG += (static_cast<float>(pixels_[offset + 1U]) / 255.0f) * weight;
+            sumB += (static_cast<float>(pixels_[offset + 2U]) / 255.0f) * weight;
+            sumA += (static_cast<float>(pixels_[offset + 3U]) / 255.0f) * weight;
+            totalWeight += weight;
+        }
+    }
+
+    if (totalWeight <= std::numeric_limits<float>::epsilon()) {
+        return;
+    }
+
+    r = sumR / totalWeight;
+    g = sumG / totalWeight;
+    b = sumB / totalWeight;
+    a = sumA / totalWeight;
+}
+
 void CanvasBitmap::clear()
 {
     std::fill(pixels_.begin(), pixels_.end(), static_cast<uint8_t>(0));
