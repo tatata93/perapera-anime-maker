@@ -1,6 +1,6 @@
 // このファイルの役割:
 // 簡易タイムラインの実装。
-// フレーム操作ボタンのID衝突を避け、右サイドバーが使いにくい場合も下部から操作できるようにする。
+// Cell/FrameポインタをIDに使わず、固定IDとindexだけで操作ボタンを分離する。
 
 #include "ui/panels/TimelinePanel.h"
 
@@ -26,51 +26,38 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
 {
     TimelinePanelAction action = TimelinePanelAction::None;
 
-    ImGui::PushID("TimelinePanel_v4");
-    ImGui::PushID(static_cast<const void*>(&cell));
+    ImGui::PushID("TimelinePanel_v10_noptr");
 
     ImGui::TextUnformatted(u8c(u8"タイムライン"));
     ImGui::SameLine();
     ImGui::Text("frames: %d", static_cast<int>(cell.frames.size()));
     ImGui::SameLine();
-    ImGui::PushID("OnionPreviousCheck_v4");
-    ImGui::Checkbox(u8c(u8"前オニオン"), &onionPrevious);
-    ImGui::PopID();
+    ImGui::Checkbox(u8c(u8"前オニオン##Timeline_OnionPrev_v10"), &onionPrevious);
     ImGui::SameLine();
-    ImGui::PushID("OnionNextCheck_v4");
-    ImGui::Checkbox(u8c(u8"次オニオン"), &onionNext);
-    ImGui::PopID();
+    ImGui::Checkbox(u8c(u8"次オニオン##Timeline_OnionNext_v10"), &onionNext);
 
-    ImGui::PushID("TimelineAddFrameButton_v4");
-    if (ImGui::SmallButton(u8c(u8"TL フレーム追加"))) {
+    if (ImGui::SmallButton(u8c(u8"TL フレーム追加##Timeline_AddFrame_v10"))) {
         action = TimelinePanelAction::AddFrame;
     }
-    ImGui::PopID();
     ImGui::SameLine();
-
-    ImGui::PushID("TimelineDuplicateFrameButton_v4");
-    if (ImGui::SmallButton(u8c(u8"TL フレーム複製"))) {
+    if (ImGui::SmallButton(u8c(u8"TL フレーム複製##Timeline_DuplicateFrame_v10"))) {
         action = TimelinePanelAction::DuplicateFrame;
     }
-    ImGui::PopID();
     ImGui::SameLine();
 
     const bool canDelete = cell.frames.size() > 1U;
     if (!canDelete) {
         ImGui::BeginDisabled();
     }
-    ImGui::PushID("TimelineDeleteFrameButton_v4");
-    if (ImGui::SmallButton(u8c(u8"TL フレーム削除"))) {
+    if (ImGui::SmallButton(u8c(u8"TL フレーム削除##Timeline_DeleteFrame_v10"))) {
         action = TimelinePanelAction::DeleteFrame;
     }
-    ImGui::PopID();
     if (!canDelete) {
         ImGui::EndDisabled();
     }
 
     if (cell.frames.empty()) {
         ImGui::TextDisabled("no frames");
-        ImGui::PopID();
         ImGui::PopID();
         return action;
     }
@@ -95,7 +82,6 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
         ImGui::PopID();
     }
 
-    ImGui::PopID();
     ImGui::PopID();
     return action;
 }

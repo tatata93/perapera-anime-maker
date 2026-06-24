@@ -1,6 +1,6 @@
 // このファイルの役割:
 // レイヤー・フレーム操作など、Projectを変更する小さな操作を実装する。
-// フレーム操作後は名前を振り直し、タイムライン表示と保存フォルダ名が分かりやすくなるようにする。
+// フレーム追加は現在表示中の絵を勝手に切り替えず、タイムラインから新規フレームを選ばせる。
 
 #include "ui/App.h"
 
@@ -32,6 +32,7 @@ void App::addLayer()
 {
     Frame* frame = activeFrame();
     if (frame == nullptr) {
+        lastMessage_ = "layer add failed: no active frame";
         return;
     }
 
@@ -63,13 +64,13 @@ void App::clearActiveLayer()
 {
     Layer* layer = activeLayer();
     if (layer == nullptr) {
+        lastMessage_ = "layer clear failed: no active layer";
         return;
     }
 
     pushUndoSnapshot();
     layer->strokes.clear();
-    canvasRenderer_.clearLayer(activeLayerIndex_);
-    canvasRenderer_.markDirty(activeLayerIndex_);
+    canvasRenderer_.markAllDirty();
     lastMessage_ = "layer cleared";
 }
 
@@ -84,17 +85,19 @@ void App::addFrame()
     pushUndoSnapshot();
 
     const int frameCount = static_cast<int>(cell->frames.size());
-    const int insertIndex = frameCount <= 0
-        ? 0
-        : std::clamp(activeFrameIndex_ + 1, 0, frameCount);
+    activeFrameIndex_ = frameCount <= 0 ? 0 : std::clamp(activeFrameIndex_, 0, frameCount - 1);
+    const int insertIndex = frameCount <= 0 ? 0 : activeFrameIndex_ + 1;
 
     cell->frames.insert(cell->frames.begin() + insertIndex, Frame::createDefault(insertIndex + 1));
     renumberFrames(*cell);
-    activeFrameIndex_ = insertIndex;
+
+    // 追加直後にキャンバスを空白へ切り替えない。
+    // 新規フレームへ描く時はタイムラインから frame_XXX を選択する。
+    activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
     clampSelection();
     canvasRenderer_.markAllDirty();
-    lastMessage_ = "frame added: count=" + std::to_string(cell->frames.size());
+    lastMessage_ = "blank frame added after current. select it on timeline to draw.";
 }
 
 void App::duplicateFrame()

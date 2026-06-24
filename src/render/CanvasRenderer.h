@@ -1,9 +1,10 @@
 #pragma once
 
 // このファイルの役割:
-// CanvasBitmapをレイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
+// CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
+#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 
@@ -36,19 +37,15 @@ public:
     void setRenderer(SDL_Renderer* renderer);
     void setCanvasSize(int width, int height);
 
-    // ストローク変更の通知。
-    // 指定レイヤーのBitmapを破棄し、次回draw時に点列から再構築する。
+    // ストローク変更の通知。Phase 1では安全優先で全キャッシュを破棄する。
     void markDirty(int layerIndex);
     void markAllDirty();
 
-    // ストロークをビットマップに焼く。
-    // Step 1-4のペン確定時に呼ぶ想定。
+    // 旧Step互換入口。現在はProject内のストローク点列を正本にし、次回drawで再構築する。
     void bakeStroke(int layerIndex, const Stroke& stroke, float opacity);
     void eraseCircle(int layerIndex, float canvasX, float canvasY, float radius);
     void clearLayer(int layerIndex);
 
-    // 毎フレーム呼ぶ描画メイン。
-    // currentStroke はペン入力中のプレビュー。nullptrならプレビューなし。
     void draw(const Frame& frame,
               int activeLayerIndex,
               const Stroke* currentStroke,
@@ -58,8 +55,6 @@ public:
               ImVec2 areaSize,
               ImDrawList* drawList);
 
-    // オニオンスキン表示。
-    // isPrevious=trueなら青系、falseなら赤系で表示する。
     void drawOnionSkin(const Frame& frame,
                        int frameIndex,
                        bool isPrevious,
@@ -70,20 +65,45 @@ public:
                        ImDrawList* drawList);
 
 private:
+    struct LayerCacheKey {
+        const Frame* frame = nullptr;
+        int layerIndex = 0;
+
+        bool operator==(const LayerCacheKey& other) const noexcept;
+    };
+
+    struct OnionCacheKey {
+        const Frame* frame = nullptr;
+        int frameIndex = 0;
+
+        bool operator==(const OnionCacheKey& other) const noexcept;
+    };
+
+    struct LayerCacheKeyHash {
+        std::size_t operator()(const LayerCacheKey& key) const noexcept;
+    };
+
+    struct OnionCacheKeyHash {
+        std::size_t operator()(const OnionCacheKey& key) const noexcept;
+    };
+
     SDL_Renderer* renderer_ = nullptr;
     int canvasWidth_ = 0;
     int canvasHeight_ = 0;
 
-    std::unordered_map<int, CanvasBitmap> bitmaps_;
-    std::unordered_map<int, CanvasBitmap> onionBitmaps_;
-    std::unordered_map<int, std::uint64_t> onionRevisions_;
+    std::unordered_map<LayerCacheKey, CanvasBitmap, LayerCacheKeyHash> layerBitmaps_;
+    std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerRevisions_;
+    std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
+    std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
 
-    CanvasBitmap& bitmapForLayer(int layerIndex);
-    void rebuildLayerBitmapIfNeeded(int layerIndex, const Layer& layer);
+    CanvasBitmap& bitmapForLayer(const Frame& frame, int layerIndex);
+    void rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex);
 
+    std::uint64_t layerRevisionHash(const Layer& layer) const;
+    std::uint64_t frameRevisionHash(const Frame& frame) const;
+
     void drawBitmap(CanvasBitmap& bitmap,
-                    float opacity,
                     const CanvasView& view,
                     ImVec2 areaMin,
                     ImVec2 areaSize,
@@ -96,8 +116,6 @@ private:
                                   ImVec2 areaMin,
                                   ImVec2 areaSize,
                                   ImDrawList* drawList) const;
-
-    std::uint64_t frameRevisionHash(const Frame& frame) const;
 };
 
 } // namespace perapera

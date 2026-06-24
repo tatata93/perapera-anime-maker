@@ -1,10 +1,8 @@
 #pragma once
 
-// src/render/CanvasBitmap.h
-//
-// 1レイヤー分のピクセルバッファとSDL_Textureを管理する。
-// 正データはcore層のStroke点列であり、CanvasBitmapは表示を軽くするための
-// 1層だけのキャッシュとして使う。
+// このファイルの役割:
+// 1レイヤーぶんのRGBA8ピクセルバッファとSDL_Textureを管理する。
+// ストローク確定時だけCPU側ピクセルへ焼き込み、dirty矩形だけGPUへ転送する。
 
 #include <cstdint>
 #include <vector>
@@ -27,18 +25,16 @@ public:
     CanvasBitmap(CanvasBitmap&& other) noexcept;
     CanvasBitmap& operator=(CanvasBitmap&& other) noexcept;
 
-    // キャンバスサイズを変更し、RGBA8ピクセルバッファを透明で初期化する。
-    // rendererがnullptrの場合はCPU側だけを用意し、後でuploadIfDirty時にTextureを作る。
     void resize(SDL_Renderer* renderer, int width, int height);
 
-    // ストロークをピクセルに焼く。
-    // ペン確定時のみ呼ぶ想定で、毎フレーム呼ばない。
+    // ストロークをピクセルへ焼く。
+    // 点列間をブラシ半径の約半分の間隔で補間して、円スタンプを押す。
     void bakeStroke(const Stroke& stroke, float opacity = 1.0f);
 
-    // 円形消しゴム。指定円内のアルファを0へ近づける。
+    // 円形消しゴム。指定範囲のアルファを0に近づける。
     void eraseCircle(float cx, float cy, float radius);
 
-    // 全体を透明にして、全範囲をdirtyにする。
+    // ピクセルバッファを透明でクリアする。
     void clear();
 
     // dirty矩形だけSDL_Textureへアップロードする。
@@ -49,40 +45,30 @@ public:
     int width() const { return width_; }
     int height() const { return height_; }
     bool hasTexture() const { return texture_ != nullptr; }
-    bool dirty() const { return dirty_; }
 
 private:
     int width_ = 0;
     int height_ = 0;
-    std::vector<std::uint8_t> pixels_; // RGBA8。1ピクセル4バイト。
+    std::vector<std::uint8_t> pixels_;
     SDL_Texture* texture_ = nullptr;
 
+    // dirty矩形は [x1, y1) 〜 [x2, y2) の半開区間で保持する。
     int dirtyX1_ = 0;
     int dirtyY1_ = 0;
     int dirtyX2_ = 0;
     int dirtyY2_ = 0;
     bool dirty_ = false;
 
-    void createTexture(SDL_Renderer* renderer);
     void destroyTexture();
+    bool createTexture(SDL_Renderer* renderer);
 
-    void stampCircle(float cx,
-                     float cy,
-                     float radius,
-                     std::uint8_t r,
-                     std::uint8_t g,
-                     std::uint8_t b,
-                     std::uint8_t a);
-
-    void blendPixel(int x,
-                    int y,
-                    std::uint8_t r,
-                    std::uint8_t g,
-                    std::uint8_t b,
-                    std::uint8_t a);
-
+    void stampCircle(float cx, float cy, float radius,
+                     std::uint8_t r, std::uint8_t g,
+                     std::uint8_t b, std::uint8_t a);
+    void blendPixel(int x, int y,
+                    std::uint8_t r, std::uint8_t g,
+                    std::uint8_t b, std::uint8_t a);
     void expandDirty(int x0, int y0, int x1, int y1);
-    bool validSize() const;
 };
 
 } // namespace perapera

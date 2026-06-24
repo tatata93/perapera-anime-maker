@@ -1,25 +1,21 @@
-// src/brush/SimpleBrushEngine.cpp
-//
-// SimpleBrushEngineは、CanvasBitmapが持つ円スタンプ処理を使う薄い実装。
-// 後でlibmypaintへ差し替える時も、App側はBrushEngineだけを見ればよい。
+// このファイルの役割:
+// SimpleBrushEngineの実装。
+// 実際のピクセル操作はCanvasBitmapに集約し、ブラシエンジン側は呼び出し口だけを持つ。
 
 #include "brush/SimpleBrushEngine.h"
 
-#include "core/Stroke.h"
 #include "render/CanvasBitmap.h"
 
 namespace perapera {
 
-const char* SimpleBrushEngine::name() const {
-    return "Simple Circle Brush";
+void SimpleBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, float opacity)
+{
+    canvas.bakeStroke(stroke, opacity);
 }
 
-void SimpleBrushEngine::bakeStroke(CanvasBitmap& bitmap, const Stroke& stroke, float opacity) {
-    bitmap.bakeStroke(stroke, opacity);
-}
-
-void SimpleBrushEngine::eraseCircle(CanvasBitmap& bitmap, float cx, float cy, float radius) {
-    bitmap.eraseCircle(cx, cy, radius);
+void SimpleBrushEngine::eraseCircle(CanvasBitmap& canvas, float cx, float cy, float radius)
+{
+    canvas.eraseCircle(cx, cy, radius);
 }
 
 } // namespace perapera

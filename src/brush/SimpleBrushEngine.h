@@ -1,9 +1,8 @@
 #pragma once
 
-// src/brush/SimpleBrushEngine.h
-//
-// Phase 1用の最小ブラシエンジン。
-// 点列を円スタンプでCanvasBitmapへ焼く。
+// このファイルの役割:
+// Phase 1用の最小ブラシエンジンを定義する。
+// 入り抜き・水彩などはまだ行わず、円スタンプ方式で線を焼く。
 
 #include "brush/BrushEngine.h"
 
@@ -11,9 +10,8 @@ namespace perapera {
 
 class SimpleBrushEngine final : public BrushEngine {
 public:
-    const char* name() const override;
-    void bakeStroke(CanvasBitmap& bitmap, const Stroke& stroke, float opacity) override;
-    void eraseCircle(CanvasBitmap& bitmap, float cx, float cy, float radius) override;
+    void bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, float opacity) override;
+    void eraseCircle(CanvasBitmap& canvas, float cx, float cy, float radius) override;
 };
 
 } // namespace perapera

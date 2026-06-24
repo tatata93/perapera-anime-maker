@@ -80,9 +80,9 @@ void App::drawDrawingMode()
 
     ImGui::SameLine();
 
-    ImGui::BeginChild("DrawingRightSidebar", ImVec2(rightWidth, 0.0f), true,
+    ImGui::BeginChild("DrawingRightSidebar_v5", ImVec2(rightWidth, 0.0f), true,
         ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_HorizontalScrollbar);
-    ImGui::PushID("DrawingRightSidebarContent_v4");
+    ImGui::PushID("DrawingRightSidebar_v5Content_v4");
     drawRightSidebar();
     ImGui::PopID();
     ImGui::EndChild();
@@ -121,6 +121,8 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
+
+    ImGui::TextDisabled("Step 1-4 runtime fix v10");
 
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
@@ -163,7 +165,7 @@ void App::drawTimelineArea()
         return;
     }
 
-    ImGui::BeginChild("DrawingTimeline", ImVec2(0.0f, 0.0f), true);
+    ImGui::BeginChild("DrawingTimeline_v5", ImVec2(0.0f, 0.0f), true);
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);
     if (timelineAction == ui::TimelinePanelAction::AddFrame) {
@@ -250,11 +252,11 @@ void App::finishStroke()
         if (layer != nullptr) {
             if (brushSettings_.tool == ui::ToolKind::Brush) {
                 layer->strokes.push_back(currentStroke_);
-                canvasRenderer_.bakeStroke(activeLayerIndex_, currentStroke_, 1.0f);
-                lastMessage_ = "stroke baked";
+                canvasRenderer_.markAllDirty();
+                lastMessage_ = "stroke committed to active frame";
             } else {
                 removeIntersectingStrokes(currentStroke_);
-                canvasRenderer_.markDirty(activeLayerIndex_);
+                canvasRenderer_.markAllDirty();
                 lastMessage_ = "eraser applied";
             }
         }

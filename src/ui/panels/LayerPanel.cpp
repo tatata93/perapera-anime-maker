@@ -1,6 +1,6 @@
 // このファイルの役割:
 // レイヤーパネルの実装。
-// パネル間で同じ表示名のボタンがあってもID衝突しないよう、PushIDで分離する。
+// パネル間で同じ表示名のボタンがあってもID衝突しないよう固定IDで分離する。
 
 #include "ui/panels/LayerPanel.h"
 
@@ -21,42 +21,34 @@ const char* u8c(const char8_t* text)
 
 LayerPanelAction drawLayerPanel(Frame& frame, int& activeLayerIndex)
 {
-    ImGui::PushID("LayerPanel_v4");
-    ImGui::PushID(static_cast<const void*>(&frame));
+    ImGui::PushID("LayerPanel_v10_noptr");
 
     ImGui::TextUnformatted(u8c(u8"レイヤー"));
     ImGui::Text("count: %d", static_cast<int>(frame.layers.size()));
 
     LayerPanelAction action = LayerPanelAction::None;
 
-    ImGui::PushID("AddLayerButton_v4");
-    if (ImGui::Button(u8c(u8"レイヤー追加"), ImVec2(-1.0f, 0.0f))) {
+    if (ImGui::Button(u8c(u8"レイヤー追加##LayerPanel_AddLayer_v10"), ImVec2(-1.0f, 0.0f))) {
         action = LayerPanelAction::AddLayer;
     }
-    ImGui::PopID();
 
     const bool canDelete = frame.layers.size() > 1U;
     if (!canDelete) {
         ImGui::BeginDisabled();
     }
-    ImGui::PushID("DeleteLayerButton_v4");
-    if (ImGui::Button(u8c(u8"レイヤー削除"), ImVec2(-1.0f, 0.0f))) {
+    if (ImGui::Button(u8c(u8"レイヤー削除##LayerPanel_DeleteLayer_v10"), ImVec2(-1.0f, 0.0f))) {
         action = LayerPanelAction::DeleteLayer;
     }
-    ImGui::PopID();
     if (!canDelete) {
         ImGui::EndDisabled();
     }
 
-    ImGui::PushID("ClearLayerButton_v4");
-    if (ImGui::Button(u8c(u8"レイヤークリア"), ImVec2(-1.0f, 0.0f))) {
+    if (ImGui::Button(u8c(u8"レイヤークリア##LayerPanel_ClearLayer_v10"), ImVec2(-1.0f, 0.0f))) {
         action = LayerPanelAction::ClearLayer;
     }
-    ImGui::PopID();
 
     if (frame.layers.empty()) {
         ImGui::TextDisabled("no layers");
-        ImGui::PopID();
         ImGui::PopID();
         return action;
     }
@@ -65,7 +57,7 @@ LayerPanelAction drawLayerPanel(Frame& frame, int& activeLayerIndex)
     for (int index = static_cast<int>(frame.layers.size()) - 1; index >= 0; --index) {
         Layer& layer = frame.layers[static_cast<std::size_t>(index)];
         ImGui::PushID(index);
-        ImGui::Checkbox("##LayerVisible", &layer.visible);
+        ImGui::Checkbox("##LayerVisible_v10", &layer.visible);
         ImGui::SameLine();
         const bool selected = activeLayerIndex == index;
         if (ImGui::Selectable(layer.name.c_str(), selected)) {
@@ -73,11 +65,10 @@ LayerPanelAction drawLayerPanel(Frame& frame, int& activeLayerIndex)
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80.0f);
-        ImGui::SliderFloat("##LayerOpacity", &layer.opacity, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("##LayerOpacity_v10", &layer.opacity, 0.0f, 1.0f, "%.2f");
         ImGui::PopID();
     }
 
-    ImGui::PopID();
     ImGui::PopID();
     return action;
 }

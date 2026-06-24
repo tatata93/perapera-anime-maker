@@ -1,6 +1,6 @@
 // このファイルの役割:
 // FFmpegの外部コマンド呼び出しを実装する。
-// MP4失敗理由を追えるよう、FFmpeg実行前の検査結果とコマンドを必ずログへ保存する。
+// WindowsではCreateProcessで直接起動し、cmd/batchの%展開や引用符問題を避ける。
 
 #include "io/FfmpegRunner.h"
 
@@ -9,6 +9,13 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace perapera {
 namespace {
@@ -77,8 +84,8 @@ void resetLog(const std::filesystem::path& logPath)
     std::filesystem::create_directories(logPath.parent_path(), errorCode);
     std::ofstream log(logPath, std::ios::binary | std::ios::trunc);
     if (log) {
-        log << "perapera-anime-maker FFmpeg log\n";
-        log << "=================================\n\n";
+        log << "perapera-anime-maker FFmpeg log v10\n";
+        log << "==================================\n\n";
     }
 }
 
@@ -86,6 +93,124 @@ bool executableLooksLikePath(const std::string& executable)
 {
     return hasPathSeparator(executable);
 }
+
+#ifdef _WIN32
+std::wstring toWidePath(const std::filesystem::path& path)
+{
+    return path.wstring();
+}
+
+std::wstring toWideUtf8ish(const std::string& text)
+{
+    return std::filesystem::path(text).wstring();
+}
+
+std::wstring quoteArg(const std::wstring& value)
+{
+    std::wstring result = L"\"";
+    std::size_t backslashCount = 0;
+    for (wchar_t ch : value) {
+        if (ch == L'\\') {
+            ++backslashCount;
+            result.push_back(ch);
+        } else if (ch == L'\"') {
+            result.append(backslashCount, L'\\');
+            result.push_back(L'\\');
+            result.push_back(ch);
+            backslashCount = 0;
+        } else {
+            backslashCount = 0;
+            result.push_back(ch);
+        }
+    }
+    result.append(backslashCount, L'\\');
+    result.push_back(L'\"');
+    return result;
+}
+
+std::wstring buildWindowsCommandLine(const std::string& ffmpegPath,
+                                     const std::filesystem::path& inputPattern,
+                                     int fps,
+                                     const std::filesystem::path& outputPath)
+{
+    if (fps <= 0) {
+        fps = 24;
+    }
+
+    std::wstring command;
+    command += quoteArg(toWideUtf8ish(ffmpegPath));
+    command += L" -y -hide_banner -f image2 -framerate ";
+    command += std::to_wstring(fps);
+    command += L" -start_number 1 -i ";
+    command += quoteArg(toWidePath(inputPattern));
+    command += L" -vf ";
+    command += quoteArg(L"format=yuv420p");
+    command += L" -c:v libx264 -movflags +faststart ";
+    command += quoteArg(toWidePath(outputPath));
+    return command;
+}
+
+bool runWindowsProcess(const std::wstring& commandLine,
+                       const std::filesystem::path& logPath,
+                       int* exitCode,
+                       std::string* errorMessage)
+{
+    SECURITY_ATTRIBUTES securityAttributes{};
+    securityAttributes.nLength = sizeof(securityAttributes);
+    securityAttributes.bInheritHandle = TRUE;
+
+    HANDLE logHandle = CreateFileW(toWidePath(logPath).c_str(),
+                                   GENERIC_WRITE,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                   &securityAttributes,
+                                   OPEN_ALWAYS,
+                                   FILE_ATTRIBUTE_NORMAL,
+                                   nullptr);
+    if (logHandle == INVALID_HANDLE_VALUE) {
+        setError(errorMessage, "failed to open FFmpeg log for process output");
+        return false;
+    }
+
+    SetFilePointer(logHandle, 0, nullptr, FILE_END);
+
+    STARTUPINFOW startupInfo{};
+    startupInfo.cb = sizeof(startupInfo);
+    startupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    startupInfo.hStdOutput = logHandle;
+    startupInfo.hStdError = logHandle;
+
+    PROCESS_INFORMATION processInfo{};
+    std::wstring mutableCommand = commandLine;
+    const BOOL started = CreateProcessW(nullptr,
+                                        mutableCommand.data(),
+                                        nullptr,
+                                        nullptr,
+                                        TRUE,
+                                        CREATE_NO_WINDOW,
+                                        nullptr,
+                                        nullptr,
+                                        &startupInfo,
+                                        &processInfo);
+    CloseHandle(logHandle);
+
+    if (!started) {
+        setError(errorMessage, "CreateProcessW failed. error=" + std::to_string(GetLastError()));
+        return false;
+    }
+
+    WaitForSingleObject(processInfo.hProcess, INFINITE);
+    DWORD processExitCode = 1;
+    GetExitCodeProcess(processInfo.hProcess, &processExitCode);
+    CloseHandle(processInfo.hThread);
+    CloseHandle(processInfo.hProcess);
+
+    if (exitCode != nullptr) {
+        *exitCode = static_cast<int>(processExitCode);
+    }
+    return processExitCode == 0;
+}
+#endif
 
 } // namespace
 
@@ -98,21 +223,14 @@ std::string FfmpegRunner::buildPngSequenceCommand(const std::string& ffmpegPath,
         fps = 24;
     }
 
-    const std::filesystem::path logPath = logPathForOutput(outputPath);
-
     std::ostringstream command;
     command << quoteExecutableIfNeeded(ffmpegPath)
-            << " -y"
-            << " -hide_banner"
-            << " -framerate " << fps
+            << " -y -hide_banner -f image2 -framerate " << fps
             << " -start_number 1"
             << " -i " << quotePath(inputPattern)
             << " -vf " << quoteRaw("format=yuv420p")
-            << " -c:v libx264"
-            << " -movflags +faststart "
-            << quotePath(outputPath)
-            << " >> " << quotePath(logPath)
-            << " 2>&1";
+            << " -c:v libx264 -movflags +faststart "
+            << quotePath(outputPath);
     return command.str();
 }
 
@@ -158,22 +276,33 @@ bool FfmpegRunner::pngSequenceToMp4(const std::string& ffmpegPath,
     const std::filesystem::path firstFrame = firstFramePathFromPattern(inputPattern);
     if (!std::filesystem::exists(firstFrame, errorCode)) {
         const std::string message = "first PNG frame not found: " + firstFrame.string() + " log: " + logPath.string();
-        appendLog(logPath, "ERROR: first PNG frame not found.\n");
-        appendLog(logPath, "Expected: " + firstFrame.string() + "\n");
+        appendLog(logPath, "ERROR: first PNG frame not found.\nExpected: " + firstFrame.string() + "\n");
         setError(errorMessage, message);
         return false;
     }
 
     const std::string command = buildPngSequenceCommand(ffmpegPath, inputPattern, fps, outputPath);
-    appendLog(logPath, "Command:\n" + command + "\n\nOutput:\n");
+    appendLog(logPath, "Command preview:\n" + command + "\n\nOutput:\n");
 
-    const int result = std::system(command.c_str());
+#ifdef _WIN32
+    int exitCode = 1;
+    const std::wstring commandLine = buildWindowsCommandLine(ffmpegPath, inputPattern, fps, outputPath);
+    if (!runWindowsProcess(commandLine, logPath, &exitCode, errorMessage)) {
+        const std::string message = "ffmpeg command failed. exit=" + std::to_string(exitCode) + " log: " + logPath.string();
+        appendLog(logPath, "\nERROR: " + message + "\n");
+        setError(errorMessage, message);
+        return false;
+    }
+#else
+    const std::string runCommand = command + " >> " + quotePath(logPath) + " 2>&1";
+    const int result = std::system(runCommand.c_str());
     if (result != 0) {
         const std::string message = "ffmpeg command failed. exit=" + std::to_string(result) + " log: " + logPath.string();
         appendLog(logPath, "\nERROR: " + message + "\n");
         setError(errorMessage, message);
         return false;
     }
+#endif
 
     if (!std::filesystem::exists(outputPath, errorCode)) {
         const std::string message = "ffmpeg finished but MP4 was not found. log: " + logPath.string();

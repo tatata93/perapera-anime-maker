@@ -46,7 +46,36 @@ std::uint64_t hashFloat(float value)
     return std::hash<int>{}(static_cast<int>(std::lround(value * 1000.0f)));
 }
 
+std::size_t pointerHash(const void* pointer)
+{
+    return std::hash<const void*>{}(pointer);
+}
+
 } // namespace
+
+bool CanvasRenderer::LayerCacheKey::operator==(const LayerCacheKey& other) const noexcept
+{
+    return frame == other.frame && layerIndex == other.layerIndex;
+}
+
+bool CanvasRenderer::OnionCacheKey::operator==(const OnionCacheKey& other) const noexcept
+{
+    return frame == other.frame && frameIndex == other.frameIndex;
+}
+
+std::size_t CanvasRenderer::LayerCacheKeyHash::operator()(const LayerCacheKey& key) const noexcept
+{
+    std::size_t seed = pointerHash(key.frame);
+    seed ^= std::hash<int>{}(key.layerIndex) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+    return seed;
+}
+
+std::size_t CanvasRenderer::OnionCacheKeyHash::operator()(const OnionCacheKey& key) const noexcept
+{
+    std::size_t seed = pointerHash(key.frame);
+    seed ^= std::hash<int>{}(key.frameIndex) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+    return seed;
+}
 
 ImVec2 CanvasView::canvasToScreen(float canvasX, float canvasY,
                                   ImVec2 areaMin, ImVec2 areaSize) const
@@ -77,12 +106,8 @@ void CanvasRenderer::setRenderer(SDL_Renderer* renderer)
         return;
     }
 
-    // SDL_Textureは作成元SDL_Rendererに紐づく。
-    // Rendererが変わったら古いTextureを持つBitmapを破棄する。
     renderer_ = renderer;
-    bitmaps_.clear();
-    onionBitmaps_.clear();
-    onionRevisions_.clear();
+    markAllDirty();
 }
 
 void CanvasRenderer::setCanvasSize(int width, int height)
@@ -100,56 +125,39 @@ void CanvasRenderer::setCanvasSize(int width, int height)
 
 void CanvasRenderer::markDirty(int layerIndex)
 {
-    bitmaps_.erase(layerIndex);
-    onionBitmaps_.clear();
-    onionRevisions_.clear();
+    (void)layerIndex;
+    markAllDirty();
 }
 
 void CanvasRenderer::markAllDirty()
 {
-    bitmaps_.clear();
+    layerBitmaps_.clear();
+    layerRevisions_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
 }
 
 void CanvasRenderer::bakeStroke(int layerIndex, const Stroke& stroke, float opacity)
 {
-    if (renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0) {
-        return;
-    }
-
-    CanvasBitmap& bitmap = bitmapForLayer(layerIndex);
-    if (!bitmap.hasTexture() || bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_) {
-        bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
-    }
-
-    bitmap.bakeStroke(stroke, opacity);
-    onionBitmaps_.clear();
-    onionRevisions_.clear();
+    (void)layerIndex;
+    (void)stroke;
+    (void)opacity;
+    markAllDirty();
 }
 
 void CanvasRenderer::eraseCircle(int layerIndex, float canvasX, float canvasY, float radius)
 {
-    if (renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0) {
-        return;
-    }
-
-    CanvasBitmap& bitmap = bitmapForLayer(layerIndex);
-    if (!bitmap.hasTexture() || bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_) {
-        bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
-    }
-
-    bitmap.eraseCircle(canvasX, canvasY, radius);
-    onionBitmaps_.clear();
-    onionRevisions_.clear();
+    (void)layerIndex;
+    (void)canvasX;
+    (void)canvasY;
+    (void)radius;
+    markAllDirty();
 }
 
 void CanvasRenderer::clearLayer(int layerIndex)
 {
-    CanvasBitmap& bitmap = bitmapForLayer(layerIndex);
-    bitmap.clear();
-    onionBitmaps_.clear();
-    onionRevisions_.clear();
+    (void)layerIndex;
+    markAllDirty();
 }
 
 void CanvasRenderer::draw(const Frame& frame,
@@ -167,9 +175,7 @@ void CanvasRenderer::draw(const Frame& frame,
 
     const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
     drawList->PushClipRect(areaMin, areaMax, true);
-
-    const ImU32 canvasBackColor = IM_COL32(24, 24, 28, 255);
-    drawList->AddRectFilled(areaMin, areaMax, canvasBackColor);
+    drawList->AddRectFilled(areaMin, areaMax, IM_COL32(24, 24, 28, 255));
 
     if (renderer_ != nullptr && canvasWidth_ > 0 && canvasHeight_ > 0) {
         for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
@@ -178,14 +184,13 @@ void CanvasRenderer::draw(const Frame& frame,
                 continue;
             }
 
-            rebuildLayerBitmapIfNeeded(layerIndex, layer);
-            CanvasBitmap& bitmap = bitmapForLayer(layerIndex);
+            rebuildLayerBitmapIfNeeded(frame, layerIndex, layer);
+            CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
             if (!bitmap.uploadIfDirty(renderer_)) {
                 continue;
             }
 
-            const ImU32 tint = IM_COL32(255, 255, 255, alphaByte(layer.opacity));
-            drawBitmap(bitmap, layer.opacity, view, areaMin, areaSize, drawList, tint);
+            drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, alphaByte(layer.opacity)));
         }
     }
 
@@ -217,26 +222,34 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
     }
 
     rebuildOnionBitmapIfNeeded(frame, frameIndex);
-    CanvasBitmap& bitmap = onionBitmaps_.at(frameIndex);
+    CanvasBitmap& bitmap = onionBitmaps_.at(OnionCacheKey{&frame, frameIndex});
     if (!bitmap.uploadIfDirty(renderer_)) {
         return;
     }
 
     const std::uint8_t a = alphaByte(opacity);
-    const ImU32 tint = isPrevious ? IM_COL32(80, 150, 255, a)
-                                  : IM_COL32(255, 110, 110, a);
-    drawBitmap(bitmap, opacity, view, areaMin, areaSize, drawList, tint);
+    const ImU32 tint = isPrevious ? IM_COL32(80, 150, 255, a) : IM_COL32(255, 110, 110, a);
+    drawBitmap(bitmap, view, areaMin, areaSize, drawList, tint);
 }
 
-CanvasBitmap& CanvasRenderer::bitmapForLayer(int layerIndex)
+CanvasBitmap& CanvasRenderer::bitmapForLayer(const Frame& frame, int layerIndex)
 {
-    return bitmaps_.try_emplace(layerIndex).first->second;
+    return layerBitmaps_.try_emplace(LayerCacheKey{&frame, layerIndex}).first->second;
 }
 
-void CanvasRenderer::rebuildLayerBitmapIfNeeded(int layerIndex, const Layer& layer)
+void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer)
 {
-    CanvasBitmap& bitmap = bitmapForLayer(layerIndex);
-    if (bitmap.hasTexture() && bitmap.width() == canvasWidth_ && bitmap.height() == canvasHeight_) {
+    CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
+    const LayerCacheKey key{&frame, layerIndex};
+    const std::uint64_t revision = layerRevisionHash(layer);
+    const auto revisionIt = layerRevisions_.find(key);
+    const bool needsRebuild = revisionIt == layerRevisions_.end()
+        || revisionIt->second != revision
+        || !bitmap.hasTexture()
+        || bitmap.width() != canvasWidth_
+        || bitmap.height() != canvasHeight_;
+
+    if (!needsRebuild) {
         return;
     }
 
@@ -245,28 +258,27 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(int layerIndex, const Layer& lay
     for (const Stroke& stroke : layer.strokes) {
         bitmap.bakeStroke(stroke, 1.0f);
     }
+    layerRevisions_[key] = revision;
 }
 
 void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex)
 {
+    const OnionCacheKey key{&frame, frameIndex};
+    CanvasBitmap& bitmap = onionBitmaps_.try_emplace(key).first->second;
     const std::uint64_t revision = frameRevisionHash(frame);
-    auto bitmapIt = onionBitmaps_.find(frameIndex);
-    const auto revisionIt = onionRevisions_.find(frameIndex);
-    const bool needsRebuild = bitmapIt == onionBitmaps_.end()
-        || revisionIt == onionRevisions_.end()
+    const auto revisionIt = onionRevisions_.find(key);
+    const bool needsRebuild = revisionIt == onionRevisions_.end()
         || revisionIt->second != revision
-        || !bitmapIt->second.hasTexture()
-        || bitmapIt->second.width() != canvasWidth_
-        || bitmapIt->second.height() != canvasHeight_;
+        || !bitmap.hasTexture()
+        || bitmap.width() != canvasWidth_
+        || bitmap.height() != canvasHeight_;
 
     if (!needsRebuild) {
         return;
     }
 
-    CanvasBitmap& bitmap = onionBitmaps_.try_emplace(frameIndex).first->second;
     bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
     bitmap.clear();
-
     for (const Layer& layer : frame.layers) {
         if (!layer.visible || layer.opacity <= 0.0f) {
             continue;
@@ -275,19 +287,16 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
             bitmap.bakeStroke(stroke, 1.0f);
         }
     }
-
-    onionRevisions_[frameIndex] = revision;
+    onionRevisions_[key] = revision;
 }
 
 void CanvasRenderer::drawBitmap(CanvasBitmap& bitmap,
-                                float opacity,
                                 const CanvasView& view,
                                 ImVec2 areaMin,
                                 ImVec2 areaSize,
                                 ImDrawList* drawList,
                                 ImU32 tintColor)
 {
-    (void)opacity;
     if (!bitmap.hasTexture() || drawList == nullptr) {
         return;
     }
@@ -331,6 +340,29 @@ void CanvasRenderer::drawCurrentStrokePreview(const Stroke& stroke,
     }
 }
 
+std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
+{
+    std::uint64_t seed = 1099511628211ULL;
+    hashCombine(seed, layer.visible ? 1ULL : 0ULL);
+    hashCombine(seed, hashFloat(layer.opacity));
+    hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
+
+    for (const Stroke& stroke : layer.strokes) {
+        hashCombine(seed, hashFloat(stroke.radiusPx));
+        for (float component : stroke.color) {
+            hashCombine(seed, hashFloat(component));
+        }
+        hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
+        for (const StrokePoint& point : stroke.points) {
+            hashCombine(seed, hashFloat(point.x));
+            hashCombine(seed, hashFloat(point.y));
+            hashCombine(seed, hashFloat(point.pressure));
+        }
+    }
+
+    return seed;
+}
+
 std::uint64_t CanvasRenderer::frameRevisionHash(const Frame& frame) const
 {
     std::uint64_t seed = 1469598103934665603ULL;
@@ -338,25 +370,7 @@ std::uint64_t CanvasRenderer::frameRevisionHash(const Frame& frame) const
     hashCombine(seed, static_cast<std::uint64_t>(frame.durationFrames));
 
     for (const Layer& layer : frame.layers) {
-        hashCombine(seed, std::hash<std::string>{}(layer.layerId));
-        hashCombine(seed, std::hash<std::string>{}(layer.name));
-        hashCombine(seed, layer.visible ? 1ULL : 0ULL);
-        hashCombine(seed, hashFloat(layer.opacity));
-        hashCombine(seed, std::hash<std::string>{}(layer.blendMode));
-        hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
-
-        for (const Stroke& stroke : layer.strokes) {
-            hashCombine(seed, hashFloat(stroke.radiusPx));
-            for (float component : stroke.color) {
-                hashCombine(seed, hashFloat(component));
-            }
-            hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
-            for (const StrokePoint& point : stroke.points) {
-                hashCombine(seed, hashFloat(point.x));
-                hashCombine(seed, hashFloat(point.y));
-                hashCombine(seed, hashFloat(point.pressure));
-            }
-        }
+        hashCombine(seed, layerRevisionHash(layer));
     }
 
     return seed;

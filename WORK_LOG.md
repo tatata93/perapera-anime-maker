@@ -1,36 +1,57 @@
-# WORK_LOG
+# WORK_LOG - Phase 1 Step 1-4 runtime fix v10
 
-## Phase 1 Step 1-4 runtime fix v4
+## 目的
 
-### 目的
+Phase 1 Step 1-4 の作画UI配線後に発生していた以下を、コード全体の整合を取り直して修正する。
 
-- フレーム追加ボタン hover 時に出る Dear ImGui の conflicting ID 警告を解消する。
-- フレーム追加・削除ボタンを確実に動作させる。
-- MP4 書き出しで FFmpeg 実行前に失敗しても `exports/mp4/ffmpeg_last_run.log` を必ず作る。
-- ExportPanel の実行結果欄にログパスを含む失敗理由を表示する。
+- フレームを追加するとキャンバス表示が不自然に切り替わる。
+- 1つのフレームへ描いた線が他フレームにも見える。
+- MP4出力失敗時にFFmpeg本体のエラーがログに残らない。
+- Dear ImGui のID衝突を避けるため、ポインタID依存を減らす。
 
-### 変更
+## 修正内容
 
-- `src/ui/panels/FramePanel.cpp`
-  - ボタンIDを `PushID` で完全分離。
-  - `###` ラベル依存をやめ、表示名とIDを別スタックで管理。
-- `src/ui/panels/LayerPanel.cpp`
-  - レイヤー操作ボタンIDを完全分離。
-- `src/ui/panels/TimelinePanel.cpp`
-  - タイムライン操作ボタンIDを完全分離。
-- `src/ui/AppDrawingMode.cpp`
-  - 右サイドバー内のIDスタックを追加。
-  - 右サイドバーの縦横スクロール指定を維持。
-- `src/ui/panels/ExportPanel.cpp`
-  - ExportPanel内の入力欄・ボタンIDを完全分離。
-  - MP4ボタン直下の実行結果欄を維持。
+### フレーム別キャンバス修正
+
+- `CanvasRenderer` のBitmapキャッシュキーを `layerIndex` だけから、`Frame* + layerIndex` に変更した。
+- これにより、同じレイヤー番号でも別フレームのBitmapを共有しない。
+- `finishStroke()` では即時Bitmap焼き込みをやめ、Project内のストローク点列を正本として、`markAllDirty()` 後に次回drawで再構築するよう変更した。
+- オニオンスキンが通常描画と誤認されやすいため、初期値をOFFにした。
+
+### フレーム操作修正
+
+- `addFrame()` は空白フレームを現在フレームの後ろへ挿入するが、表示中フレームを勝手に切り替えない。
+- 新しい空白フレームへ描く場合はタイムラインから選択する。
+- `FramePanel` / `LayerPanel` / `TimelinePanel` / `ExportPanel` のポインタ `PushID` を廃止し、固定IDに整理した。
+
+### MP4出力修正
+
+- Windowsでは `cmd` / batch を経由せず、`CreateProcessW` でFFmpegを直接起動するようにした。
+- `frame_%03d.png` の `%` がbatchで壊れる問題を避けた。
+- FFmpegの標準出力・標準エラーを `exports/mp4/ffmpeg_last_run.log` へ直接リダイレクトするようにした。
+
+## 変更ファイル
+
+- `src/ui/App.h`
 - `src/ui/App.cpp`
-  - `exportMp4()` の最初にMP4プリフライトログを作成。
-  - PNG連番作成で失敗した場合も `ffmpeg_last_run.log` に理由を書く。
+- `src/ui/AppDrawingMode.cpp`
+- `src/ui/AppOperations.cpp`
+- `src/ui/panels/FramePanel.cpp`
+- `src/ui/panels/LayerPanel.cpp`
+- `src/ui/panels/TimelinePanel.cpp`
+- `src/ui/panels/ExportPanel.h`
+- `src/ui/panels/ExportPanel.cpp`
+- `src/render/CanvasRenderer.h`
+- `src/render/CanvasRenderer.cpp`
+- `src/render/CanvasBitmap.h`
+- `src/render/CanvasBitmap.cpp`
+- `src/brush/BrushEngine.h`
+- `src/brush/SimpleBrushEngine.h`
+- `src/brush/SimpleBrushEngine.cpp`
+- `src/io/FfmpegRunner.cpp`
+- `WORK_LOG.md`
 
-### 確認
+## ビルド確認
 
-- フレーム追加ボタンをhoverしてもDear ImGuiのID警告が出ないこと。
-- フレーム追加でフレーム数が増えること。
-- 2フレーム以上で削除ボタンが有効になり、削除できること。
-- MP4書き出しに失敗しても `exports/mp4/ffmpeg_last_run.log` が生成されること。
+この環境ではWindows/MSVC/SDL3/ImGui実ビルドは実行していない。
+ただし、ヘッダと実装の不一致を避けるため、過去に不整合が出た `CanvasBitmap` / `BrushEngine` も同梱している。
