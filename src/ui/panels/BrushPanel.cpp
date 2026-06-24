@@ -184,13 +184,18 @@ void drawBrushPanel(BrushSettings& settings)
     settings.dryRate = std::clamp(settings.dryRate, 0.0f, 1.0f);
     settings.fillTolerance = std::clamp(settings.fillTolerance, 0, 255);
     settings.fillGapClosePx = std::clamp(settings.fillGapClosePx, 0, 6);
+    settings.fillInsetPx = std::clamp(settings.fillInsetPx, 0, 8);
+    settings.fillLeakGuardPercent = std::clamp(settings.fillLeakGuardPercent, 0, 100);
 
     if (settings.tool == ToolKind::FloodFill) {
         ImGui::Separator();
         ImGui::TextUnformatted(u8c(u8"バケツ塗り"));
         ImGui::SliderInt(u8c(u8"許容範囲"), &settings.fillTolerance, 0, 255);
         ImGui::SliderInt(u8c(u8"隙間閉じpx"), &settings.fillGapClosePx, 0, 6);
+        ImGui::SliderInt(u8c(u8"はみ出し防止px"), &settings.fillInsetPx, 0, 8);
+        ImGui::SliderInt(u8c(u8"漏れ防止%"), &settings.fillLeakGuardPercent, 0, 100);
         ImGui::TextDisabled(u8c(u8"Paintレイヤー上でクリックして塗る"));
+        ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。閉じていない領域の巨大塗りを止める。"));
     }
 
     ImGui::ColorEdit4(u8c(u8"色"), settings.color.data(), ImGuiColorEditFlags_NoInputs);

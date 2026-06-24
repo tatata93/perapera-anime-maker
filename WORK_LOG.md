@@ -23,3 +23,35 @@
 
 ### 判断待ち（私への確認事項）
 - この軽量プレビューの見え方で十分か、さらに「削除予定ストロークだけ赤く光らせる」方向へ進めるか。
+
+## 2026-06-25 Phase 1.5-Step 11: FloodFill improvement
+
+### 作業概要
+- バケツ塗りの実用性を上げるため、塗り領域を境界から内側へ縮める「はみ出し防止px」を追加した。
+- 閉じていない線をクリックした時に画面全体へ塗りが流れる事故を避けるため、「漏れ防止%」を追加した。
+
+### 変更ファイル
+- WORK_LOG.md
+- src/brush/BrushSettings.h
+- src/fill/FloodFill.h
+- src/fill/FloodFill.cpp
+- src/ui/AppInput.cpp
+- src/ui/panels/BrushPanel.cpp
+
+### 実装内容
+- FloodFillSettings に insetPx / leakGuardPercent を追加。
+- FloodFill.cpp に insetFilledMask() を追加し、塗り結果を境界から内側へ縮める処理を追加。
+- 漏れ防止%を超える巨大な塗りは中止し、閉じ線の作り直しや設定調整を促すメッセージを返す。
+- BrushPanel に「はみ出し防止px」「漏れ防止%」を追加。
+- AppInput.cpp から新設定を FloodFillSettings へ渡すように変更。
+
+### 未完了
+- Paint専用のピクセルデータ化は未実装。
+- ColorTrace線を最終出力時に隣接Paint色へ置換する処理は未実装。
+- 消しゴムの半径方向削り込みは未修正。現在の消しゴムはベクターストローク分割方式のため、線幅を半分だけ削る用途には向かない。
+
+### 次にやること
+- libmypaint導入、ColorTrace出力時置換、または消しゴムのピクセル/輪郭ベース改善を検討する。
+
+### 判断待ち（私への確認事項）
+- libmypaint導入を次に行うか、先にColorTrace出力置換や消しゴムの設計修正を行うか。

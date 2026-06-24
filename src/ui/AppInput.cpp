@@ -301,6 +301,8 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     fill::FloodFillSettings settings;
     settings.tolerance = brushSettings_.fillTolerance;
     settings.gapClosePx = brushSettings_.fillGapClosePx;
+    settings.insetPx = brushSettings_.fillInsetPx;
+    settings.leakGuardPercent = brushSettings_.fillLeakGuardPercent;
 
     const fill::FloodFillResult result = fill::makeFloodFillStrokes(*frame,
                                                                     activeLayerIndex_,

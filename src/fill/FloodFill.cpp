@@ -139,6 +139,61 @@ void dilateWallMask(std::vector<std::uint8_t>& wall, int width, int height, int 
     }
 }
 
+int countMaskPixels(const std::vector<std::uint8_t>& mask)
+{
+    return static_cast<int>(std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1U)));
+}
+
+void insetFilledMask(std::vector<std::uint8_t>& filled,
+                     const std::vector<std::uint8_t>& wall,
+                     int width,
+                     int height,
+                     int radius)
+{
+    if (radius <= 0 || filled.empty()) {
+        return;
+    }
+
+    const std::vector<std::uint8_t> original = filled;
+    std::fill(filled.begin(), filled.end(), 0U);
+
+    // 塗り領域の境界から radius px ぶん内側だけを残す。
+    // これにより、線画に密着しすぎたPaintストロークを少し引っ込めて、
+    // 主線の上へ色が食い込む見た目を避ける。
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const std::size_t centerIndex = indexOf(x, y, width);
+            if (original[centerIndex] == 0U) {
+                continue;
+            }
+
+            bool keep = true;
+            for (int dy = -radius; dy <= radius && keep; ++dy) {
+                for (int dx = -radius; dx <= radius; ++dx) {
+                    if (dx * dx + dy * dy > radius * radius) {
+                        continue;
+                    }
+                    const int nx = x + dx;
+                    const int ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                        keep = false;
+                        break;
+                    }
+                    const std::size_t neighborIndex = indexOf(nx, ny, width);
+                    if (original[neighborIndex] == 0U || wall[neighborIndex] != 0U) {
+                        keep = false;
+                        break;
+                    }
+                }
+            }
+
+            if (keep) {
+                filled[centerIndex] = 1U;
+            }
+        }
+    }
+}
+
 std::vector<std::uint8_t> buildWallMask(const Frame& frame,
                                         int targetLayerIndex,
                                         int width,
@@ -248,9 +303,25 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         }
     }
 
-    result.filledPixelCount = static_cast<int>(queue.size());
-    if (result.filledPixelCount <= 0) {
+    const int rawFilledPixelCount = static_cast<int>(queue.size());
+    if (rawFilledPixelCount <= 0) {
         result.message = "nothing to fill";
+        return result;
+    }
+
+    const int leakGuardPercent = std::clamp(settings.leakGuardPercent, 0, 100);
+    if (leakGuardPercent > 0) {
+        const int maxAllowedPixels = std::max(1, width * height * leakGuardPercent / 100);
+        if (rawFilledPixelCount >= maxAllowedPixels) {
+            result.message = "fill looks leaked; close the line or raise leak guard";
+            return result;
+        }
+    }
+
+    insetFilledMask(filled, wall, width, height, std::clamp(settings.insetPx, 0, 8));
+    result.filledPixelCount = countMaskPixels(filled);
+    if (result.filledPixelCount <= 0) {
+        result.message = "fill area too thin after inset; lower inset px";
         return result;
     }
 
@@ -271,7 +342,11 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
     }
 
     result.success = !result.strokes.empty();
-    result.message = result.success ? "filled" : "no spans generated";
+    if (result.success) {
+        result.message = "filled";
+    } else {
+        result.message = "no spans generated";
+    }
     return result;
 }
 

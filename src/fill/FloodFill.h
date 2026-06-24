@@ -19,6 +19,14 @@ struct FloodFillSettings {
 
     // 小さな隙間を閉じるため、壁マスクをこの半径pxだけ膨らませる。
     int gapClosePx = 0;
+
+    // 塗り領域を境界からこの半径pxだけ内側に縮める。
+    // 主線の上までPaintストロークが食い込むのを防ぐための簡易はみ出し防止。
+    int insetPx = 1;
+
+    // 閉じていない領域で塗りが画面全体へ流れた時の安全弁。
+    // 0なら無効、85ならキャンバスの85%以上を塗ろうとした時点で中止する。
+    int leakGuardPercent = 85;
 };
 
 struct FloodFillResult {
