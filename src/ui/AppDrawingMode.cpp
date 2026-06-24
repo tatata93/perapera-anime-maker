@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <iterator>
+#include <utility>
+#include <vector>
 
 #include <imgui.h>
 
@@ -24,33 +27,128 @@ const char* u8c(const char8_t* text)
     return reinterpret_cast<const char*>(text);
 }
 
-float distanceSquared(const StrokePoint& point, const StrokePoint& other)
+float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 {
-    const float dx = point.x - other.x;
-    const float dy = point.y - other.y;
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
     return dx * dx + dy * dy;
 }
 
-bool strokeNearEraserPoint(const Stroke& stroke, const StrokePoint& eraserPoint, float radius)
+float distancePointToSegmentSquared(const StrokePoint& point,
+                                    const StrokePoint& segmentA,
+                                    const StrokePoint& segmentB)
 {
-    const StrokeBounds bounds = stroke.bounds();
-    if (!bounds.valid) {
-        return false;
+    const float vx = segmentB.x - segmentA.x;
+    const float vy = segmentB.y - segmentA.y;
+    const float wx = point.x - segmentA.x;
+    const float wy = point.y - segmentA.y;
+    const float lengthSq = vx * vx + vy * vy;
+    if (lengthSq <= 0.0001f) {
+        return distanceSquared(point, segmentA);
     }
 
-    if (eraserPoint.x < bounds.minX - radius || eraserPoint.x > bounds.maxX + radius ||
-        eraserPoint.y < bounds.minY - radius || eraserPoint.y > bounds.maxY + radius) {
-        return false;
+    const float t = std::clamp((wx * vx + wy * vy) / lengthSq, 0.0f, 1.0f);
+    const StrokePoint closest{segmentA.x + vx * t, segmentA.y + vy * t, 1.0f};
+    return distanceSquared(point, closest);
+}
+
+std::vector<StrokePoint> resampleStrokeForEraser(const Stroke& stroke, float spacing)
+{
+    std::vector<StrokePoint> result;
+    if (stroke.points.empty()) {
+        return result;
+    }
+    if (stroke.points.size() == 1U) {
+        result.push_back(stroke.points.front());
+        return result;
     }
 
-    const float hitRadius = radius + stroke.radiusPx;
+    result.push_back(stroke.points.front());
+    const float safeSpacing = std::max(0.75f, spacing);
+    for (std::size_t index = 1; index < stroke.points.size(); ++index) {
+        const StrokePoint& previous = stroke.points[index - 1U];
+        const StrokePoint& current = stroke.points[index];
+        const float dx = current.x - previous.x;
+        const float dy = current.y - previous.y;
+        const float length = std::sqrt(dx * dx + dy * dy);
+        const int steps = std::max(1, static_cast<int>(std::ceil(length / safeSpacing)));
+        for (int step = 1; step <= steps; ++step) {
+            const float t = static_cast<float>(step) / static_cast<float>(steps);
+            result.push_back(StrokePoint{previous.x + dx * t,
+                                         previous.y + dy * t,
+                                         previous.pressure + (current.pressure - previous.pressure) * t});
+        }
+    }
+    return result;
+}
+
+bool pointHitByEraser(const StrokePoint& point,
+                      float strokeRadius,
+                      const Stroke& eraserStroke,
+                      float eraserRadius)
+{
+    const float hitRadius = std::max(1.0f, eraserRadius + strokeRadius);
     const float hitRadiusSq = hitRadius * hitRadius;
-    for (const StrokePoint& point : stroke.points) {
-        if (distanceSquared(point, eraserPoint) <= hitRadiusSq) {
+    if (eraserStroke.points.empty()) {
+        return false;
+    }
+    if (eraserStroke.points.size() == 1U) {
+        return distanceSquared(point, eraserStroke.points.front()) <= hitRadiusSq;
+    }
+
+    for (std::size_t index = 1; index < eraserStroke.points.size(); ++index) {
+        if (distancePointToSegmentSquared(point,
+                                          eraserStroke.points[index - 1U],
+                                          eraserStroke.points[index]) <= hitRadiusSq) {
             return true;
         }
     }
     return false;
+}
+
+void appendStrokePart(std::vector<Stroke>& output,
+                      const Stroke& source,
+                      std::vector<StrokePoint>& points)
+{
+    if (points.empty()) {
+        return;
+    }
+
+    Stroke part = source;
+    part.points = points;
+    output.push_back(std::move(part));
+    points.clear();
+}
+
+std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
+                                        const Stroke& eraserStroke,
+                                        float eraserRadius,
+                                        bool& changed)
+{
+    std::vector<Stroke> result;
+    const float spacing = std::max(0.75f, std::min(stroke.radiusPx, eraserRadius) * 0.45f);
+    const std::vector<StrokePoint> sampledPoints = resampleStrokeForEraser(stroke, spacing);
+    std::vector<StrokePoint> currentPart;
+    bool anyErasedPoint = false;
+
+    for (const StrokePoint& point : sampledPoints) {
+        if (pointHitByEraser(point, stroke.radiusPx, eraserStroke, eraserRadius)) {
+            anyErasedPoint = true;
+            appendStrokePart(result, stroke, currentPart);
+        } else {
+            currentPart.push_back(point);
+        }
+    }
+
+    appendStrokePart(result, stroke, currentPart);
+    if (!anyErasedPoint) {
+        result.clear();
+        result.push_back(stroke);
+        return result;
+    }
+
+    changed = true;
+    return result;
 }
 
 } // namespace
@@ -122,7 +220,7 @@ void App::drawRightSidebar()
         return;
     }
 
-    ImGui::TextDisabled("Step 1-4 stability pass v12");
+    ImGui::TextDisabled("Step 1-4 stability pass v13");
 
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
@@ -277,21 +375,28 @@ void App::cancelStroke()
 void App::removeIntersectingStrokes(const Stroke& eraserStroke)
 {
     Layer* layer = activeLayer();
-    if (layer == nullptr) {
+    if (layer == nullptr || eraserStroke.points.empty()) {
         return;
     }
 
     const float radius = std::max(1.0f, eraserStroke.radiusPx);
-    auto shouldRemove = [&](const Stroke& stroke) {
-        for (const StrokePoint& eraserPoint : eraserStroke.points) {
-            if (strokeNearEraserPoint(stroke, eraserPoint, radius)) {
-                return true;
-            }
-        }
-        return false;
-    };
+    std::vector<Stroke> rewrittenStrokes;
+    rewrittenStrokes.reserve(layer->strokes.size());
 
-    layer->strokes.erase(std::remove_if(layer->strokes.begin(), layer->strokes.end(), shouldRemove), layer->strokes.end());
+    bool changed = false;
+    for (const Stroke& stroke : layer->strokes) {
+        std::vector<Stroke> parts = splitStrokeByEraser(stroke, eraserStroke, radius, changed);
+        rewrittenStrokes.insert(rewrittenStrokes.end(),
+                                std::make_move_iterator(parts.begin()),
+                                std::make_move_iterator(parts.end()));
+    }
+
+    if (changed) {
+        layer->strokes = std::move(rewrittenStrokes);
+        lastMessage_ = "eraser applied: partial stroke split";
+    } else {
+        lastMessage_ = "eraser applied: no hit";
+    }
 }
 
 } // namespace perapera

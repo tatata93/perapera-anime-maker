@@ -1,6 +1,7 @@
 // このファイルの役割:
 // CanvasRendererの実装。
 // 1レイヤー=1枚のCanvasBitmapという仕様を守り、毎フレーム全ストロークをDrawListへ積まない。
+// v13: オニオンスキンが背景塗りで隠れないようにし、専用色のBitmapとして焼く。
 
 #include "render/CanvasRenderer.h"
 
@@ -60,7 +61,7 @@ bool CanvasRenderer::LayerCacheKey::operator==(const LayerCacheKey& other) const
 
 bool CanvasRenderer::OnionCacheKey::operator==(const OnionCacheKey& other) const noexcept
 {
-    return frame == other.frame && frameIndex == other.frameIndex;
+    return frame == other.frame && frameIndex == other.frameIndex && isPrevious == other.isPrevious;
 }
 
 std::size_t CanvasRenderer::LayerCacheKeyHash::operator()(const LayerCacheKey& key) const noexcept
@@ -74,6 +75,7 @@ std::size_t CanvasRenderer::OnionCacheKeyHash::operator()(const OnionCacheKey& k
 {
     std::size_t seed = pointerHash(key.frame);
     seed ^= std::hash<int>{}(key.frameIndex) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+    seed ^= std::hash<bool>{}(key.isPrevious) + 0x85ebca6bU + (seed << 6U) + (seed >> 2U);
     return seed;
 }
 
@@ -175,7 +177,7 @@ void CanvasRenderer::draw(const Frame& frame,
 
     const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
     drawList->PushClipRect(areaMin, areaMax, true);
-    drawList->AddRectFilled(areaMin, areaMax, IM_COL32(24, 24, 28, 255));
+    // 背景はApp側で先に塗る。ここで再度塗ると、先に描いたオニオンスキンが隠れる。
 
     if (renderer_ != nullptr && canvasWidth_ > 0 && canvasHeight_ > 0) {
         for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
@@ -221,15 +223,14 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
         return;
     }
 
-    rebuildOnionBitmapIfNeeded(frame, frameIndex);
-    CanvasBitmap& bitmap = onionBitmaps_.at(OnionCacheKey{&frame, frameIndex});
+    rebuildOnionBitmapIfNeeded(frame, frameIndex, isPrevious, opacity);
+    CanvasBitmap& bitmap = onionBitmaps_.at(OnionCacheKey{&frame, frameIndex, isPrevious});
     if (!bitmap.uploadIfDirty(renderer_)) {
         return;
     }
 
-    const std::uint8_t a = alphaByte(opacity);
-    const ImU32 tint = isPrevious ? IM_COL32(80, 150, 255, a) : IM_COL32(255, 110, 110, a);
-    drawBitmap(bitmap, view, areaMin, areaSize, drawList, tint);
+    (void)opacity;
+    drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, 255));
 }
 
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const Frame& frame, int layerIndex)
@@ -261,11 +262,13 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerInd
     layerRevisions_[key] = revision;
 }
 
-void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex)
+void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity)
 {
-    const OnionCacheKey key{&frame, frameIndex};
+    const OnionCacheKey key{&frame, frameIndex, isPrevious};
     CanvasBitmap& bitmap = onionBitmaps_.try_emplace(key).first->second;
-    const std::uint64_t revision = frameRevisionHash(frame);
+    std::uint64_t revision = frameRevisionHash(frame);
+    hashCombine(revision, isPrevious ? 1ULL : 0ULL);
+    hashCombine(revision, hashFloat(opacity));
     const auto revisionIt = onionRevisions_.find(key);
     const bool needsRebuild = revisionIt == onionRevisions_.end()
         || revisionIt->second != revision
@@ -279,12 +282,21 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
 
     bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
     bitmap.clear();
+
+    // 黒い線にImGuiのtintを掛けても青/赤にならないため、
+    // オニオンスキン用Bitmapには専用色のStrokeとして焼き込む。
     for (const Layer& layer : frame.layers) {
         if (!layer.visible || layer.opacity <= 0.0f) {
             continue;
         }
         for (const Stroke& stroke : layer.strokes) {
-            bitmap.bakeStroke(stroke, 1.0f);
+            Stroke onionStroke = stroke;
+            if (isPrevious) {
+                onionStroke.color = {0.20f, 0.58f, 1.0f, 1.0f};
+            } else {
+                onionStroke.color = {1.0f, 0.30f, 0.25f, 1.0f};
+            }
+            bitmap.bakeStroke(onionStroke, opacity * layer.opacity);
         }
     }
     onionRevisions_[key] = revision;

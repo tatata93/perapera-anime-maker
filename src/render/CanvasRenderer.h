@@ -2,6 +2,7 @@
 
 // このファイルの役割:
 // CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
+// v13: オニオンスキンは黒ストロークへの単純tintではなく、専用色でBitmapへ焼く。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -75,6 +76,7 @@ private:
     struct OnionCacheKey {
         const Frame* frame = nullptr;
         int frameIndex = 0;
+        bool isPrevious = false;
 
         bool operator==(const OnionCacheKey& other) const noexcept;
     };
@@ -98,7 +100,7 @@ private:
 
     CanvasBitmap& bitmapForLayer(const Frame& frame, int layerIndex);
     void rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer);
-    void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex);
+    void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
 
     std::uint64_t layerRevisionHash(const Layer& layer) const;
     std::uint64_t frameRevisionHash(const Frame& frame) const;
