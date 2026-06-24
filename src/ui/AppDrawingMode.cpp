@@ -171,8 +171,11 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
         return result;
     }
     const float targetLength = strokeApproxLength(stroke);
-    const bool mostlyHit = hitCount >= static_cast<int>(sampledPoints.size() * 0.70f);
-    if (sampledPoints.size() >= 3U && targetLength > std::max(8.0f, eraserRadius * 2.5f) && mostlyHit) {
+    const float eraserPathLength = strokeApproxLength(eraserStroke);
+    const bool shortEraserGesture = eraserPathLength <= std::max(4.0f, eraserRadius * 1.5f);
+    const bool mostlyHit = hitCount >= static_cast<int>(sampledPoints.size() * 0.90f);
+    if (shortEraserGesture && sampledPoints.size() >= 3U &&
+        targetLength > std::max(8.0f, eraserRadius * 2.5f) && mostlyHit) {
         keepLocalEraserGap(hitFlags, closestIndex, spacing, eraserRadius, stroke.radiusPx);
     }
     std::vector<StrokePoint> currentPart;
@@ -186,7 +189,7 @@ std::vector<Stroke> splitStrokeByEraser(const Stroke& stroke,
         }
     }
     appendStrokePart(result, stroke, currentPart);
-    if (anyErasedPoint && result.empty()) {
+    if (anyErasedPoint && result.empty() && shortEraserGesture) {
         keepLocalEraserGap(hitFlags, closestIndex, spacing, eraserRadius, stroke.radiusPx);
         currentPart.clear();
         for (std::size_t i = 0; i < sampledPoints.size(); ++i) {
@@ -217,13 +220,13 @@ void drawOnionStrokeDirect(const Stroke& stroke, bool isPrevious, float opacity,
     if (drawList == nullptr || stroke.points.empty() || opacity <= 0.0f) {
         return;
     }
-    const ImU32 color = onionColor(isPrevious, opacity * std::max(0.15f, stroke.color[3]));
+    const ImU32 color = onionColor(isPrevious, opacity * std::max(0.35f, stroke.color[3]));
     const float zoom = std::clamp(view.zoom, 0.05f, 32.0f);
-    const float width = std::max(2.5f, stroke.radiusPx * zoom * 2.2f);
+    const float width = std::clamp(stroke.radiusPx * zoom * 0.55f, 1.2f, 4.0f);
     if (stroke.points.size() == 1U) {
         const StrokePoint& point = stroke.points.front();
         const ImVec2 p = view.canvasToScreen(point.x, point.y, areaMin, areaSize);
-        drawList->AddCircleFilled(p, width * 0.5f, color, 16);
+        drawList->AddCircleFilled(p, width * 0.5f, color, 12);
         return;
     }
     for (std::size_t index = 1; index < stroke.points.size(); ++index) {
@@ -232,7 +235,7 @@ void drawOnionStrokeDirect(const Stroke& stroke, bool isPrevious, float opacity,
         const ImVec2 p0 = view.canvasToScreen(previous.x, previous.y, areaMin, areaSize);
         const ImVec2 p1 = view.canvasToScreen(current.x, current.y, areaMin, areaSize);
         const float pressure = std::max(0.1f, (previous.pressure + current.pressure) * 0.5f);
-        drawList->AddLine(p0, p1, color, std::max(2.5f, width * pressure));
+        drawList->AddLine(p0, p1, color, std::clamp(width * pressure, 1.2f, 4.0f));
     }
 }
 void drawOnionFrameDirect(const Frame& frame, bool isPrevious, float opacity,
@@ -328,7 +331,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Step 1-4 stability pass v21");
+    ImGui::TextDisabled("Step 1-4 stability pass v22");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -485,7 +488,7 @@ void App::removeIntersectingStrokes(const Stroke& eraserStroke)
     }
     if (changed) {
         layer->strokes = std::move(rewrittenStrokes);
-        lastMessage_ = "eraser applied: partial stroke split v21";
+        lastMessage_ = "eraser applied: partial stroke split v22";
     } else {
         lastMessage_ = "eraser applied: no hit, radius=" + std::to_string(radius) +
                        ", strokes=" + std::to_string(beforeCount);
