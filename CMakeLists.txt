@@ -54,7 +54,12 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3 imgui nlohmann_json)
 
 # libmypaint: Phase 1.5で導入するブラシエンジンライブラリ。
-# vcpkgのlibmypaint portはpkg-config情報だけを持つ構成があるため、CONFIGとpkg-configの両方を見る。
+# vcpkgのlibmypaint portはpkg-config情報だけを持つ構成がある。
+# さらにVisual Studio同梱vcpkgではpkg-config検出が環境変数に左右されやすいため、
+# 1) CMake config
+# 2) pkg-config
+# 3) vcpkg_installed/<triplet> 直下のヘッダ/ライブラリ直接検出
+# の順で安全に探す。
 find_package(libmypaint CONFIG QUIET)
 find_package(PkgConfig QUIET)
 if (PkgConfig_FOUND)
@@ -68,6 +73,11 @@ if (PkgConfig_FOUND)
 endif()
 
 set(PERAPERA_LIBMYPAINT_AVAILABLE OFF)
+set(PERAPERA_LIBMYPAINT_DIRECT OFF)
+set(PERAPERA_LIBMYPAINT_DIRECT_INCLUDE_DIRS "")
+set(PERAPERA_LIBMYPAINT_DIRECT_LIBRARY "")
+set(PERAPERA_VCPKG_RUNTIME_BIN_DIR "")
+
 if (libmypaint_FOUND)
     set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
     message(STATUS "libmypaint found by CMake config")
@@ -75,7 +85,37 @@ elseif (LIBMYPAINT_FOUND)
     set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
     message(STATUS "libmypaint found by pkg-config: ${LIBMYPAINT_VERSION}")
 else()
-    message(STATUS "libmypaint not found: MyPaintBrushEngine will use Simple fallback")
+    # vcpkg manifest modeでは、インストール先がプロジェクト直下の
+    # vcpkg_installed/<triplet> になる。pkg-configが拾えない場合でも、
+    # この場所に libmypaint のヘッダと import lib があれば使える。
+    if (DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
+        set(PERAPERA_VCPKG_TRIPLET "${VCPKG_TARGET_TRIPLET}")
+    else()
+        set(PERAPERA_VCPKG_TRIPLET "x64-windows")
+    endif()
+
+    set(PERAPERA_VCPKG_TRIPLET_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${PERAPERA_VCPKG_TRIPLET}")
+    set(PERAPERA_LIBMYPAINT_HEADER
+        "${PERAPERA_VCPKG_TRIPLET_DIR}/include/libmypaint/mypaint-brush.h")
+    set(PERAPERA_LIBMYPAINT_IMPORT_LIB
+        "${PERAPERA_VCPKG_TRIPLET_DIR}/lib/mypaint.lib")
+
+    if (EXISTS "${PERAPERA_LIBMYPAINT_HEADER}" AND EXISTS "${PERAPERA_LIBMYPAINT_IMPORT_LIB}")
+        set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
+        set(PERAPERA_LIBMYPAINT_DIRECT ON)
+        set(PERAPERA_LIBMYPAINT_DIRECT_LIBRARY "${PERAPERA_LIBMYPAINT_IMPORT_LIB}")
+        set(PERAPERA_VCPKG_RUNTIME_BIN_DIR "${PERAPERA_VCPKG_TRIPLET_DIR}/bin")
+        set(PERAPERA_LIBMYPAINT_DIRECT_INCLUDE_DIRS
+            "${PERAPERA_VCPKG_TRIPLET_DIR}/include"
+            "${PERAPERA_VCPKG_TRIPLET_DIR}/include/libmypaint"
+            "${PERAPERA_VCPKG_TRIPLET_DIR}/include/glib-2.0"
+            "${PERAPERA_VCPKG_TRIPLET_DIR}/lib/glib-2.0/include"
+        )
+        message(STATUS "libmypaint found by vcpkg_installed direct path: ${PERAPERA_VCPKG_TRIPLET_DIR}")
+    else()
+        message(STATUS "libmypaint not found: MyPaintBrushEngine will use Simple fallback")
+    endif()
 endif()
 
 add_library(imgui_sdl3_renderer STATIC
@@ -154,6 +194,13 @@ if (PERAPERA_LIBMYPAINT_AVAILABLE)
         target_link_libraries(perapera_anime_maker PRIVATE libmypaint)
     elseif (TARGET PkgConfig::LIBMYPAINT)
         target_link_libraries(perapera_anime_maker PRIVATE PkgConfig::LIBMYPAINT)
+    elseif (PERAPERA_LIBMYPAINT_DIRECT)
+        target_include_directories(perapera_anime_maker PRIVATE
+            ${PERAPERA_LIBMYPAINT_DIRECT_INCLUDE_DIRS}
+        )
+        target_link_libraries(perapera_anime_maker PRIVATE
+            "${PERAPERA_LIBMYPAINT_DIRECT_LIBRARY}"
+        )
     else()
         target_include_directories(perapera_anime_maker PRIVATE ${LIBMYPAINT_INCLUDE_DIRS})
         target_link_directories(perapera_anime_maker PRIVATE ${LIBMYPAINT_LIBRARY_DIRS})
@@ -174,3 +221,14 @@ add_custom_command(TARGET perapera_anime_maker POST_BUILD
         $<TARGET_FILE:SDL3::SDL3>
         $<TARGET_FILE_DIR:perapera_anime_maker>
 )
+
+
+# vcpkg直下からlibmypaintを直接拾った場合、実行時に必要なDLLもexe横へコピーする。
+# vcpkg_installed はgit管理しない。ローカル環境の依存物として扱う。
+if (PERAPERA_LIBMYPAINT_DIRECT AND EXISTS "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}")
+    add_custom_command(TARGET perapera_anime_maker POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}"
+            $<TARGET_FILE_DIR:perapera_anime_maker>
+    )
+endif()
