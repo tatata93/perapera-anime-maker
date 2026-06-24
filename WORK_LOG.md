@@ -216,3 +216,25 @@
 
 ### 次にやること
 - MyPaintがdabを出しているかを画面上で確認し、必要ならStep 13dで設定値・stroke_to呼び出しを調整する。
+
+
+## 2026-06-25 Phase 1.5 Step 13d: MyPaint交差欠け対策
+
+### 作業概要
+- MyPaintBrushEngine選択時、線は残るが交差箇所で遮られたように欠ける問題への安全対策を追加した。
+
+### 変更ファイル
+- WORK_LOG.md
+- DECISIONS.md
+- src/brush/MyPaintBrushEngine.cpp
+
+### 実装内容
+- libmypaintのdraw_dabから渡るalpha_eraserを作画ブラシでは無視し、意図しない円形消去を起こさないようにした。
+- smudge/colorize/lock_alpha系の基本値を0へ寄せた。
+- libmypaintが有効dabを返した場合でも、ストローク確定時だけ細いSimple連続芯を重ね、交差部分や急カーブの欠けを防ぐようにした。
+
+### 未完了
+- MyPaintらしい描き味の本格調整、.mybプリセット読み込み、タブレット筆圧入力は未実装。
+
+### 次にやること
+- 交差欠けが消えたか確認し、問題なければMyPaint設定UI反映を進める。

@@ -2,6 +2,7 @@
 // libmypaintを使うブラシエンジンを実装する。
 // Phase 1.5 Step 13では、MyPaintSurface::draw_dab を CanvasBitmap::paintDab へ接続する。
 // libmypaintが見つからない環境では、従来のSimple互換へ安全にフォールバックする。
+// Step 13dでは、交差部分が欠けるのを避けるため、alpha_eraserを無視し、細いSimple連続芯を後段で足す。
 
 #include "brush/MyPaintBrushEngine.h"
 
@@ -88,6 +89,7 @@ int surfaceDrawDab(MyPaintSurface* self,
                    float lockAlpha,
                    float colorize)
 {
+    (void)alphaEraser;
     (void)aspectRatio;
     (void)angle;
     (void)lockAlpha;
@@ -101,13 +103,6 @@ int surfaceDrawDab(MyPaintSurface* self,
     ++surface->dabCallCount;
 
     const float opacity = clamp01(opaque * surface->strokeOpacity);
-    if (alphaEraser > 0.01f) {
-        // libmypaint側で消しゴム設定が混ざった場合の保険。
-        // 現在のUI消しゴムは既存のベクターストローク分割方式を使う。
-        surface->canvas->eraseCircle(x, y, std::max(0.5f, radius * alphaEraser));
-        return 1;
-    }
-
     const float safeRadius = std::max(0.5f, radius);
     surface->canvas->paintDab(x,
                               y,
@@ -219,6 +214,17 @@ void setPressureMapping(MyPaintBrush* brush,
     mypaint_brush_set_mapping_point(brush, setting, pressure, 1, 1.0f, highValue);
 }
 
+void bakeSimpleContinuityCore(CanvasBitmap& canvas, const Stroke& stroke, float opacity)
+{
+    if (stroke.points.empty()) {
+        return;
+    }
+
+    Stroke continuityStroke = stroke;
+    continuityStroke.radiusPx = std::max(0.5f, stroke.radiusPx * 0.55f);
+    canvas.bakeStroke(continuityStroke, opacity);
+}
+
 void configureBrush(MyPaintBrush* brush, const Stroke& stroke, float opacity)
 {
     mypaint_brush_from_defaults(brush);
@@ -239,6 +245,10 @@ void configureBrush(MyPaintBrush* brush, const Stroke& stroke, float opacity)
     setBaseValue(brush, "dabs_per_second", 0.0f);
     setBaseValue(brush, "eraser", 0.0f);
     setBaseValue(brush, "paint_mode", 0.0f);
+    setBaseValue(brush, "smudge", 0.0f);
+    setBaseValue(brush, "smudge_length", 0.0f);
+    setBaseValue(brush, "colorize", 0.0f);
+    setBaseValue(brush, "lock_alpha", 0.0f);
     setBaseValue(brush, "color_h", hsv[0]);
     setBaseValue(brush, "color_s", hsv[1]);
     setBaseValue(brush, "color_v", hsv[2]);
@@ -330,7 +340,14 @@ void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, 
         // その場合、ドラッグ中のDrawListプレビューだけ見えて、確定後に線が消える。
         // ここでは描画結果の消失を防ぐため、保存形式はMyPaintのまま、ピクセル焼き込みだけSimpleへ退避する。
         canvas.bakeStroke(stroke, opacity);
+        return;
     }
+
+    // libmypaintのdabだけだと、ストローク同士が交差した箇所や急な方向転換で、
+    // 既存ピクセルとの相互作用により細い欠けが見えることがある。
+    // 確定後に線が遮られたように見えるのを防ぐため、描画確定時だけ細いSimple芯を重ねる。
+    // 毎フレーム処理ではなくストローク確定時のみなので、60fps方針には影響させない。
+    bakeSimpleContinuityCore(canvas, stroke, opacity);
 #endif
 }
 
