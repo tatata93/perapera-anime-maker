@@ -14,6 +14,7 @@
 #include "core/Stroke.h"
 #include "render/CanvasRenderer.h"
 #include "ui/panels/BrushPanel.h"
+#include "ui/panels/ColorPanel.h"
 #include "ui/panels/ExportPanel.h"
 
 namespace perapera {
@@ -46,6 +47,7 @@ private:
     int activeLayerIndex_ = 0;
 
     ui::BrushSettings brushSettings_;
+    ui::ColorPanelState colorPanelState_;
     ui::ExportPanelState exportState_;
 
     Stroke currentStroke_;

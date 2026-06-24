@@ -10,6 +10,7 @@
 #include <imgui.h>
 #include "ui/Theme.h"
 #include "ui/panels/BrushPanel.h"
+#include "ui/panels/ColorPanel.h"
 #include "ui/panels/ExportPanel.h"
 #include "ui/panels/FramePanel.h"
 #include "ui/panels/LayerPanel.h"
@@ -311,6 +312,8 @@ void App::drawLeftSidebar()
 {
     ui::drawBrushPanel(brushSettings_);
     ImGui::Separator();
+    ui::drawColorPanel(colorPanelState_, brushSettings_);
+    ImGui::Separator();
     ImGui::TextUnformatted(u8c(u8"操作"));
     if (ImGui::Button("Undo", ImVec2(-1.0f, 0.0f))) {
         undo();
@@ -331,7 +334,7 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 4 finger preview");
+    ImGui::TextDisabled("Phase 1.5 Step 6 color palette foundation");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
