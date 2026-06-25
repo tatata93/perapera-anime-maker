@@ -6,6 +6,7 @@
 // Phase 1.5 Step 18c: ColorTrace色を残さず、線と塗りの白い隙間もPaint色で埋める。
 // Phase 1.5 Step 18d: Paintを線マスク方向へ拡張し、輪郭線との白い隙間をさらに潰す。
 // Phase 1.5 Step 18e: 既存Fillでも残る白い隙間を出力側でさらに強く吸収する。
+// Phase 1.5 Step 18f: PNG/MP4出力停止を防ぐため、出力時の重い反復補正を安全な1px補助に縮小する。
 
 #include "io/PngExporter.h"
 
@@ -547,13 +548,11 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
     if (mode == ExportMode::Composite) {
         const ImageRgba combinedLineMask = mergeAlphaMasks(normalLineMask, colorTraceMask);
 
-        // Paint領域を線方向へ膨張させて、バケツ塗りと輪郭線の白い隙間を埋める。
-        // その後にNormal線を再合成し、黒い輪郭とアンチエイリアスをPaint色の上に戻す。
-        bleedPaintIntoLineGaps(image, combinedLineMask, paintReference, 24, 32);
-
-        // ColorTrace線は最終出力で色を残さず、Paint色へ吸収する。
-        // 残った細い白点を拾うため、従来の近傍サンプリングも最後に薄くかける。
-        closePaintGapsNearLineMask(image, combinedLineMask, paintReference, 12, 40);
+        // Step 18eの大半径・多段膨張は高解像度PNG/PNG連番/MP4前段で非常に重く、
+        // UIが固まったように見える原因になる。
+        // 隙間閉じの本体はFloodFill側でPaintレイヤーへ焼く。ここでは出力専用の保険として、
+        // 線に隣接する1px程度の白点だけを近傍Paint色へ置換する。
+        closePaintGapsNearLineMask(image, combinedLineMask, paintReference, 1, 3);
 
         for (const RenderedLayer& rendered : renderedLayers) {
             if (rendered.type == LayerType::Normal) {
