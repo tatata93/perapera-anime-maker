@@ -1,9 +1,15 @@
 // このファイルの役割:
 // FloodFill.h の実装。
 // Normal / ColorTrace レイヤーの線を壁としてラスタライズし、クリック位置から4方向に塗り広げる。
-// 現在のデータモデルはストローク正本なので、塗り結果は横方向の短いストローク列として返す。
+// Phase 1.5 Step 18e:
+//   - MyPaintBrushEngineで描いた線も、実際のブラシ描画結果を壁として扱う。
+//   - バケツ塗りを境界から内側へ縮めず、線の下へ少し潜り込ませて白い隙間を減らす。
+//   - 結果はPaintストロークとして保存されるため、キャンバス表示・Undo・保存・PNG/MP4に同じ結果が反映される。
 
 #include "fill/FloodFill.h"
+
+#include "brush/MyPaintBrushEngine.h"
+#include "render/CanvasBitmap.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,11 +21,6 @@
 namespace perapera::fill {
 namespace {
 
-std::uint8_t toByte(float value)
-{
-    return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
-}
-
 std::size_t indexOf(int x, int y, int width)
 {
     return static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x);
@@ -30,108 +31,29 @@ bool isWallLayer(LayerType type)
     return type == LayerType::Normal || type == LayerType::ColorTrace;
 }
 
-void markWallPixel(std::vector<std::uint8_t>& wall,
-                   int width,
-                   int height,
-                   int x,
-                   int y,
-                   std::uint8_t alpha,
-                   std::uint8_t threshold)
+void dilateMask(std::vector<std::uint8_t>& mask, int width, int height, int radius)
 {
-    if (x < 0 || y < 0 || x >= width || y >= height || alpha < threshold) {
-        return;
-    }
-    wall[indexOf(x, y, width)] = 1U;
-}
-
-void stampWallCircle(std::vector<std::uint8_t>& wall,
-                     int width,
-                     int height,
-                     float cx,
-                     float cy,
-                     float radius,
-                     std::uint8_t alpha,
-                     std::uint8_t threshold)
-{
-    const int x0 = std::max(0, static_cast<int>(std::floor(cx - radius - 1.0f)));
-    const int y0 = std::max(0, static_cast<int>(std::floor(cy - radius - 1.0f)));
-    const int x1 = std::min(width, static_cast<int>(std::ceil(cx + radius + 1.0f)));
-    const int y1 = std::min(height, static_cast<int>(std::ceil(cy + radius + 1.0f)));
-
-    for (int y = y0; y < y1; ++y) {
-        for (int x = x0; x < x1; ++x) {
-            const float dx = static_cast<float>(x) + 0.5f - cx;
-            const float dy = static_cast<float>(y) + 0.5f - cy;
-            const float distance = std::sqrt(dx * dx + dy * dy);
-            if (distance > radius + 0.5f) {
-                continue;
-            }
-            const float coverage = std::clamp(radius + 0.5f - distance, 0.0f, 1.0f);
-            const auto coveredAlpha = static_cast<std::uint8_t>(std::lround(static_cast<float>(alpha) * coverage));
-            markWallPixel(wall, width, height, x, y, coveredAlpha, threshold);
-        }
-    }
-}
-
-void rasterizeWallStroke(std::vector<std::uint8_t>& wall,
-                         int width,
-                         int height,
-                         const Stroke& stroke,
-                         float layerOpacity,
-                         std::uint8_t threshold)
-{
-    if (stroke.points.empty()) {
+    if (radius <= 0 || mask.empty()) {
         return;
     }
 
-    const auto alpha = toByte(stroke.color[3] * layerOpacity);
-    const float baseRadius = std::max(0.75f, stroke.radiusPx);
-    const float spacing = std::max(0.5f, baseRadius * 0.5f);
-
-    if (stroke.points.size() == 1U) {
-        const StrokePoint& point = stroke.points.front();
-        stampWallCircle(wall, width, height, point.x, point.y, baseRadius, alpha, threshold);
-        return;
-    }
-
-    for (std::size_t pointIndex = 1; pointIndex < stroke.points.size(); ++pointIndex) {
-        const StrokePoint& from = stroke.points[pointIndex - 1U];
-        const StrokePoint& to = stroke.points[pointIndex];
-        const float dx = to.x - from.x;
-        const float dy = to.y - from.y;
-        const float length = std::sqrt(dx * dx + dy * dy);
-        const int steps = std::max(1, static_cast<int>(std::ceil(length / spacing)));
-        for (int step = 0; step <= steps; ++step) {
-            const float t = static_cast<float>(step) / static_cast<float>(steps);
-            const float x = from.x + dx * t;
-            const float y = from.y + dy * t;
-            const float pressure = from.pressure + (to.pressure - from.pressure) * t;
-            stampWallCircle(wall, width, height, x, y, baseRadius * std::max(0.1f, pressure), alpha, threshold);
-        }
-    }
-}
-
-void dilateWallMask(std::vector<std::uint8_t>& wall, int width, int height, int radius)
-{
-    if (radius <= 0 || wall.empty()) {
-        return;
-    }
-
-    const std::vector<std::uint8_t> original = wall;
+    const std::vector<std::uint8_t> original = mask;
+    const int safeRadius = std::max(0, radius);
+    const int radiusSq = safeRadius * safeRadius;
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             if (original[indexOf(x, y, width)] == 0U) {
                 continue;
             }
-            for (int dy = -radius; dy <= radius; ++dy) {
-                for (int dx = -radius; dx <= radius; ++dx) {
-                    if (dx * dx + dy * dy > radius * radius) {
+            for (int dy = -safeRadius; dy <= safeRadius; ++dy) {
+                for (int dx = -safeRadius; dx <= safeRadius; ++dx) {
+                    if (dx * dx + dy * dy > radiusSq) {
                         continue;
                     }
                     const int nx = x + dx;
                     const int ny = y + dy;
                     if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
-                        wall[indexOf(nx, ny, width)] = 1U;
+                        mask[indexOf(nx, ny, width)] = 1U;
                     }
                 }
             }
@@ -139,56 +61,44 @@ void dilateWallMask(std::vector<std::uint8_t>& wall, int width, int height, int 
     }
 }
 
-int countMaskPixels(const std::vector<std::uint8_t>& mask)
+void bakeStrokeToBitmap(CanvasBitmap& bitmap, const Stroke& stroke, float layerOpacity)
 {
-    return static_cast<int>(std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1U)));
-}
-
-void insetFilledMask(std::vector<std::uint8_t>& filled,
-                     const std::vector<std::uint8_t>& wall,
-                     int width,
-                     int height,
-                     int radius)
-{
-    if (radius <= 0 || filled.empty()) {
+    const float strokeOpacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
+    const float combinedOpacity = std::clamp(layerOpacity * strokeOpacity, 0.0f, 1.0f);
+    if (combinedOpacity <= 0.0f || stroke.points.empty()) {
         return;
     }
 
-    const std::vector<std::uint8_t> original = filled;
-    std::fill(filled.begin(), filled.end(), 0U);
+    // MyPaint線をSimple円スタンプで近似すると、壁マスクが実際の線とずれてバケツが漏れる。
+    // クリック時だけなので、ここではCanvasRendererと同じMyPaint再生を使って正確な壁を作る。
+    if (stroke.brushEngine == StrokeBrushEngine::MyPaint) {
+        MyPaintBrushEngine myPaintEngine;
+        if (myPaintEngine.isLibraryAvailable()) {
+            myPaintEngine.bakeStroke(bitmap, stroke, combinedOpacity);
+            return;
+        }
+    }
 
-    // 塗り領域の境界から radius px ぶん内側だけを残す。
-    // これにより、線画に密着しすぎたPaintストロークを少し引っ込めて、
-    // 主線の上へ色が食い込む見た目を避ける。
+    bitmap.bakeStroke(stroke, combinedOpacity);
+}
+
+void addBitmapAlphaToMask(std::vector<std::uint8_t>& mask,
+                          const CanvasBitmap& bitmap,
+                          int width,
+                          int height,
+                          std::uint8_t alphaThreshold)
+{
+    const std::vector<std::uint8_t>& pixels = bitmap.pixelsRgba();
+    if (bitmap.width() != width || bitmap.height() != height || pixels.empty()) {
+        return;
+    }
+
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            const std::size_t centerIndex = indexOf(x, y, width);
-            if (original[centerIndex] == 0U) {
-                continue;
-            }
-
-            bool keep = true;
-            for (int dy = -radius; dy <= radius && keep; ++dy) {
-                for (int dx = -radius; dx <= radius; ++dx) {
-                    if (dx * dx + dy * dy > radius * radius) {
-                        continue;
-                    }
-                    const int nx = x + dx;
-                    const int ny = y + dy;
-                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
-                        keep = false;
-                        break;
-                    }
-                    const std::size_t neighborIndex = indexOf(nx, ny, width);
-                    if (original[neighborIndex] == 0U || wall[neighborIndex] != 0U) {
-                        keep = false;
-                        break;
-                    }
-                }
-            }
-
-            if (keep) {
-                filled[centerIndex] = 1U;
+            const std::size_t pixelOffset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                                             static_cast<std::size_t>(x)) * 4U;
+            if (pixels[pixelOffset + 3U] >= alphaThreshold) {
+                mask[indexOf(x, y, width)] = 1U;
             }
         }
     }
@@ -201,33 +111,110 @@ std::vector<std::uint8_t> buildWallMask(const Frame& frame,
                                         const FloodFillSettings& settings)
 {
     std::vector<std::uint8_t> wall(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
-    // tolerance が高いほど、薄いアンチエイリアス部分も壁として扱う。
-    // しきい値を高くしすぎると線の端で塗り漏れが起きるため、初期値はやや低めにする。
+
+    // tolerance が高いほど薄い線も壁として扱う。
+    // MyPaintの柔らかい線も壁にしたいので、旧実装より低めのしきい値から始める。
     const auto threshold = static_cast<std::uint8_t>(
-        std::clamp(96 - settings.tolerance / 3, 1, 255));
+        std::clamp(48 - settings.tolerance / 6, 4, 255));
+
+    CanvasBitmap layerBitmap;
+    layerBitmap.resize(nullptr, width, height);
 
     for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
         if (layerIndex == targetLayerIndex) {
             continue;
         }
+
         const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
         if (!layer.visible || layer.opacity <= 0.0f || !isWallLayer(layer.type)) {
             continue;
         }
+
+        layerBitmap.clear();
         for (const Stroke& stroke : layer.strokes) {
-            rasterizeWallStroke(wall, width, height, stroke, layer.opacity, threshold);
+            bakeStrokeToBitmap(layerBitmap, stroke, layer.opacity);
         }
+        addBitmapAlphaToMask(wall, layerBitmap, width, height, threshold);
     }
 
-    dilateWallMask(wall, width, height, std::clamp(settings.gapClosePx, 0, 6));
+    // 隙間閉じは「閉じていない線の小穴」をふさぐための壁膨張。
+    // MyPaintの柔らかい線は端が薄くなるので、最低1pxだけ補強する。
+    const int wallGrowRadius = std::max(1, std::clamp(settings.gapClosePx, 0, 6));
+    dilateMask(wall, width, height, wallGrowRadius);
     return wall;
+}
+
+int countMaskPixels(const std::vector<std::uint8_t>& mask)
+{
+    return static_cast<int>(std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1U)));
+}
+
+void bleedFilledMaskIntoWalls(std::vector<std::uint8_t>& filled,
+                              const std::vector<std::uint8_t>& wall,
+                              int width,
+                              int height,
+                              int radius)
+{
+    // 旧inset処理は塗りを境界から引っ込めるため、白い隙間の原因になった。
+    // ここでは逆に、塗り領域から隣接する壁ピクセルへ少しだけ広げる。
+    // Paintレイヤーは線画の下地として使うため、線の下まで色を潜り込ませると隙間が消える。
+    const int safeRadius = std::max(0, radius);
+    if (safeRadius <= 0 || filled.empty() || wall.empty()) {
+        return;
+    }
+
+    constexpr int kNeighborCount = 8;
+    constexpr int kNeighborDx[kNeighborCount] = {1, -1, 0, 0, 1, 1, -1, -1};
+    constexpr int kNeighborDy[kNeighborCount] = {0, 0, 1, -1, 1, -1, 1, -1};
+
+    for (int step = 0; step < safeRadius; ++step) {
+        bool changed = false;
+        std::vector<std::uint8_t> next = filled;
+
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const std::size_t center = indexOf(x, y, width);
+                if (filled[center] != 0U || wall[center] == 0U) {
+                    continue;
+                }
+
+                bool touchesFill = false;
+                for (int neighborIndex = 0; neighborIndex < kNeighborCount; ++neighborIndex) {
+                    const int nx = x + kNeighborDx[neighborIndex];
+                    const int ny = y + kNeighborDy[neighborIndex];
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                        continue;
+                    }
+                    if (filled[indexOf(nx, ny, width)] != 0U) {
+                        touchesFill = true;
+                        break;
+                    }
+                }
+
+                if (touchesFill) {
+                    next[center] = 1U;
+                    changed = true;
+                }
+            }
+        }
+
+        filled.swap(next);
+        if (!changed) {
+            break;
+        }
+    }
 }
 
 Stroke makeSpanStroke(int y, int x0, int x1, const std::array<float, 4>& color)
 {
     Stroke stroke;
     stroke.color = color;
-    stroke.radiusPx = 0.65f;
+    stroke.opacity = 1.0f;
+    stroke.brushEngine = StrokeBrushEngine::Simple;
+
+    // 0.65pxの細い横線では、斜め境界やアンチエイリアス部に白い点が残りやすい。
+    // 1px強の重なりを持つスパンにして、隣の行・輪郭線の下へ自然につなげる。
+    stroke.radiusPx = 1.05f;
 
     const float fy = static_cast<float>(y) + 0.5f;
     const float startX = static_cast<float>(x0) + 0.5f;
@@ -286,16 +273,12 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         ? std::max(1, width * height * leakGuardPercent / 100)
         : 0;
 
-    // シード点の位置は「漏れ」の判定に使わない。
-    // 実際の漏れ判定は、塗り面積が上限を超えたかどうかだけで行う。
     std::size_t head = 0U;
     while (head < queue.size()) {
         const int current = queue[head++];
         const int x = current % width;
         const int y = current / width;
 
-        // 漏れ防止は、最後まで塗ってから判定するだけだと巨大な塗りストロークを
-        // 作る直前まで進んでしまう。探索中にも面積上限を超えたらすぐ止める。
         if (maxAllowedPixels > 0 && static_cast<int>(queue.size()) > maxAllowedPixels) {
             result.message = "fill leaked: area exceeded guard percent ("
                 + std::to_string(leakGuardPercent) + "%)";
@@ -324,21 +307,20 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    if (leakGuardPercent > 0) {
-        // 面積が上限を超えた場合だけ漏れとして中止する。
-        // キャンバス端への到達は正当なケース（背景全体塗りなど）があるため、
-        // 単独の漏れ判定には使わない。
-        if (maxAllowedPixels > 0 && rawFilledPixelCount >= maxAllowedPixels) {
-            result.message = "fill leaked: area exceeded guard percent ("
-                + std::to_string(leakGuardPercent) + "%)";
-            return result;
-        }
+    if (leakGuardPercent > 0 && maxAllowedPixels > 0 && rawFilledPixelCount >= maxAllowedPixels) {
+        result.message = "fill leaked: area exceeded guard percent ("
+            + std::to_string(leakGuardPercent) + "%)";
+        return result;
     }
 
-    insetFilledMask(filled, wall, width, height, std::clamp(settings.insetPx, 0, 8));
+    // キャンバス表示にも白い隙間対策を反映するため、出力時だけでなく、
+    // 保存されるPaintストローク自体を境界下まで伸ばす。
+    const int underpaintRadius = std::clamp(settings.insetPx, 0, 6) + 2;
+    bleedFilledMaskIntoWalls(filled, wall, width, height, underpaintRadius);
+
     result.filledPixelCount = countMaskPixels(filled);
     if (result.filledPixelCount <= 0) {
-        result.message = "fill area too thin after inset; lower inset px";
+        result.message = "nothing to fill after boundary underpaint";
         return result;
     }
 
@@ -360,7 +342,7 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
 
     result.success = !result.strokes.empty();
     if (result.success) {
-        result.message = "filled";
+        result.message = "filled with boundary underpaint";
     } else {
         result.message = "no spans generated";
     }

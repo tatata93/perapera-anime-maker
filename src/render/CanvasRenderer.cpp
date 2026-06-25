@@ -62,16 +62,20 @@ float displayOpacityForLayer(const Layer& layer, CanvasDisplayMode displayMode)
 
 int coloringLayerRank(LayerType type)
 {
+    // Phase 1.5 Step 18e:
+    // 彩色モードではPaintを線画の下に表示する。
+    // バケツ塗りは輪郭線の下へ少し潜り込ませるため、
+    // Paintを先に描いてNormal/ColorTraceを後から重ねるとキャンバス上でも白い隙間が見えにくい。
     switch (type) {
-    case LayerType::Normal:
-        return 0;
-    case LayerType::ColorTrace:
-        return 1;
     case LayerType::Paint:
-        return 2;
-    case LayerType::ShadowGuide:
-        return 3;
+        return 0;
     case LayerType::Rough:
+        return 1;
+    case LayerType::Normal:
+        return 2;
+    case LayerType::ColorTrace:
+        return 3;
+    case LayerType::ShadowGuide:
         return 4;
     }
     return 5;
