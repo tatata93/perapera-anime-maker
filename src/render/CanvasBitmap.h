@@ -55,6 +55,9 @@ public:
     int height() const { return height_; }
     bool hasTexture() const { return texture_ != nullptr; }
 
+    // PNG/MP4書き出しなど、SDL_Textureを使わずにCPU側RGBAを読むための参照。
+    const std::vector<std::uint8_t>& pixelsRgba() const { return pixels_; }
+
 private:
     int width_ = 0;
     int height_ = 0;

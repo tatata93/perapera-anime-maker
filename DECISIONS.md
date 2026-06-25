@@ -1,9 +1,14 @@
-## Decision 017: 彩色モードは作画モードの描画処理を流用する
+## Decision 018: Composite出力時だけColorTrace線をPaint色へ置換する
 日付: 2026-06-25
-理由: final_spec_v6 では、彩色モードはデータを変えず表示とツールを変えるだけで、drawDrawingMode() を流用し巨大な別関数を作らない方針になっているため。
-影響: AppMode::Coloring は drawDrawingMode() を通り、CanvasRenderer の表示モードだけを切り替える。
+理由: v6仕様では、ColorTraceの最終出力処理はCompositeモード内で行い、LineTest/ColorTrace/LineOnlyの書き出しモードは既存仕様を維持するため。
+影響: 完成出力では色トレス線が近傍Paint色へ馴染む。Paint色がない箇所は確認しやすさを優先して元のColorTrace色を保持する。
 
-## Decision 018: 彩色モードの編集対象は Paint レイヤーに寄せる
+## Decision 019: 作画キャンバス背景を白に統一する
 日付: 2026-06-25
-理由: 彩色モードでは Normal / ColorTrace / ShadowGuide を参照表示し、Paint レイヤーを主編集対象にする仕様のため。
-影響: 彩色モードに入ると Paint レイヤーを自動選択し、なければ作成する。
+理由: 線画作業時も紙面に近い白背景で確認したいという要望に対応するため。
+影響: アプリ全体のダークテーマは維持し、キャンバス描画領域のみ白背景になる。
+
+## Decision 020: PNG書き出しはCanvasBitmapのCPU側RGBAを読む
+日付: 2026-06-25
+理由: PNG/MP4書き出しではSDL_Textureではなく、MyPaint再生後のCanvasBitmap上のCPU側RGBAを読む必要があるため。
+影響: CanvasBitmapに読み取り専用アクセサを追加するだけで、描画・GPU転送・dirty管理の既存挙動は変えない。
