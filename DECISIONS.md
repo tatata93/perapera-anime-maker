@@ -1,16 +1,15 @@
-# DECISIONS - Phase 1.5 Step 14f
+# DECISIONS
 
-## MyPaint realtime stroke connection
+## Phase 1.5 Step 14h
 
-Decision:
-- libmypaint の描画は確定時一括処理ではなく、ドラッグ中に beginStroke() -> addPoint() -> endStroke() で逐次処理する。
+### Decision
+Reapply and package the App-side MyPaint realtime connection together with the Step 14g replay/restore changes.
 
-Reason:
-- 確定時に stroke 全点を bakeStroke() すると、長いストロークや太いブラシで UI 停止が発生するため。
+### Reason
+The MyPaint realtime stroke engine must be owned by `App`, started on drag begin, fed on drag update, and ended on drag finish. If the App-side connection is missing or overwritten by later packages, MyPaint strokes can fall back to commit-time/default behavior or fail to preserve brush appearance across undo/save/reload.
 
-Implementation notes:
-- App は MyPaintBrushEngine myPaintEngine_ を保持する。
-- MyPaint の逐次処理中は isMyPaintStrokeActive_ を true にする。
-- MyPaint の確定時は bakeStroke を呼ばず、点列だけ Project 側へ保存する。
-- CanvasBitmap へ直接描いたピクセルは markActiveBitmapClean() でキャッシュrevisionだけ同期する。
-- 保存・読み込み後の再構築は引き続き軽いSimple互換ベイクで行う。
+### Implementation policy
+- Do not reintroduce commit-time full-stroke MyPaint baking for live drawing.
+- Do not provide short/incremental build as the main verification path.
+- Keep SimpleBrushEngine path intact.
+- Keep saved/rebuilt MyPaint strokes replayed through MyPaint when libmypaint is available.

@@ -1,20 +1,27 @@
-# WORK_LOG - Phase 1.5 Step 14f
+# WORK_LOG
 
-## Summary
-- MyPaintBrushEngine を App 入力経路へ明示接続した。
-- App::beginStroke / updateStroke / finishStroke の逐次処理フローを整理した。
-- CanvasRenderer に bitmapForLayerPtr() を追加し、MyPaint逐次処理が対象レイヤーの CanvasBitmap を取得できるようにした。
-- SimpleBrushEngine 側は従来通り確定時 bakeStrokeOnLayer() 経由で処理する。
+## Phase 1.5 Step 14h: reapply MyPaint realtime App connection
 
-## Changed files
-- src/ui/App.h
-- src/ui/AppInput.cpp
-- src/ui/AppDrawingMode.cpp
-- src/render/CanvasRenderer.h
-- src/render/CanvasRenderer.cpp
-- src/brush/MyPaintBrushEngine.h
-- src/brush/MyPaintBrushEngine.cpp
+### Goal
+Ensure MyPaintBrushEngine is explicitly connected to the App input lifecycle while preserving Step 14g MyPaint replay/restore behavior.
 
-## Notes
-- 現行ファイル分割では finishStroke() は AppInput.cpp ではなく AppDrawingMode.cpp に存在するため、同等修正を AppDrawingMode.cpp に入れた。
-- MyPaintBrushEngine.cpp は直前の custom deleter / state_.reset 修正を含む版を同梱した。
+### Changed / Reapplied files
+- `src/ui/App.h`
+- `src/ui/AppInput.cpp`
+- `src/ui/AppDrawingMode.cpp`
+- `src/render/CanvasRenderer.h`
+- `src/render/CanvasRenderer.cpp`
+- `src/brush/MyPaintBrushEngine.h`
+- `src/brush/MyPaintBrushEngine.cpp`
+
+### Summary
+- Added/kept `MyPaintBrushEngine myPaintEngine_` in `App`.
+- Added/kept `bool isMyPaintStrokeActive_` in `App`.
+- `beginStroke()` starts MyPaint realtime drawing when MyPaint engine is selected.
+- `updateStroke()` feeds new filtered points to `myPaintEngine_.addPoint()`.
+- `finishStroke()` skips final `bakeStroke` for realtime MyPaint strokes and only stores the point list.
+- Added/kept `CanvasRenderer::bitmapForLayerPtr()` for direct bitmap access.
+- Kept Step 14g replay behavior so saved/rebuilt MyPaint strokes are replayed through MyPaint instead of returning to Simple/default appearance.
+
+### Build note
+Use full clean vcpkg build only for verification.

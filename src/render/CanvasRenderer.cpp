@@ -73,11 +73,18 @@ void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacit
     const float strokeOpacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
     const float combinedOpacity = std::clamp(opacity * strokeOpacity, 0.0f, 1.0f);
 
-    // Step 14c:
-    // MyPaintはドラッグ中逐次描画でCanvasBitmapへ直接dabを入れる。
-    // 保存データ・オニオン・読み込み後再構築では、確定時一括libmypaint処理を避けるためSimple互換で再ベイクする。
-    // これで長いMyPaintストロークを持つレイヤーを再表示してもUIが止まりにくい。
-    (void)stroke.brushEngine;
+    // Step 14g:
+    // MyPaintストロークをUndo/保存/読み込み/キャッシュ再構築後も同じ見た目で戻す。
+    // ドラッグ中はApp側の逐次処理、再構築時はMyPaintBrushEngine::bakeStrokeの
+    // begin/addPoint/end再生で復元する。
+    if (stroke.brushEngine == StrokeBrushEngine::MyPaint) {
+        MyPaintBrushEngine myPaintEngine;
+        if (myPaintEngine.isLibraryAvailable()) {
+            myPaintEngine.bakeStroke(bitmap, stroke, combinedOpacity);
+            return;
+        }
+    }
+
     bitmap.bakeStroke(stroke, combinedOpacity);
 }
 

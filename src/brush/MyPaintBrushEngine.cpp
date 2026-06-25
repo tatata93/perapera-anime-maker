@@ -362,10 +362,35 @@ void MyPaintBrushEngine::endStroke()
 
 void MyPaintBrushEngine::bakeStroke(CanvasBitmap& canvas, const Stroke& stroke, float opacity)
 {
-    // Step 14c:
-    // libmypaintはドラッグ中逐次処理で使う。
-    // 保存データ再構築・libmypaint未使用時・読み込み時の再ベイクでは、重い一括処理を避けてSimple互換にする。
+#ifndef PERAPERA_HAS_LIBMYPAINT
     canvas.bakeStroke(stroke, opacity);
+#else
+    if (stroke.points.empty()) {
+        return;
+    }
+
+    // Step 14g:
+    // MyPaint逐次描画で作ったストロークは、Undo/保存/読み込み/キャッシュ再構築でも
+    // 同じMyPaint経路で再ベイクしないと、Simple互換の見た目へ戻ってしまう。
+    // ここではドラッグ時と同じ begin -> addPoint -> end の経路で再生する。
+    beginStroke(canvas, stroke, opacity);
+    if (!state_) {
+        canvas.bakeStroke(stroke, opacity);
+        return;
+    }
+
+    bool painted = false;
+    constexpr float kReplayDeltaTimeSec = 1.0f / 60.0f;
+    for (const StrokePoint& point : stroke.points) {
+        painted = addPoint(point, kReplayDeltaTimeSec) || painted;
+    }
+    endStroke();
+
+    if (!painted) {
+        // libmypaint側から有効dabが返らなかった場合だけ、消失防止としてSimpleへ退避する。
+        canvas.bakeStroke(stroke, opacity);
+    }
+#endif
 }
 
 void MyPaintBrushEngine::eraseCircle(CanvasBitmap& canvas, float cx, float cy, float radius)
