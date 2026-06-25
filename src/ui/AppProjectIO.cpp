@@ -171,8 +171,10 @@ void App::exportActivePng()
 
     const std::filesystem::path output = appio::absolutePath(exportState_.exportFolder) / "active_frame.png";
     std::string error;
-    if (PngExporter::exportFrame(*frame, output, project_.canvas.width, project_.canvas.height, &error)) {
-        lastMessage_ = "PNG exported: " + output.string();
+    if (PngExporter::exportFrame(*frame, output, project_.canvas.width, project_.canvas.height,
+                                  exportState_.exportMode, &error)) {
+        lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) +
+            "]: " + output.string();
     } else {
         lastMessage_ = "PNG export failed: " + error;
     }
@@ -188,8 +190,10 @@ void App::exportPngSequence()
 
     const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
     std::string error;
-    if (PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height, &error)) {
-        lastMessage_ = "PNG sequence exported: " + pngFolder.string();
+    if (PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height,
+                                          exportState_.exportMode, &error)) {
+        lastMessage_ = "PNG sequence exported [" + std::string(exportModeToString(exportState_.exportMode)) +
+            "]: " + pngFolder.string();
     } else {
         lastMessage_ = "PNG sequence failed: " + error;
     }
@@ -208,10 +212,13 @@ void App::exportMp4()
     const std::filesystem::path logPath = appio::mp4LogPathForOutput(mp4Output);
 
     appio::resetMp4PreflightLog(logPath, exportState_.ffmpegPath, pngFolder, mp4Output, project_.output.fps);
-    appio::appendTextLog(logPath, "V12 Step 1: exporting PNG sequence before FFmpeg.\n");
+    appio::appendTextLog(logPath, "Step15: exporting PNG sequence before FFmpeg. mode=");
+    appio::appendTextLog(logPath, exportModeToString(exportState_.exportMode));
+    appio::appendTextLog(logPath, "\n");
 
     std::string error;
-    if (!PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height, &error)) {
+    if (!PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height,
+                                          exportState_.exportMode, &error)) {
         appio::appendTextLog(logPath, "ERROR: PNG sequence export failed before FFmpeg.\n");
         appio::appendTextLog(logPath, "Reason: " + error + "\n");
         lastMessage_ = "MP4 failed before ffmpeg: " + error + " log: " + logPath.string();
@@ -223,7 +230,8 @@ void App::exportMp4()
 
     const std::filesystem::path inputPattern = pngFolder / "frame_%03d.png";
     if (FfmpegRunner::pngSequenceToMp4(exportState_.ffmpegPath, inputPattern, project_.output.fps, mp4Output, &error)) {
-        lastMessage_ = "MP4 exported: " + mp4Output.string();
+        lastMessage_ = "MP4 exported [" + std::string(exportModeToString(exportState_.exportMode)) +
+            "]: " + mp4Output.string();
     } else {
         const std::string logText = appio::readLogForStatus(logPath);
         lastMessage_ = logText.empty() ? "MP4 failed: " + error : "MP4 failed: " + error + " | log: " + logText;

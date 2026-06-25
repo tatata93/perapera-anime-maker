@@ -1,7 +1,7 @@
 // このファイルの役割:
 // PNG書き出しを実装する。
 // 外部ライブラリ追加を避けるため、zlibの非圧縮deflateブロックを使う最小PNGエンコーダを内蔵する。
-// Phase 1.5 Step 3: ShadowGuideレイヤーは最終出力に含めない。
+// Phase 1.5 Step 15: 書き出しモードごとに対象レイヤーと背景を切り替える。
 
 #include "io/PngExporter.h"
 
@@ -35,6 +35,16 @@ void setError(std::string* errorMessage, const std::string& message)
 {
     if (errorMessage != nullptr) {
         *errorMessage = message;
+    }
+}
+
+void fillBackground(ImageRgba& image, std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a)
+{
+    for (std::size_t offset = 0; offset + 3U < image.pixels.size(); offset += 4U) {
+        image.pixels[offset + 0U] = r;
+        image.pixels[offset + 1U] = g;
+        image.pixels[offset + 2U] = b;
+        image.pixels[offset + 3U] = a;
     }
 }
 
@@ -122,22 +132,38 @@ void rasterizeStroke(ImageRgba& image, const Stroke& stroke, float opacity)
     }
 }
 
-bool shouldExportLayer(const Layer& layer)
+bool usesWhiteBackground(ExportMode mode)
 {
-    // ShadowGuide は作画指示・影指定のための参照レイヤー。
-    // 仕様どおり、PNG連番やMP4素材になる最終出力には含めない。
-    return layer.type != LayerType::ShadowGuide;
+    return mode != ExportMode::LineOnly;
 }
 
-ImageRgba rasterizeFrame(const Frame& frame, int width, int height)
+bool shouldExportLayer(const Layer& layer, ExportMode mode)
+{
+    switch (mode) {
+    case ExportMode::Composite:
+        return true;
+    case ExportMode::LineTest:
+    case ExportMode::LineOnly:
+        return layer.type == LayerType::Normal;
+    case ExportMode::ColorTrace:
+        return layer.type == LayerType::Normal || layer.type == LayerType::ColorTrace;
+    }
+    return true;
+}
+
+ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode mode)
 {
     ImageRgba image;
     image.width = std::max(1, width);
     image.height = std::max(1, height);
     image.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
 
+    if (usesWhiteBackground(mode)) {
+        fillBackground(image, 255U, 255U, 255U, 255U);
+    }
+
     for (const Layer& layer : frame.layers) {
-        if (!layer.visible || layer.opacity <= 0.0f || !shouldExportLayer(layer)) {
+        if (!layer.visible || layer.opacity <= 0.0f || !shouldExportLayer(layer, mode)) {
             continue;
         }
         for (const Stroke& stroke : layer.strokes) {
@@ -265,19 +291,51 @@ std::filesystem::path sequencePath(const std::filesystem::path& folder, int inde
 
 } // namespace
 
+const char* exportModeToString(ExportMode mode)
+{
+    switch (mode) {
+    case ExportMode::Composite:
+        return "Composite";
+    case ExportMode::LineTest:
+        return "LineTest";
+    case ExportMode::ColorTrace:
+        return "ColorTrace";
+    case ExportMode::LineOnly:
+        return "LineOnly";
+    }
+    return "Composite";
+}
+
+const char* exportModeDisplayName(ExportMode mode)
+{
+    switch (mode) {
+    case ExportMode::Composite:
+        return "通常（全レイヤー合成）";
+    case ExportMode::LineTest:
+        return "ラインテスト（線画のみ・白背景）";
+    case ExportMode::ColorTrace:
+        return "色トレスアニメ（線画＋色トレス線・白背景）";
+    case ExportMode::LineOnly:
+        return "線画素材（線画のみ・背景透明）";
+    }
+    return "通常（全レイヤー合成）";
+}
+
 bool PngExporter::exportFrame(const Frame& frame,
                               const std::filesystem::path& outputPath,
                               int width,
                               int height,
+                              ExportMode mode,
                               std::string* errorMessage)
 {
-    return writePng(rasterizeFrame(frame, width, height), outputPath, errorMessage);
+    return writePng(rasterizeFrame(frame, width, height, mode), outputPath, errorMessage);
 }
 
 bool PngExporter::exportFrameSequence(const Cell& cell,
                                       const std::filesystem::path& outputFolder,
                                       int width,
                                       int height,
+                                      ExportMode mode,
                                       std::string* errorMessage)
 {
     if (cell.frames.empty()) {
@@ -287,7 +345,7 @@ bool PngExporter::exportFrameSequence(const Cell& cell,
 
     for (std::size_t index = 0; index < cell.frames.size(); ++index) {
         const std::filesystem::path outputPath = sequencePath(outputFolder, static_cast<int>(index) + 1);
-        if (!exportFrame(cell.frames[index], outputPath, width, height, errorMessage)) {
+        if (!exportFrame(cell.frames[index], outputPath, width, height, mode, errorMessage)) {
             return false;
         }
     }

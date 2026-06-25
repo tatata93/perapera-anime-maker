@@ -1,27 +1,12 @@
 # WORK_LOG
 
-## Phase 1.5 Step 14h: reapply MyPaint realtime App connection
+## Phase 1.5 Step 15: Export modes for line test / color trace / line-only
 
-### Goal
-Ensure MyPaintBrushEngine is explicitly connected to the App input lifecycle while preserving Step 14g MyPaint replay/restore behavior.
+- Added `ExportMode` to `PngExporter`.
+- Added export mode selector to `ExportPanel`.
+- Wired active PNG, PNG sequence, and MP4 pre-export PNG generation to the selected mode.
+- Added white-background output for Composite / LineTest / ColorTrace.
+- Added transparent-background output for LineOnly.
+- Added layer filtering: Normal only, Normal+ColorTrace, or all visible layers according to the mode.
 
-### Changed / Reapplied files
-- `src/ui/App.h`
-- `src/ui/AppInput.cpp`
-- `src/ui/AppDrawingMode.cpp`
-- `src/render/CanvasRenderer.h`
-- `src/render/CanvasRenderer.cpp`
-- `src/brush/MyPaintBrushEngine.h`
-- `src/brush/MyPaintBrushEngine.cpp`
-
-### Summary
-- Added/kept `MyPaintBrushEngine myPaintEngine_` in `App`.
-- Added/kept `bool isMyPaintStrokeActive_` in `App`.
-- `beginStroke()` starts MyPaint realtime drawing when MyPaint engine is selected.
-- `updateStroke()` feeds new filtered points to `myPaintEngine_.addPoint()`.
-- `finishStroke()` skips final `bakeStroke` for realtime MyPaint strokes and only stores the point list.
-- Added/kept `CanvasRenderer::bitmapForLayerPtr()` for direct bitmap access.
-- Kept Step 14g replay behavior so saved/rebuilt MyPaint strokes are replayed through MyPaint instead of returning to Simple/default appearance.
-
-### Build note
-Use full clean vcpkg build only for verification.
+Build note: Windows/vcpkg/SDL full build must be run by the user environment.

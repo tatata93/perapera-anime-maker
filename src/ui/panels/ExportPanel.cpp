@@ -18,7 +18,7 @@ const char* u8c(const char8_t* text)
 
 ExportPanelAction drawExportPanel(ExportPanelState& state, const char* lastMessage)
 {
-    ImGui::PushID("ExportPanel_v11_stability");
+    ImGui::PushID("ExportPanel_step15_export_modes");
     ImGui::TextUnformatted(u8c(u8"保存 / 書き出し"));
 
     ImGui::InputText(u8c(u8"プロジェクト##Export_ProjectFolder_v11"), state.projectFolder, sizeof(state.projectFolder));
@@ -39,6 +39,25 @@ ExportPanelAction drawExportPanel(ExportPanelState& state, const char* lastMessa
     ImGui::Separator();
     ImGui::InputText(u8c(u8"PNG出力先##Export_PngFolder_v11"), state.exportFolder, sizeof(state.exportFolder));
     ImGui::TextDisabled("default: exports/png");
+
+    const char* exportModeItems[] = {
+        u8c(u8"通常（全レイヤー合成）"),
+        u8c(u8"ラインテスト（線画のみ・白背景）"),
+        u8c(u8"色トレスアニメ（線画＋色トレス線・白背景）"),
+        u8c(u8"線画素材（線画のみ・背景透明）"),
+    };
+    int exportModeIndex = static_cast<int>(state.exportMode);
+    if (ImGui::Combo(u8c(u8"書き出しモード##Export_Mode_step15"),
+                     &exportModeIndex, exportModeItems, 4)) {
+        if (exportModeIndex < 0) {
+            exportModeIndex = 0;
+        }
+        if (exportModeIndex > 3) {
+            exportModeIndex = 3;
+        }
+        state.exportMode = static_cast<ExportMode>(exportModeIndex);
+    }
+    ImGui::TextDisabled(u8c(u8"PNG連番とMP4書き出しの両方に適用されます。"));
     if (ImGui::Button(u8c(u8"現在フレームPNG##Export_ActivePng_v11"))) {
         action = ExportPanelAction::ExportActivePng;
     }
