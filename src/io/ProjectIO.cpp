@@ -18,6 +18,8 @@ namespace {
 namespace fs = std::filesystem;
 using nlohmann::json;
 
+constexpr int kProjectFormatVersion = 1;
+
 void setError(std::string* errorMessage, const std::string& message)
 {
     if (errorMessage != nullptr) {
@@ -128,6 +130,7 @@ json toJson(const Layer& layer)
     }
 
     return json{
+        {"format_version", kProjectFormatVersion},
         {"layerId", layer.layerId},
         {"name", layer.name},
         {"visible", layer.visible},
@@ -157,7 +160,7 @@ Layer layerFromJson(const json& value)
 }
 json frameMetaToJson(const Frame& frame)
 {
-    return json{{"name", frame.name}, {"durationFrames", frame.durationFrames}};
+    return json{{"format_version", kProjectFormatVersion}, {"name", frame.name}, {"durationFrames", frame.durationFrames}};
 }
 Frame frameMetaFromJson(const json& value, int frameNumber)
 {
@@ -213,6 +216,7 @@ json cellMetaToJson(const Cell& cell)
     }
 
     return json{
+        {"format_version", kProjectFormatVersion},
         {"id", cell.id},
         {"name", cell.name},
         {"category", cell.category},
@@ -262,6 +266,7 @@ json projectToJson(const Project& project)
     }
 
     return json{
+        {"format_version", kProjectFormatVersion},
         {"version", project.version},
         {"name", project.name},
         {"canvas", {{"width", project.canvas.width}, {"height", project.canvas.height}}},

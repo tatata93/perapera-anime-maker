@@ -1,10 +1,9 @@
-# DECISIONS
+# DECISIONS - Phase 1.5 Step 16
 
-## Phase 1.5 Step 15
+## format_version の扱い
+開発中の保存形式なので、`format_version` は将来の目印として追加するだけにする。
+現時点では `format_version` による分岐・移行処理は作らない。
 
-- Implemented export modes in `PngExporter` rather than changing the live canvas renderer.
-- `Composite` follows the user instruction for this step: all visible layers on a white background.
-- `LineTest` exports only Normal layers on a white background.
-- `ColorTrace` exports Normal and ColorTrace layers on a white background, preserving stroke colors.
-- `LineOnly` exports only Normal layers on a transparent background.
-- MP4 uses the same PNG sequence export mode because MP4 generation already consumes exported PNG frames.
+## 互換性方針
+仕様書の「保存形式の拡張方針」に従い、過去プロジェクトとの互換性維持よりもシンプルな実装を優先する。
+既存フィールドの読み込みは従来通りデフォルト値付きで行う。
