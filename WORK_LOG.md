@@ -1,22 +1,32 @@
-# WORK_LOG - Phase 1.5 Step 16
+## 2026-06-25 Phase 1.5 Step 17: 彩色モード追加
 
-## 目的
-保存形式の将来拡張に備えて、主要JSONへ `format_version` を追加する。
+### 作業概要
+- final_spec_v6 の矛盾修正版を反映し、Phase 1.5 の次工程として AppMode::Coloring を追加した。
+- 作画モードの描画処理を流用し、別の巨大な彩色用描画関数は作らない方針にした。
 
-## 変更
-- `project.json` に `format_version: 1` を追加。
-- `cell.json` に `format_version: 1` を追加。
-- `frame.json` に `format_version: 1` を追加。
-- `layer_NNN.json` に `format_version: 1` を追加。
-- 読み込みは既存の `value("key", default)` 方針を維持し、`format_version` による分岐処理は追加しない。
+### 変更ファイル
+- src/ui/App.h
+- src/ui/App.cpp
+- src/ui/AppDrawingMode.cpp
+- src/ui/AppInput.cpp
+- src/render/CanvasRenderer.h
+- src/render/CanvasRenderer.cpp
 
-## 実装内容
-- `src/io/ProjectIO.cpp` に `kProjectFormatVersion` を追加。
-- `projectToJson()` / `cellMetaToJson()` / `frameMetaToJson()` / `toJson(const Layer&)` の出力に `format_version` を追加。
+### 実装内容
+- モードタブに「3.5 彩色」を追加。
+- 彩色モードへ入ったとき、Paint レイヤーを自動選択する。
+- Paint レイヤーが存在しない場合は自動作成する。
+- 彩色モードのデフォルトツールを FloodFill にする。
+- 彩色モードでは Normal / ColorTrace / Paint / ShadowGuide / Rough の表示不透明度を用途別に変更する。
+- 彩色モードのキャンバス背景を白にする。
+- 彩色モードでは入力開始時に Paint レイヤーへ寄せ、参照レイヤーを直接編集しないようにした。
 
-## 未完了
-- `scene.json` / `cut.json` / `app_state.json` は未実装のため対象外。
-- 新しい `scenes/scene/cut/cells` 階層への移行は Phase 2 前の別Stepで実施する。
+### 未完了
+- Composite 書き出し時の ColorTrace 隣接 Paint 色置換は Step 18 で実装する。
+- 本コンテナでは Windows / SDL3 / vcpkg / libmypaint 実ビルドは未実行。
 
-## 次にやること
-- Phase 1.5 Step 17: 彩色モード追加。
+### 次にやること
+- Phase 1.5 Step 18: ColorTrace の最終出力処理。
+
+### 判断待ち
+- なし。

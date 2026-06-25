@@ -26,6 +26,7 @@ enum class AppMode : int {
     Storyboard,
     Previs,
     Drawing,
+    Coloring,
     Shooting,
     Export,
 };
@@ -91,6 +92,8 @@ private:
     void drawMainLayout();
     void drawModeTabs();
     void drawModeWorkspace();
+    void enterColoringMode();
+    bool selectPaintLayerForColoring(bool createIfMissing);
     void drawPlaceholderMode(const char* title, const char* description);
     void drawStatusBar();
 

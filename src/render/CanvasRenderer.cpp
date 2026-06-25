@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <string_view>
+#include <vector>
 
 namespace perapera {
 namespace {
@@ -33,8 +34,23 @@ std::uint8_t alphaByte(float opacity)
 
 // Rough は下書き用なので、表示上は常に半透明上限をかける。
 // レイヤー自体の opacity を下げた場合は、その値を優先する。
-float displayOpacityForLayer(const Layer& layer)
+float displayOpacityForLayer(const Layer& layer, CanvasDisplayMode displayMode)
 {
+    if (displayMode == CanvasDisplayMode::Coloring) {
+        switch (layer.type) {
+        case LayerType::Normal:
+            return std::min(layer.opacity, 0.45f);
+        case LayerType::ColorTrace:
+            return std::min(layer.opacity, 0.65f);
+        case LayerType::Paint:
+            return layer.opacity;
+        case LayerType::ShadowGuide:
+            return std::min(layer.opacity, 0.30f);
+        case LayerType::Rough:
+            return std::min(layer.opacity, 0.25f);
+        }
+    }
+
     if (layer.type == LayerType::Rough) {
         return std::min(layer.opacity, 0.50f);
     }
@@ -42,6 +58,23 @@ float displayOpacityForLayer(const Layer& layer)
         return std::min(layer.opacity, 0.75f);
     }
     return layer.opacity;
+}
+
+int coloringLayerRank(LayerType type)
+{
+    switch (type) {
+    case LayerType::Normal:
+        return 0;
+    case LayerType::ColorTrace:
+        return 1;
+    case LayerType::Paint:
+        return 2;
+    case LayerType::ShadowGuide:
+        return 3;
+    case LayerType::Rough:
+        return 4;
+    }
+    return 5;
 }
 
 ImU32 colorWithAlpha(float r, float g, float b, float a)
@@ -250,6 +283,7 @@ void CanvasRenderer::draw(const Frame& frame,
                           const Stroke* currentStroke,
                           float currentStrokeOpacity,
                           const CanvasView& view,
+                          CanvasDisplayMode displayMode,
                           ImVec2 areaMin,
                           ImVec2 areaSize,
                           ImDrawList* drawList)
@@ -265,9 +299,26 @@ void CanvasRenderer::draw(const Frame& frame,
     // 背景はApp側で先に塗る。ここで再度塗ると、先に描いたオニオンスキンが隠れる。
 
     if (renderer_ != nullptr && canvasWidth_ > 0 && canvasHeight_ > 0) {
+        std::vector<int> layerIndices;
+        layerIndices.reserve(frame.layers.size());
         for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+            layerIndices.push_back(layerIndex);
+        }
+
+        // 彩色モードでは、仕様に合わせて参照線・彩色・影指定の順序を固定する。
+        // Project のレイヤー配列自体は変更せず、表示順だけを変える。
+        if (displayMode == CanvasDisplayMode::Coloring) {
+            std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
+                const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
+                const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
+                return coloringLayerRank(typeA) < coloringLayerRank(typeB);
+            });
+        }
+
+        for (int layerIndex : layerIndices) {
             const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
-            if (!layer.visible || layer.opacity <= 0.0f) {
+            const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+            if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
                 continue;
             }
 
@@ -277,7 +328,6 @@ void CanvasRenderer::draw(const Frame& frame,
                 continue;
             }
 
-            const float displayOpacity = displayOpacityForLayer(layer);
             drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, alphaByte(displayOpacity)));
         }
     }
@@ -382,7 +432,7 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
             } else {
                 onionStroke.color = {1.0f, 0.30f, 0.25f, 1.0f};
             }
-            bakeStrokeByEngine(bitmap, onionStroke, opacity * displayOpacityForLayer(layer));
+            bakeStrokeByEngine(bitmap, onionStroke, opacity * displayOpacityForLayer(layer, CanvasDisplayMode::Drawing));
         }
     }
     onionRevisions_[key] = revision;

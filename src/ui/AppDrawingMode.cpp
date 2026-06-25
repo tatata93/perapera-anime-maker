@@ -336,6 +336,10 @@ Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Str
 } // namespace
 void App::drawDrawingMode()
 {
+    const bool isColoringMode = currentMode_ == AppMode::Coloring;
+    if (isColoringMode) {
+        selectPaintLayerForColoring(true);
+    }
     clampSelection();
     handleFrameShortcuts();
     updateFramePlayback();
@@ -366,6 +370,15 @@ void App::drawDrawingMode()
 }
 void App::drawLeftSidebar()
 {
+    if (currentMode_ == AppMode::Coloring) {
+        ImGui::TextUnformatted(u8c(u8"③.5 彩色モード"));
+        ImGui::TextWrapped(u8c(u8"Paintレイヤーを編集対象にし、Normal/ColorTrace/ShadowGuideを参照表示します。"));
+        if (ImGui::Button(u8c(u8"Paintレイヤーへ移動"), ImVec2(-1.0f, 0.0f))) {
+            selectPaintLayerForColoring(true);
+        }
+        ImGui::Separator();
+    }
+
     ui::drawBrushPanel(brushSettings_);
     ImGui::Separator();
     ui::drawColorPanel(colorPanelState_, brushSettings_);
@@ -390,7 +403,9 @@ void App::drawRightSidebar()
         ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
         return;
     }
-    ImGui::TextDisabled("Phase 1.5 Step 13 libmypaint dab connection");
+    ImGui::TextDisabled(currentMode_ == AppMode::Coloring
+        ? "Phase 1.5 Step 17 coloring mode"
+        : "Phase 1.5 Step 13 libmypaint dab connection");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -464,7 +479,10 @@ void App::drawCanvasArea(float rightWidth)
     const ImVec2 areaSize = ImGui::GetContentRegionAvail();
     fitCanvasToArea(areaSize);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const ImU32 background = ImGui::ColorConvertFloat4ToU32(ui::themeColors().canvasBackground);
+    const bool isColoringMode = currentMode_ == AppMode::Coloring;
+    const ImU32 background = isColoringMode
+        ? IM_COL32(255, 255, 255, 255)
+        : ImGui::ColorConvertFloat4ToU32(ui::themeColors().canvasBackground);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
     const bool drawAssistOverlays = !isPlayingFrames_ || !playbackSkipAssistOverlays_;
     if (drawAssistOverlays) {
@@ -485,7 +503,15 @@ void App::drawCanvasArea(float rightWidth)
     const Stroke* preview = (isDrawingStroke_
         && brushSettings_.tool == ui::ToolKind::Brush
         && !myPaintRealtimePreview) ? &currentStroke_ : nullptr;
-    canvasRenderer_.draw(*frame, activeLayerIndex_, preview, 1.0f, canvasView_, areaMin, areaSize, drawList);
+    canvasRenderer_.draw(*frame,
+                         activeLayerIndex_,
+                         preview,
+                         1.0f,
+                         canvasView_,
+                         isColoringMode ? CanvasDisplayMode::Coloring : CanvasDisplayMode::Drawing,
+                         areaMin,
+                         areaSize,
+                         drawList);
     if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
         drawLightweightEraserPreview(currentStroke_, canvasView_, areaMin, areaSize, drawList);
     }

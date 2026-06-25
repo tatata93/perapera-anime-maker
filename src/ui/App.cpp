@@ -4,6 +4,7 @@
 #include "ui/App.h"
 
 #include <algorithm>
+#include <utility>
 
 #include <imgui.h>
 
@@ -24,11 +25,12 @@ struct ModeInfo {
     const char* description;
 };
 
-constexpr std::array<ModeInfo, 6> kModes = {{
+constexpr std::array<ModeInfo, 7> kModes = {{
     {"1 プロジェクト", "プロジェクトモード", "作品とカットを管理する場所。Phase 1では空パネル。"},
     {"2 絵コンテ", "絵コンテモード", "絵コンテを描き、台詞・アクション・カメラ指示を書く場所。Phase 4で本実装。"},
     {"2.5 プリビズ", "プリビズモード", "3D下敷きや作画補助を扱う場所。Phase 2.5で本実装。"},
-    {"3 作画", "作画モード", "Phase 1で実装するメイン作画画面。"},
+    {"3 作画", "作画モード", "線画・ラフ・色トレス・影指定を編集する作画画面。"},
+    {"3.5 彩色", "彩色モード", "Paintレイヤーを主編集対象にし、線画・色トレスを参照表示して彩色する画面。"},
     {"4 撮影", "撮影モード", "セル重ね、カメラ、撮影効果を扱う場所。Phase 3で本実装。"},
     {"5 出力", "出力モード", "PNG連番やMP4を書き出す場所。Phase 1では右パネルから最小書き出し可能。"},
 }};
@@ -190,7 +192,11 @@ void App::drawModeTabs()
         }
 
         if (ImGui::Button(kModes[static_cast<std::size_t>(index)].tabLabel, ImVec2(150.0f, 28.0f))) {
-            currentMode_ = modeFromIndex(index);
+            const AppMode nextMode = modeFromIndex(index);
+            currentMode_ = nextMode;
+            if (currentMode_ == AppMode::Coloring) {
+                enterColoringMode();
+            }
         }
 
         if (selected) {
@@ -210,13 +216,55 @@ void App::drawModeTabs()
 
 void App::drawModeWorkspace()
 {
-    if (currentMode_ == AppMode::Drawing) {
+    if (currentMode_ == AppMode::Drawing || currentMode_ == AppMode::Coloring) {
         drawDrawingMode();
         return;
     }
 
     const ModeInfo& mode = kModes[static_cast<std::size_t>(modeIndex(currentMode_))];
     drawPlaceholderMode(mode.title, mode.description);
+}
+
+
+void App::enterColoringMode()
+{
+    brushSettings_.tool = ui::ToolKind::FloodFill;
+    if (selectPaintLayerForColoring(true)) {
+        lastMessage_ = "coloring mode: Paint layer active";
+    } else {
+        lastMessage_ = "coloring mode: no active frame";
+    }
+}
+
+bool App::selectPaintLayerForColoring(bool createIfMissing)
+{
+    Frame* frame = activeFrame();
+    if (frame == nullptr) {
+        return false;
+    }
+
+    for (int index = 0; index < static_cast<int>(frame->layers.size()); ++index) {
+        if (frame->layers[static_cast<std::size_t>(index)].type == LayerType::Paint) {
+            activeLayerIndex_ = index;
+            clampSelection();
+            return true;
+        }
+    }
+
+    if (!createIfMissing) {
+        return false;
+    }
+
+    pushUndoSnapshot();
+
+    Layer paintLayer = Layer::createDefault(static_cast<int>(frame->layers.size()) + 1);
+    paintLayer.name = "彩色";
+    paintLayer.type = LayerType::Paint;
+    paintLayer.opacity = 1.0f;
+    frame->layers.push_back(std::move(paintLayer));
+    activeLayerIndex_ = static_cast<int>(frame->layers.size()) - 1;
+    canvasRenderer_.markAllDirty();
+    return true;
 }
 
 void App::drawPlaceholderMode(const char* title, const char* description)

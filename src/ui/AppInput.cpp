@@ -330,8 +330,17 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
 
 void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
 {
+    if (currentMode_ == AppMode::Coloring) {
+        selectPaintLayerForColoring(true);
+    }
+
     Layer* layer = activeLayer();
     if (layer == nullptr) {
+        return;
+    }
+
+    if (currentMode_ == AppMode::Coloring && layer->type != LayerType::Paint) {
+        lastMessage_ = "coloring mode edits Paint layer only";
         return;
     }
 

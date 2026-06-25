@@ -18,6 +18,13 @@
 
 namespace perapera {
 
+// キャンバスの表示用途。
+// Drawing は通常作画、Coloring は彩色用の参照表示ルールを使う。
+enum class CanvasDisplayMode {
+    Drawing,
+    Coloring,
+};
+
 // ビューポートのパン・ズーム状態。
 // panX / panY は画面px単位の表示位置、zoom はキャンバスpxから画面pxへの倍率。
 struct CanvasView {
@@ -66,6 +73,7 @@ public:
               const Stroke* currentStroke,
               float currentStrokeOpacity,
               const CanvasView& view,
+              CanvasDisplayMode displayMode,
               ImVec2 areaMin,
               ImVec2 areaSize,
               ImDrawList* drawList);
