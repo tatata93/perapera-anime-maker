@@ -5,6 +5,7 @@
 // UIやImGuiを知らない純粋な処理にして、Paintレイヤーへ追加する塗りストロークを返す。
 // Phase 1.5 Step 18g: ColorTrace線の半透明エッジ下までPaintを潜り込ませる。
 // Phase 1.5 Step 18h: 1px白フチ対策としてPaintマスクの最終シールを追加。
+// Phase 1.5 Step 18i: MyPaint線の隙間と細い線のはみ出しを分けて抑える。
 
 #include <array>
 #include <string>
@@ -20,12 +21,12 @@ struct FloodFillSettings {
     int tolerance = 24;
 
     // 小さな隙間を閉じるため、壁マスクをこの半径pxだけ膨らませる。
-    int gapClosePx = 2;
+    int gapClosePx = 1;
 
     // 境界の下までPaintを潜り込ませる半径px。
     // 旧実装では内側へ縮めていたが、白い隙間の原因になったため、
     // 現在はNormal/ColorTrace線の半透明エッジ下まで塗りを伸ばす量として使う。
-    int insetPx = 6;
+    int insetPx = 5;
 
     // 閉じていない領域で塗りが画面全体へ流れた時の安全弁。
     // 0なら無効。45ならキャンバスの45%以上を塗ろうとした時点で中止する。

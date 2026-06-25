@@ -11,6 +11,10 @@
 // Phase 1.5 Step 18h:
 //   - BrushPanel側の境界下塗りpxクランプ漏れを前提に、1px白フチを消すための最終シールを追加。
 //   - Paintスパンの端と行間を少し重ね、CanvasBitmapのアンチエイリアス由来の白点を減らす。
+// Phase 1.5 Step 18i:
+//   - MyPaint線は低アルファまで壁として拾い、線画と塗りの隙間を減らす。
+//   - 細いSimple線では下塗りが線の外側へ抜けないよう、外側到達マスクで制限する。
+//   - Paintスパンストロークを太らせすぎない設定に戻し、細線の外側へ色が見える事故を減らす。
 
 #include "fill/FloodFill.h"
 
@@ -77,9 +81,10 @@ std::vector<std::uint8_t> dilatedMaskCopy(const std::vector<std::uint8_t>& mask,
 int underpaintIterationRadius(const FloodFillSettings& settings)
 {
     // UI上の0でも最低限の下塗りを行う。
-    // ColorTrace線は彩色モードで半透明表示されるため、線の芯だけでなく
-    // アンチエイリアス端の下までPaintが入っていないと白フチに見える。
-    return std::clamp(settings.insetPx, 0, 16) + 6;
+    // ただしStep 18hのように大きく足しすぎると、細いSimple線の外側まで
+    // Paintが見えることがある。Step 18iでは外側到達マスクで越境を止めるため、
+    // ここでは「線の半透明エッジを覆う」程度の半径に抑える。
+    return std::clamp(settings.insetPx, 0, 16) + 2;
 }
 
 void bakeStrokeToBitmap(CanvasBitmap& bitmap, const Stroke& stroke, float layerOpacity)
@@ -126,13 +131,17 @@ void addBitmapAlphaToMask(std::vector<std::uint8_t>& mask,
 }
 
 struct WallMasks {
-    // flood fill が越えてはいけない壁。小さな隙間閉じのため、硬めの線マスクを少し膨張する。
+    // flood fill が越えてはいけない壁。小さな隙間閉じのため、線マスクを少し膨張する。
     std::vector<std::uint8_t> wall;
 
     // 塗り確定後にPaintを潜り込ませてもよい範囲。
-    // ColorTraceの半透明エッジやアンチエイリアス端も含めるため、
-    // 非常に薄い線アルファから作った線周辺バンドを使う。
+    // ColorTrace/MyPaintの半透明エッジやアンチエイリアス端も含める。
     std::vector<std::uint8_t> underpaintBand;
+
+    // キャンバス外側から到達できる領域を求めるための壁。
+    // 下塗りはこの外側到達領域には入れない。これで細いSimple線の外側へ
+    // Paintが抜ける事故を抑える。
+    std::vector<std::uint8_t> exteriorBarrier;
 };
 
 WallMasks buildWallMasks(const Frame& frame,
@@ -144,15 +153,18 @@ WallMasks buildWallMasks(const Frame& frame,
     WallMasks masks;
     masks.wall.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
     masks.underpaintBand.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
+    masks.exteriorBarrier.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
 
     // tolerance が高いほど薄い線も壁として扱う。
-    // MyPaintの柔らかい線も壁にしたいので、旧実装より低めのしきい値から始める。
+    // MyPaintは線端や筆圧の弱い部分が低アルファになりやすいため、
+    // Step 18hより低いしきい値で壁に入れる。
+    // これで「追加したブラシの線画だけバケツとの間に隙間が残る」問題を抑える。
     const auto wallThreshold = static_cast<std::uint8_t>(
-        std::clamp(48 - settings.tolerance / 6, 4, 255));
+        std::clamp(24 - settings.tolerance / 12, 2, 255));
 
-    // 下塗り用は「壁として止めるか」ではなく「色を潜り込ませるべき線の存在」を見る。
-    // そのため、ColorTraceやMyPaintの薄いアンチエイリアス端も拾う。
-    constexpr std::uint8_t kUnderpaintLineThreshold = 1U;
+    // 下塗り・外側到達判定では、壁として止めるかではなく「線が存在するか」を見る。
+    // ColorTraceやMyPaintの薄いアンチエイリアス端も拾う。
+    constexpr std::uint8_t kLinePresenceThreshold = 1U;
 
     CanvasBitmap layerBitmap;
     layerBitmap.resize(nullptr, width, height);
@@ -173,17 +185,24 @@ WallMasks buildWallMasks(const Frame& frame,
         }
 
         addBitmapAlphaToMask(masks.wall, layerBitmap, width, height, wallThreshold);
-        addBitmapAlphaToMask(masks.underpaintBand, layerBitmap, width, height, kUnderpaintLineThreshold);
+        addBitmapAlphaToMask(masks.underpaintBand, layerBitmap, width, height, kLinePresenceThreshold);
+        addBitmapAlphaToMask(masks.exteriorBarrier, layerBitmap, width, height, kLinePresenceThreshold);
     }
 
     // 隙間閉じは「閉じていない線の小穴」をふさぐための壁膨張。
     // MyPaintの柔らかい線は端が薄くなるので、最低1pxだけ補強する。
+    // ただし細いSimple線で色が外へ見える原因にもなるため、既定値は1pxに抑える。
     const int wallGrowRadius = std::max(1, std::clamp(settings.gapClosePx, 0, 8));
     dilateMask(masks.wall, width, height, wallGrowRadius);
 
+    // 外側到達判定用の壁。ここは下塗りバンドほど太らせない。
+    // 太らせすぎると外側判定が過剰になり、逆に線外の色残りを検出できなくなる。
+    const int exteriorBarrierGrowRadius = std::max(1, std::min(wallGrowRadius, 2));
+    dilateMask(masks.exteriorBarrier, width, height, exteriorBarrierGrowRadius);
+
     // 下塗りバンドは線そのものだけでなく、線のすぐ内側/下側の白フチも含める。
-    // FloodFillの本体はwallで止めているため、後処理でこのバンド内だけPaintを広げる。
-    const int underpaintBandRadius = wallGrowRadius + underpaintIterationRadius(settings) + 2;
+    // Step 18iでは、このバンド内でも「外側から到達できる領域」にはPaintを入れない。
+    const int underpaintBandRadius = wallGrowRadius + underpaintIterationRadius(settings);
     masks.underpaintBand = dilatedMaskCopy(masks.underpaintBand, width, height, underpaintBandRadius);
     return masks;
 }
@@ -193,18 +212,70 @@ int countMaskPixels(const std::vector<std::uint8_t>& mask)
     return static_cast<int>(std::count(mask.begin(), mask.end(), static_cast<std::uint8_t>(1U)));
 }
 
+std::vector<std::uint8_t> buildExteriorReachableMask(const std::vector<std::uint8_t>& exteriorBarrier,
+                                                       int width,
+                                                       int height)
+{
+    // キャンバス外周から、線を越えずに到達できる場所を外側領域として扱う。
+    // 下塗りはこの外側領域へは広げない。
+    // これにより、細いSimple線の外側へPaintが見える問題を防ぐ。
+    std::vector<std::uint8_t> exterior(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
+    if (width <= 0 || height <= 0 || exteriorBarrier.empty()) {
+        return exterior;
+    }
+
+    std::vector<int> queue;
+    queue.reserve(static_cast<std::size_t>(width + height) * 2U);
+
+    auto enqueueIfOpen = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= width || y >= height) {
+            return;
+        }
+        const std::size_t idx = indexOf(x, y, width);
+        if (exterior[idx] != 0U || exteriorBarrier[idx] != 0U) {
+            return;
+        }
+        exterior[idx] = 1U;
+        queue.push_back(static_cast<int>(idx));
+    };
+
+    for (int x = 0; x < width; ++x) {
+        enqueueIfOpen(x, 0);
+        enqueueIfOpen(x, height - 1);
+    }
+    for (int y = 0; y < height; ++y) {
+        enqueueIfOpen(0, y);
+        enqueueIfOpen(width - 1, y);
+    }
+
+    std::size_t head = 0U;
+    while (head < queue.size()) {
+        const int current = queue[head++];
+        const int x = current % width;
+        const int y = current / width;
+        const int neighbors[4][2] = {{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}};
+        for (const auto& neighbor : neighbors) {
+            enqueueIfOpen(neighbor[0], neighbor[1]);
+        }
+    }
+
+    return exterior;
+}
+
 void bleedFilledMaskIntoUnderpaintBand(std::vector<std::uint8_t>& filled,
                                          const std::vector<std::uint8_t>& underpaintBand,
+                                         const std::vector<std::uint8_t>& exteriorReachable,
                                          int width,
                                          int height,
                                          int radius)
 {
     // 旧inset処理は塗りを境界から引っ込めるため、白い隙間の原因になった。
-    // Step 18eでは壁ピクセルだけに塗りを伸ばしたが、ColorTraceの薄いエッジは
-    // 壁判定から漏れることがある。ここでは線周辺の下塗りバンド内へ広げる。
-    // Paintレイヤーは線の下地として使うため、半透明エッジの下まで色を潜り込ませる。
+    // ただしStep 18hのように単純に線周辺へ広げるだけだと、細いSimple線では
+    // Paintが線の外側へ見えることがある。
+    // Step 18iでは、キャンバス外側から到達できる領域には下塗りを入れない。
+    // これにより「MyPaint線では隙間を埋める」「細い線では外へ漏らさない」を両立する。
     const int safeRadius = std::max(0, radius);
-    if (safeRadius <= 0 || filled.empty() || underpaintBand.empty()) {
+    if (safeRadius <= 0 || filled.empty() || underpaintBand.empty() || exteriorReachable.empty()) {
         return;
     }
 
@@ -219,7 +290,7 @@ void bleedFilledMaskIntoUnderpaintBand(std::vector<std::uint8_t>& filled,
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 const std::size_t center = indexOf(x, y, width);
-                if (filled[center] != 0U || underpaintBand[center] == 0U) {
+                if (filled[center] != 0U || underpaintBand[center] == 0U || exteriorReachable[center] != 0U) {
                     continue;
                 }
 
@@ -253,13 +324,14 @@ void bleedFilledMaskIntoUnderpaintBand(std::vector<std::uint8_t>& filled,
 
 void sealOnePixelGapsForPaintRasterization(std::vector<std::uint8_t>& filled,
                                            const std::vector<std::uint8_t>& underpaintBand,
+                                           const std::vector<std::uint8_t>& exteriorReachable,
                                            int width,
                                            int height)
 {
     // FloodFillのマスク上では埋まっていても、Paintは横スパンのブラシストロークとして保存される。
     // ブラシのアンチエイリアス・丸キャップ・整数化の都合で、ColorTrace線の直下に1pxだけ
     // 白点が残ることがあるため、線周辺バンド内の1px穴をPaint側の正データとして塞ぐ。
-    if (filled.empty() || underpaintBand.empty()) {
+    if (filled.empty() || underpaintBand.empty() || exteriorReachable.empty()) {
         return;
     }
 
@@ -277,7 +349,7 @@ void sealOnePixelGapsForPaintRasterization(std::vector<std::uint8_t>& filled,
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 const std::size_t center = indexOf(x, y, width);
-                if (filled[center] != 0U || sealBand[center] == 0U) {
+                if (filled[center] != 0U || sealBand[center] == 0U || exteriorReachable[center] != 0U) {
                     continue;
                 }
 
@@ -334,18 +406,18 @@ Stroke makeSpanStroke(int y, int x0, int x1, const std::array<float, 4>& color)
     stroke.opacity = 1.0f;
     stroke.brushEngine = StrokeBrushEngine::Simple;
 
-    // 細い横線では、斜め境界やアンチエイリアス部に白い点が残りやすい。
-    // 2px弱の重なりを持つスパンにして、CanvasBitmapの丸キャップ/AA由来の1px穴を塞ぐ。
-    // 塗り過ぎた部分はNormal/ColorTrace線の下に隠れるため、見た目上の白フチを優先する。
-    stroke.radiusPx = 1.85f;
+    // Step 18hでは白点を消すためにPaintスパンを太くしすぎ、
+    // 細いSimple線の外側へ塗り色が見える副作用があった。
+    // Step 18iではマスク側で1px穴を塞ぎ、ストローク側は必要最小限の太さに戻す。
+    stroke.radiusPx = 1.05f;
 
     const float fy = static_cast<float>(y) + 0.5f;
     if (x1 - x0 <= 1) {
         const float centerX = static_cast<float>(x0) + 0.5f;
         stroke.points.push_back(StrokePoint{centerX, fy, 1.0f});
     } else {
-        const float startX = static_cast<float>(x0) - 0.85f;
-        const float endX = static_cast<float>(x1) + 0.85f;
+        const float startX = static_cast<float>(x0) + 0.25f;
+        const float endX = static_cast<float>(x1) - 0.25f;
         stroke.points.push_back(StrokePoint{startX, fy, 1.0f});
         stroke.points.push_back(StrokePoint{endX, fy, 1.0f});
     }
@@ -440,9 +512,12 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
 
     // キャンバス表示にも白い隙間対策を反映するため、出力時だけでなく、
     // 保存されるPaintストローク自体をColorTrace線の半透明エッジ下まで伸ばす。
+    const std::vector<std::uint8_t> exteriorReachable =
+        buildExteriorReachableMask(masks.exteriorBarrier, width, height);
+
     const int underpaintRadius = underpaintIterationRadius(settings);
-    bleedFilledMaskIntoUnderpaintBand(filled, masks.underpaintBand, width, height, underpaintRadius);
-    sealOnePixelGapsForPaintRasterization(filled, masks.underpaintBand, width, height);
+    bleedFilledMaskIntoUnderpaintBand(filled, masks.underpaintBand, exteriorReachable, width, height, underpaintRadius);
+    sealOnePixelGapsForPaintRasterization(filled, masks.underpaintBand, exteriorReachable, width, height);
 
     result.filledPixelCount = countMaskPixels(filled);
     if (result.filledPixelCount <= 0) {
@@ -468,7 +543,7 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
 
     result.success = !result.strokes.empty();
     if (result.success) {
-        result.message = "filled with color-trace underpaint and 1px seal";
+        result.message = "filled with exterior-guarded underpaint";
     } else {
         result.message = "no spans generated";
     }
