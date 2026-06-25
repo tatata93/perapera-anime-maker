@@ -2,8 +2,13 @@
 // PNG書き出しを実装する。
 // 外部ライブラリ追加を避けるため、zlibの非圧縮deflateブロックを使う最小PNGエンコーダを内蔵する。
 // Phase 1.5 Step 15: 書き出しモードごとに対象レイヤーと背景を切り替える。
+// Phase 1.5 Step 18: Composite出力時だけColorTrace線を隣接Paint色で置換する。
+// Phase 1.5 Step 18c: ColorTrace色を残さず、線と塗りの白い隙間もPaint色で埋める。
 
 #include "io/PngExporter.h"
+
+#include "brush/MyPaintBrushEngine.h"
+#include "render/CanvasBitmap.h"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +20,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace perapera {
@@ -98,36 +104,215 @@ void stampCircle(ImageRgba& image, float cx, float cy, float radius,
     }
 }
 
-void rasterizeStroke(ImageRgba& image, const Stroke& stroke, float opacity)
+void rasterizeStrokeFallback(CanvasBitmap& bitmap, const Stroke& stroke, float opacity)
 {
-    if (stroke.points.empty()) {
+    bitmap.bakeStroke(stroke, opacity);
+}
+
+void rasterizeStrokeToBitmap(CanvasBitmap& bitmap, const Stroke& stroke)
+{
+    const float strokeOpacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
+
+    // Phase 1.5 Step 15b:
+    // PNG/MP4書き出しでも、表示キャッシュ再構築と同じくMyPaint経路を使う。
+    // Step15の単純ラスタライズだけだと、MyPaintで追加したブラシ設定が出力に反映されない。
+    if (stroke.brushEngine == StrokeBrushEngine::MyPaint) {
+        MyPaintBrushEngine myPaintEngine;
+        if (myPaintEngine.isLibraryAvailable()) {
+            myPaintEngine.bakeStroke(bitmap, stroke, strokeOpacity);
+            return;
+        }
+    }
+
+    rasterizeStrokeFallback(bitmap, stroke, strokeOpacity);
+}
+
+void blendLayerBitmap(ImageRgba& image, const CanvasBitmap& bitmap, float layerOpacity)
+{
+    const std::vector<std::uint8_t>& pixels = bitmap.pixelsRgba();
+    if (bitmap.width() != image.width || bitmap.height() != image.height || pixels.empty()) {
         return;
     }
 
-    const std::uint8_t r = toByte(stroke.color[0]);
-    const std::uint8_t g = toByte(stroke.color[1]);
-    const std::uint8_t b = toByte(stroke.color[2]);
-    const std::uint8_t a = toByte(stroke.color[3] * opacity);
-    const float baseRadius = std::max(0.5f, stroke.radiusPx);
-    const float spacing = std::max(0.5f, baseRadius * 0.5f);
-
-    if (stroke.points.size() == 1U) {
-        const StrokePoint& point = stroke.points.front();
-        stampCircle(image, point.x, point.y, baseRadius * std::clamp(point.pressure, 0.0f, 1.0f), r, g, b, a);
+    const float safeLayerOpacity = std::clamp(layerOpacity, 0.0f, 1.0f);
+    if (safeLayerOpacity <= 0.0f) {
         return;
     }
 
-    for (std::size_t index = 1; index < stroke.points.size(); ++index) {
-        const StrokePoint& p0 = stroke.points[index - 1U];
-        const StrokePoint& p1 = stroke.points[index];
-        const float dx = p1.x - p0.x;
-        const float dy = p1.y - p0.y;
-        const float length = std::sqrt(dx * dx + dy * dy);
-        const int steps = std::max(1, static_cast<int>(std::ceil(length / spacing)));
-        for (int step = 0; step <= steps; ++step) {
-            const float t = static_cast<float>(step) / static_cast<float>(steps);
-            const float pressure = p0.pressure + (p1.pressure - p0.pressure) * t;
-            stampCircle(image, p0.x + dx * t, p0.y + dy * t, baseRadius * std::clamp(pressure, 0.0f, 1.0f), r, g, b, a);
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
+                                        static_cast<std::size_t>(x)) * 4U;
+            const std::uint8_t sourceA = pixels[offset + 3U];
+            if (sourceA == 0U) {
+                continue;
+            }
+
+            const std::uint8_t blendedA = toByte((static_cast<float>(sourceA) / 255.0f) * safeLayerOpacity);
+            blendPixel(image, x, y, pixels[offset + 0U], pixels[offset + 1U], pixels[offset + 2U], blendedA);
+        }
+    }
+}
+
+
+bool sampleNearestPaintColor(const ImageRgba& paintReference,
+                             int centerX,
+                             int centerY,
+                             int maxRadius,
+                             std::array<std::uint8_t, 4U>& color)
+{
+    constexpr std::uint8_t kMinPaintAlpha = 8U;
+
+    for (int radius = 0; radius <= maxRadius; ++radius) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != radius) {
+                    continue;
+                }
+
+                const int x = centerX + dx;
+                const int y = centerY + dy;
+                if (x < 0 || y < 0 || x >= paintReference.width || y >= paintReference.height) {
+                    continue;
+                }
+
+                const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(paintReference.width) +
+                                            static_cast<std::size_t>(x)) * 4U;
+                if (paintReference.pixels[offset + 3U] <= kMinPaintAlpha) {
+                    continue;
+                }
+
+                color = {paintReference.pixels[offset + 0U],
+                         paintReference.pixels[offset + 1U],
+                         paintReference.pixels[offset + 2U],
+                         paintReference.pixels[offset + 3U]};
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool isProtectedDarkLinePixel(const ImageRgba& image, int x, int y)
+{
+    const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
+                                static_cast<std::size_t>(x)) * 4U;
+    if (image.pixels[offset + 3U] < 16U) {
+        return false;
+    }
+
+    // Normal線画の黒いアンチエイリアスをPaint色で潰さないための保護。
+    // 白い隙間だけを埋め、黒線そのものは必ず残す。
+    const int maxChannel = std::max({static_cast<int>(image.pixels[offset + 0U]),
+                                     static_cast<int>(image.pixels[offset + 1U]),
+                                     static_cast<int>(image.pixels[offset + 2U])});
+    return maxChannel < 96;
+}
+
+bool isBackgroundGapPixel(const ImageRgba& image, int x, int y)
+{
+    const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
+                                static_cast<std::size_t>(x)) * 4U;
+    if (image.pixels[offset + 3U] < 16U) {
+        return true;
+    }
+
+    // Composite書き出しは白背景なので、白に近いピクセルを「塗りと線の隙間」とみなす。
+    // 既にPaint色が入っている場所や黒線は触らない。
+    return image.pixels[offset + 0U] >= 235U &&
+           image.pixels[offset + 1U] >= 235U &&
+           image.pixels[offset + 2U] >= 235U;
+}
+
+void writePaintReplacementPixel(ImageRgba& image,
+                                int x,
+                                int y,
+                                const std::array<std::uint8_t, 4U>& color)
+{
+    if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
+        return;
+    }
+    if (isProtectedDarkLinePixel(image, x, y)) {
+        return;
+    }
+
+    const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
+                                static_cast<std::size_t>(x)) * 4U;
+    image.pixels[offset + 0U] = color[0U];
+    image.pixels[offset + 1U] = color[1U];
+    image.pixels[offset + 2U] = color[2U];
+    image.pixels[offset + 3U] = std::max(image.pixels[offset + 3U], color[3U]);
+}
+
+void accumulateLineMask(ImageRgba& mask, const CanvasBitmap& bitmap, float layerOpacity)
+{
+    const std::vector<std::uint8_t>& pixels = bitmap.pixelsRgba();
+    if (bitmap.width() != mask.width || bitmap.height() != mask.height || pixels.empty()) {
+        return;
+    }
+
+    const float safeLayerOpacity = std::clamp(layerOpacity, 0.0f, 1.0f);
+    if (safeLayerOpacity <= 0.0f) {
+        return;
+    }
+
+    for (int y = 0; y < mask.height; ++y) {
+        for (int x = 0; x < mask.width; ++x) {
+            const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(mask.width) +
+                                        static_cast<std::size_t>(x)) * 4U;
+            const std::uint8_t alpha = toByte((static_cast<float>(pixels[offset + 3U]) / 255.0f) * safeLayerOpacity);
+            if (alpha == 0U) {
+                continue;
+            }
+            mask.pixels[offset + 3U] = std::max(mask.pixels[offset + 3U], alpha);
+        }
+    }
+}
+
+void closePaintGapsNearLineMask(ImageRgba& image,
+                                const ImageRgba& lineMask,
+                                const ImageRgba& paintReference,
+                                int fillRadius,
+                                int paintSearchRadius)
+{
+    // Phase 1.5 Step 18c:
+    // バケツ塗りは漏れ防止のため少し内側に入ることがあり、線との間に白い隙間が残る。
+    // Composite出力時だけ、線の周囲にある白い隙間を近傍Paint色で埋める。
+    // Normal線の黒は保護し、ColorTrace線は描かずにPaint色へ吸収する。
+    constexpr std::uint8_t kMinLineAlpha = 8U;
+
+    for (int y = 0; y < lineMask.height; ++y) {
+        for (int x = 0; x < lineMask.width; ++x) {
+            const std::size_t lineOffset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(lineMask.width) +
+                                            static_cast<std::size_t>(x)) * 4U;
+            if (lineMask.pixels[lineOffset + 3U] <= kMinLineAlpha) {
+                continue;
+            }
+
+            for (int dy = -fillRadius; dy <= fillRadius; ++dy) {
+                for (int dx = -fillRadius; dx <= fillRadius; ++dx) {
+                    if (dx * dx + dy * dy > fillRadius * fillRadius) {
+                        continue;
+                    }
+
+                    const int targetX = x + dx;
+                    const int targetY = y + dy;
+                    if (targetX < 0 || targetY < 0 || targetX >= image.width || targetY >= image.height) {
+                        continue;
+                    }
+                    if (!isBackgroundGapPixel(image, targetX, targetY)) {
+                        continue;
+                    }
+
+                    std::array<std::uint8_t, 4U> replacementColor{};
+                    if (!sampleNearestPaintColor(paintReference, targetX, targetY, paintSearchRadius, replacementColor)) {
+                        continue;
+                    }
+
+                    writePaintReplacementPixel(image, targetX, targetY, replacementColor);
+                }
+            }
         }
     }
 }
@@ -151,6 +336,12 @@ bool shouldExportLayer(const Layer& layer, ExportMode mode)
     return true;
 }
 
+struct RenderedLayer {
+    LayerType type = LayerType::Normal;
+    float opacity = 1.0f;
+    CanvasBitmap bitmap;
+};
+
 ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode mode)
 {
     ImageRgba image;
@@ -162,14 +353,70 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
         fillBackground(image, 255U, 255U, 255U, 255U);
     }
 
+    std::vector<RenderedLayer> renderedLayers;
+    renderedLayers.reserve(frame.layers.size());
+
+    ImageRgba paintReference;
+    paintReference.width = image.width;
+    paintReference.height = image.height;
+    paintReference.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+
+    ImageRgba normalLineMask;
+    normalLineMask.width = image.width;
+    normalLineMask.height = image.height;
+    normalLineMask.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+
+    ImageRgba colorTraceMask;
+    colorTraceMask.width = image.width;
+    colorTraceMask.height = image.height;
+    colorTraceMask.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+
     for (const Layer& layer : frame.layers) {
         if (!layer.visible || layer.opacity <= 0.0f || !shouldExportLayer(layer, mode)) {
             continue;
         }
+
+        RenderedLayer rendered;
+        rendered.type = layer.type;
+        rendered.opacity = layer.opacity;
+        rendered.bitmap.resize(nullptr, image.width, image.height);
+        rendered.bitmap.clear();
+
         for (const Stroke& stroke : layer.strokes) {
-            rasterizeStroke(image, stroke, layer.opacity);
+            rasterizeStrokeToBitmap(rendered.bitmap, stroke);
         }
+
+        if (mode == ExportMode::Composite && layer.type == LayerType::Paint) {
+            // ColorTrace置換と白い隙間埋め用の参照色。
+            // 出力順に関係なくPaint色を拾えるよう、先に合成しておく。
+            blendLayerBitmap(paintReference, rendered.bitmap, layer.opacity);
+        }
+        if (mode == ExportMode::Composite && layer.type == LayerType::Normal) {
+            accumulateLineMask(normalLineMask, rendered.bitmap, layer.opacity);
+        }
+        if (mode == ExportMode::Composite && layer.type == LayerType::ColorTrace) {
+            accumulateLineMask(colorTraceMask, rendered.bitmap, layer.opacity);
+        }
+
+        renderedLayers.push_back(std::move(rendered));
     }
+
+    for (const RenderedLayer& rendered : renderedLayers) {
+        if (mode == ExportMode::Composite && rendered.type == LayerType::ColorTrace) {
+            // CompositeではColorTraceの赤・青・黄緑をそのまま描かない。
+            // 後段のclosePaintGapsNearLineMaskでPaint色に吸収する。
+            continue;
+        }
+        blendLayerBitmap(image, rendered.bitmap, rendered.opacity);
+    }
+
+    if (mode == ExportMode::Composite) {
+        // Normal線の周囲は小さく埋める。黒線そのものは保護する。
+        closePaintGapsNearLineMask(image, normalLineMask, paintReference, 3, 5);
+        // ColorTrace線は最終出力で色を残さず、少し広めにPaint色へ吸収する。
+        closePaintGapsNearLineMask(image, colorTraceMask, paintReference, 4, 18);
+    }
+
     return image;
 }
 
