@@ -214,19 +214,20 @@ void drawBrushPanel(BrushSettings& settings)
     settings.colorMix = std::clamp(settings.colorMix, 0.0f, 1.0f);
     settings.dryRate = std::clamp(settings.dryRate, 0.0f, 1.0f);
     settings.fillTolerance = std::clamp(settings.fillTolerance, 0, 255);
-    settings.fillGapClosePx = std::clamp(settings.fillGapClosePx, 0, 6);
-    settings.fillInsetPx = std::clamp(settings.fillInsetPx, 0, 6);
+    settings.fillGapClosePx = std::clamp(settings.fillGapClosePx, 0, 8);
+    settings.fillInsetPx = std::clamp(settings.fillInsetPx, 0, 16);
     settings.fillLeakGuardPercent = std::clamp(settings.fillLeakGuardPercent, 0, 100);
 
     if (settings.tool == ToolKind::FloodFill) {
         ImGui::Separator();
         ImGui::TextUnformatted(u8c(u8"バケツ塗り"));
         ImGui::SliderInt(u8c(u8"許容範囲"), &settings.fillTolerance, 0, 255);
-        ImGui::SliderInt(u8c(u8"隙間閉じpx"), &settings.fillGapClosePx, 0, 6);
-        ImGui::SliderInt(u8c(u8"境界下塗りpx"), &settings.fillInsetPx, 0, 6);
+        ImGui::SliderInt(u8c(u8"隙間閉じpx"), &settings.fillGapClosePx, 0, 8);
+        ImGui::SliderInt(u8c(u8"境界下塗りpx"), &settings.fillInsetPx, 0, 16);
         ImGui::SliderInt(u8c(u8"漏れ防止%"), &settings.fillLeakGuardPercent, 0, 100);
         ImGui::TextDisabled(u8c(u8"Paintレイヤー上でクリックして塗る"));
-        ImGui::TextDisabled(u8c(u8"境界下塗りは、輪郭線の下へ塗りを伸ばして白い隙間を減らす。"));
+        ImGui::TextDisabled(u8c(u8"境界下塗りは、色トレス線の半透明エッジ下まで塗りを伸ばす。"));
+        ImGui::TextDisabled(u8c(u8"1px白フチが残る時は 8〜12px へ上げて再塗りする。"));
         ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。ON時は面積が指定%を超えた塗りを止める。"));
     }
 
