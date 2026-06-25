@@ -13,6 +13,7 @@
 
 #include "core/Project.h"
 #include "core/Stroke.h"
+#include "brush/MyPaintBrushEngine.h"
 #include "render/CanvasRenderer.h"
 #include "ui/panels/BrushPanel.h"
 #include "ui/panels/ColorPanel.h"
@@ -40,6 +41,9 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     Project project_;
     CanvasRenderer canvasRenderer_;
+    // libmypaintブラシエンジン（逐次処理用）。
+    // PERAPERA_HAS_LIBMYPAINTが未定義の場合はSimple互換として動作する。
+    MyPaintBrushEngine myPaintEngine_;
     CanvasView canvasView_;
     AppMode currentMode_ = AppMode::Project;
 
@@ -53,6 +57,9 @@ private:
 
     Stroke currentStroke_;
     bool isDrawingStroke_ = false;
+    // MyPaintの逐次処理中かどうかのフラグ。
+    // beginStroke〜endStroke の間 true になる。
+    bool isMyPaintStrokeActive_ = false;
     bool canvasViewInitialized_ = false;
     bool onionPrevious_ = true;
     bool onionNext_ = false;

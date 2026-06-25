@@ -2,7 +2,7 @@
 
 // このファイルの役割:
 // CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
-// Phase 1.5 Step 3: Roughは半透明表示、ShadowGuideは参照用として表示できる。
+// v14: オニオンキャッシュのキーからFrame*を外し、frameIndex+前後種別だけで管理する。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -44,8 +44,22 @@ public:
 
     // 旧Step互換入口。現在はProject内のストローク点列を正本にし、次回drawで再構築する。
     void bakeStroke(int layerIndex, const Stroke& stroke, float opacity);
+
+    // Simple互換の確定時焼き込み入口。現状はbakeStrokeと同じくキャッシュ再構築へ委譲する。
+    void bakeStrokeOnLayer(int layerIndex, const Stroke& stroke, float opacity);
+
     void eraseCircle(int layerIndex, float canvasX, float canvasY, float radius);
     void clearLayer(int layerIndex);
+
+    // MyPaint逐次描画用。直近draw()対象のアクティブFrame/LayerのCanvasBitmapを返す。
+    CanvasBitmap* activeBitmap(int layerIndex);
+
+    // 指定レイヤーのCanvasBitmapポインタを返す。
+    // レイヤーが存在しない場合は nullptr を返す。
+    CanvasBitmap* bitmapForLayerPtr(int layerIndex);
+
+    // 逐次描画でCanvasBitmapへ直接描いたあと、Project側の点列追加とキャッシュrevisionを同期する。
+    void markActiveBitmapClean(int layerIndex, const Layer& layer);
 
     void draw(const Frame& frame,
               int activeLayerIndex,
@@ -89,6 +103,7 @@ private:
     };
 
     SDL_Renderer* renderer_ = nullptr;
+    const Frame* activeFrameForDirectAccess_ = nullptr;
     int canvasWidth_ = 0;
     int canvasHeight_ = 0;
 

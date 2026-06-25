@@ -316,7 +316,10 @@ void MyPaintBrushEngine::beginStroke(CanvasBitmap& canvas, const Stroke& strokeS
     configureBrush(brush, strokeSettings, opacity);
     mypaint_brush_new_stroke(brush);
 
-    state_ = std::make_unique<MyPaintState>();
+    // state_ は custom deleter 付き unique_ptr なので、std::make_unique の
+    // default_delete 付き unique_ptr は代入できない。
+    // ここでは reset(pointer) を使い、破棄は MyPaintStateDeleter に任せる。
+    state_.reset(new MyPaintState());
     state_->brush = brush;
 
     // configureBrush内でstroke色アルファとopacityをopaqueへ入れているため、

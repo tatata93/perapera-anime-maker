@@ -341,6 +341,7 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     }
 
     currentStroke_ = Stroke{};
+    isMyPaintStrokeActive_ = false;
     currentStroke_.color = brushSettings_.color;
     currentStroke_.radiusPx = brushSettings_.radiusPx;
     currentStroke_.brushEngine = brushSettings_.engine == ui::BrushEngineKind::MyPaint
@@ -362,7 +363,21 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
         currentStroke_.color = {1.0f, 0.2f, 0.2f, 0.75f};
     }
 
+    // MyPaintエンジンが選択されている場合は逐次処理を開始する。
+    // beginStroke() 内で brush の初期化と mypaint_brush_new_stroke() が走る。
+    isMyPaintStrokeActive_ = false;
+    if (brushSettings_.tool == ui::ToolKind::Brush &&
+        currentStroke_.brushEngine == StrokeBrushEngine::MyPaint &&
+        myPaintEngine_.isLibraryAvailable()) {
+        CanvasBitmap* bitmap = canvasRenderer_.bitmapForLayerPtr(activeLayerIndex_);
+        if (bitmap != nullptr) {
+            myPaintEngine_.beginStroke(*bitmap, currentStroke_, currentStroke_.opacity);
+            isMyPaintStrokeActive_ = true;
+        }
+    }
+
     isDrawingStroke_ = true;
+
     updateStroke(mouseScreen, areaMin, areaSize);
     (void)areaSize;
 }
@@ -379,8 +394,13 @@ void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     point.y = std::clamp(canvas.y, 0.0f, static_cast<float>(std::max(1, project_.canvas.height)));
     point.pressure = 1.0f;
 
+    const bool useMyPaintRealtime = isMyPaintStrokeActive_;
+
     if (currentStroke_.points.empty()) {
         currentStroke_.points.push_back(point);
+        if (useMyPaintRealtime) {
+            myPaintEngine_.addPoint(point, std::max(0.006f, ImGui::GetIO().DeltaTime));
+        }
         return;
     }
 
@@ -396,6 +416,9 @@ void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     const float minDistance = std::max(0.5f, currentStroke_.radiusPx * currentStroke_.spacing);
     if (distanceSquared(currentStroke_.points.back(), filteredPoint) >= minDistance * minDistance) {
         currentStroke_.points.push_back(filteredPoint);
+        if (useMyPaintRealtime) {
+            myPaintEngine_.addPoint(filteredPoint, std::max(0.006f, ImGui::GetIO().DeltaTime));
+        }
     }
 }
 

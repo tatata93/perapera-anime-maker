@@ -481,7 +481,10 @@ void App::drawCanvasArea(float rightWidth)
         }
         drawLightTableOverlay(areaMin, areaSize, drawList);
     }
-    const Stroke* preview = (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Brush) ? &currentStroke_ : nullptr;
+    const bool myPaintRealtimePreview = isMyPaintStrokeActive_;
+    const Stroke* preview = (isDrawingStroke_
+        && brushSettings_.tool == ui::ToolKind::Brush
+        && !myPaintRealtimePreview) ? &currentStroke_ : nullptr;
     canvasRenderer_.draw(*frame, activeLayerIndex_, preview, 1.0f, canvasView_, areaMin, areaSize, drawList);
     if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
         drawLightweightEraserPreview(currentStroke_, canvasView_, areaMin, areaSize, drawList);
@@ -515,27 +518,55 @@ void App::finishStroke()
     if (!isDrawingStroke_) {
         return;
     }
+
+    const bool useMyPaintRealtime = isMyPaintStrokeActive_;
+
     if (!currentStroke_.points.empty()) {
         pushUndoSnapshot();
         Layer* layer = activeLayer();
         if (layer != nullptr) {
             if (brushSettings_.tool == ui::ToolKind::Brush) {
-                layer->strokes.push_back(currentStroke_);
-                canvasRenderer_.markAllDirty();
-                lastMessage_ = "stroke committed to active frame";
+                if (useMyPaintRealtime) {
+                    // MyPaint逐次処理: ピクセルはaddPoint()で書き込み済み。
+                    // bakeStrokeは呼ばない。点列の保存とendStroke()のみ。
+                    myPaintEngine_.endStroke();
+                    isMyPaintStrokeActive_ = false;
+                    layer->strokes.push_back(currentStroke_);
+
+                    // markAllDirtyは不要。ここでは直接描画済みCanvasBitmapとProject点列のrevisionだけ同期する。
+                    canvasRenderer_.markActiveBitmapClean(activeLayerIndex_, *layer);
+                    lastMessage_ = "MyPaint stroke committed";
+                } else {
+                    // Simple互換: 確定時にbakeStrokeで焼き込む。
+                    layer->strokes.push_back(currentStroke_);
+                    canvasRenderer_.bakeStrokeOnLayer(activeLayerIndex_, currentStroke_, currentStroke_.opacity);
+                    canvasRenderer_.markAllDirty();
+                    lastMessage_ = "stroke committed to active frame";
+                }
             } else {
                 removeIntersectingStrokes(currentStroke_);
                 canvasRenderer_.markAllDirty();
             }
         }
+    } else if (useMyPaintRealtime) {
+        myPaintEngine_.endStroke();
     }
+
     currentStroke_ = Stroke{};
     isDrawingStroke_ = false;
+    isMyPaintStrokeActive_ = false;
 }
 void App::cancelStroke()
 {
+    const bool useMyPaintRealtime = isMyPaintStrokeActive_;
+    if (useMyPaintRealtime) {
+        myPaintEngine_.endStroke();
+        // 未確定の直接描画ピクセルを捨てるため、保存済みストロークから再構築する。
+        canvasRenderer_.markAllDirty();
+    }
     currentStroke_ = Stroke{};
     isDrawingStroke_ = false;
+    isMyPaintStrokeActive_ = false;
 }
 void App::removeIntersectingStrokes(const Stroke& eraserStroke)
 {

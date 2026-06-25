@@ -72,11 +72,12 @@ void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacit
 {
     const float strokeOpacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
     const float combinedOpacity = std::clamp(opacity * strokeOpacity, 0.0f, 1.0f);
-    if (stroke.brushEngine == StrokeBrushEngine::MyPaint) {
-        MyPaintBrushEngine engine;
-        engine.bakeStroke(bitmap, stroke, combinedOpacity);
-        return;
-    }
+
+    // Step 14c:
+    // MyPaintはドラッグ中逐次描画でCanvasBitmapへ直接dabを入れる。
+    // 保存データ・オニオン・読み込み後再構築では、確定時一括libmypaint処理を避けるためSimple互換で再ベイクする。
+    // これで長いMyPaintストロークを持つレイヤーを再表示してもUIが止まりにくい。
+    (void)stroke.brushEngine;
     bitmap.bakeStroke(stroke, combinedOpacity);
 }
 
@@ -179,6 +180,11 @@ void CanvasRenderer::bakeStroke(int layerIndex, const Stroke& stroke, float opac
     markAllDirty();
 }
 
+void CanvasRenderer::bakeStrokeOnLayer(int layerIndex, const Stroke& stroke, float opacity)
+{
+    bakeStroke(layerIndex, stroke, opacity);
+}
+
 void CanvasRenderer::eraseCircle(int layerIndex, float canvasX, float canvasY, float radius)
 {
     (void)layerIndex;
@@ -194,6 +200,44 @@ void CanvasRenderer::clearLayer(int layerIndex)
     markAllDirty();
 }
 
+CanvasBitmap* CanvasRenderer::activeBitmap(int layerIndex)
+{
+    if (activeFrameForDirectAccess_ == nullptr || renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0) {
+        return nullptr;
+    }
+    if (layerIndex < 0 || layerIndex >= static_cast<int>(activeFrameForDirectAccess_->layers.size())) {
+        return nullptr;
+    }
+
+    const Layer& layer = activeFrameForDirectAccess_->layers[static_cast<std::size_t>(layerIndex)];
+    rebuildLayerBitmapIfNeeded(*activeFrameForDirectAccess_, layerIndex, layer);
+
+    CanvasBitmap& bitmap = bitmapForLayer(*activeFrameForDirectAccess_, layerIndex);
+    if (bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_ || !bitmap.hasTexture()) {
+        bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
+    }
+    return &bitmap;
+}
+
+CanvasBitmap* CanvasRenderer::bitmapForLayerPtr(int layerIndex)
+{
+    return activeBitmap(layerIndex);
+}
+
+void CanvasRenderer::markActiveBitmapClean(int layerIndex, const Layer& layer)
+{
+    if (activeFrameForDirectAccess_ == nullptr || layerIndex < 0) {
+        return;
+    }
+
+    const LayerCacheKey key{activeFrameForDirectAccess_, layerIndex};
+    layerRevisions_[key] = layerRevisionHash(layer);
+
+    // このフレームを前後オニオンとして使っているキャッシュは古くなる可能性がある。
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
+}
+
 void CanvasRenderer::draw(const Frame& frame,
                           int activeLayerIndex,
                           const Stroke* currentStroke,
@@ -203,6 +247,8 @@ void CanvasRenderer::draw(const Frame& frame,
                           ImVec2 areaSize,
                           ImDrawList* drawList)
 {
+    activeFrameForDirectAccess_ = &frame;
+
     if (drawList == nullptr) {
         return;
     }
