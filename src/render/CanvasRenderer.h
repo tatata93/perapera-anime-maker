@@ -4,6 +4,7 @@
 // CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
 // v14: オニオンキャッシュのキーからFrame*を外し、frameIndex+前後種別だけで管理する。
 // Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、frame.name + layer.layerId で管理する。
+// Phase 1.5 Step 19l: 再生時の毎フレーム全StrokePoint hashを廃止し、Layer::revisionCounterベースにする。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -126,7 +127,6 @@ private:
     void rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
 
-    std::uint64_t layerRevisionHash(const Layer& layer) const;
     std::uint64_t frameRevisionHash(const Frame& frame) const;
 
     void drawBitmap(CanvasBitmap& bitmap,

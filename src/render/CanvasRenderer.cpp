@@ -6,6 +6,7 @@
 // Phase 1.5 Step 19d: Paintレイヤー内ではFillStrokeを先に焼き、線・手描きストロークを後から焼く。
 //   FillStrokeのrevision hashはポインタではなく内容サンプルで計算する。
 // Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、再生中のFrameコピーでも再ベイクを避ける。
+// Phase 1.5 Step 19l: layerRevisionHashの全StrokePoint走査を廃止し、Layer::revisionCounterベースにする。
 
 #include "render/CanvasRenderer.h"
 
@@ -17,7 +18,6 @@
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace perapera {
@@ -105,10 +105,6 @@ std::uint64_t hashFloat(float value)
     return std::hash<int>{}(static_cast<int>(std::lround(value * 1000.0f)));
 }
 
-std::uint64_t hashString(const char* value)
-{
-    return std::hash<std::string_view>{}(std::string_view(value));
-}
 
 void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacity)
 {
@@ -145,6 +141,19 @@ std::string layerCacheId(const Layer& layer, int layerIndex)
         return layer.layerId;
     }
     return std::string{"layer_"} + std::to_string(layerIndex);
+}
+
+std::uint64_t layerRevisionValue(const Layer& layer)
+{
+    // 再生中に全ストローク/全点を毎フレームhashしない。
+    // 明示revisionと軽量メタ情報だけでキャッシュ判定する。
+    std::uint64_t seed = 1099511628211ULL;
+    hashCombine(seed, layer.revisionCounter);
+    hashCombine(seed, layer.visible ? 1ULL : 0ULL);
+    hashCombine(seed, hashFloat(layer.opacity));
+    hashCombine(seed, static_cast<std::uint64_t>(layer.type));
+    hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
+    return seed;
 }
 
 } // namespace
@@ -292,7 +301,7 @@ void CanvasRenderer::markActiveBitmapClean(int layerIndex, const Layer& layer)
     }
 
     const LayerCacheKey key{frameCacheId(*activeFrameForDirectAccess_), layerCacheId(layer, layerIndex)};
-    layerRevisions_[key] = layerRevisionHash(layer);
+    layerRevisions_[key] = layerRevisionValue(layer);
 
     // このフレームを前後オニオンとして使っているキャッシュは古くなる可能性がある。
     onionBitmaps_.clear();
@@ -405,7 +414,7 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerInd
 {
     CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
     const LayerCacheKey key{frameCacheId(frame), layerCacheId(layer, layerIndex)};
-    const std::uint64_t revision = layerRevisionHash(layer);
+    const std::uint64_t revision = layerRevisionValue(layer);
     const auto revisionIt = layerRevisions_.find(key);
     const bool needsRebuild = revisionIt == layerRevisions_.end()
         || revisionIt->second != revision
@@ -533,67 +542,15 @@ void CanvasRenderer::drawCurrentStrokePreview(const Stroke& stroke,
     }
 }
 
-std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
-{
-    std::uint64_t seed = 1099511628211ULL;
-    hashCombine(seed, layer.visible ? 1ULL : 0ULL);
-    hashCombine(seed, hashFloat(layer.opacity));
-    hashCombine(seed, static_cast<std::uint64_t>(layer.type));
-    hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
-
-    for (const Stroke& stroke : layer.strokes) {
-        hashCombine(seed, hashFloat(stroke.radiusPx));
-        hashCombine(seed, hashString(strokeBrushEngineToString(stroke.brushEngine)));
-        hashCombine(seed, hashFloat(stroke.opacity));
-        hashCombine(seed, hashFloat(stroke.hardness));
-        hashCombine(seed, hashFloat(stroke.spacing));
-        hashCombine(seed, hashFloat(stroke.pressureToSize));
-        hashCombine(seed, hashFloat(stroke.pressureToOpacity));
-        hashCombine(seed, hashFloat(stroke.watercolorBleed));
-        hashCombine(seed, hashFloat(stroke.colorMix));
-        hashCombine(seed, hashFloat(stroke.dryRate));
-        for (float component : stroke.color) {
-            hashCombine(seed, hashFloat(component));
-        }
-        hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
-        for (const StrokePoint& point : stroke.points) {
-            hashCombine(seed, hashFloat(point.x));
-            hashCombine(seed, hashFloat(point.y));
-            hashCombine(seed, hashFloat(point.pressure));
-        }
-
-        if (stroke.brushEngine == StrokeBrushEngine::Fill) {
-            hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
-            hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
-            hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
-            // FillStroke の再ベイク判定では pointer address を絶対に使わない。
-            // 先頭・中央・末尾だけでは、塗り範囲が変わっても同じ値になり得るため、
-            // 最大64点を等間隔にサンプリングして内容hashに含める。
-            if (!stroke.bitmap.empty()) {
-                const std::size_t sampleCount = std::min<std::size_t>(64U, stroke.bitmap.size());
-                const std::size_t lastIndex = stroke.bitmap.size() - 1U;
-                for (std::size_t sample = 0; sample < sampleCount; ++sample) {
-                    const std::size_t index = sampleCount <= 1U
-                        ? 0U
-                        : (sample * lastIndex) / (sampleCount - 1U);
-                    hashCombine(seed, static_cast<std::uint64_t>(index));
-                    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap[index]));
-                }
-            }
-        }
-    }
-
-    return seed;
-}
-
 std::uint64_t CanvasRenderer::frameRevisionHash(const Frame& frame) const
 {
+    // OnionSkin用。ここでも全StrokePointは走査しない。
     std::uint64_t seed = 1469598103934665603ULL;
     hashCombine(seed, static_cast<std::uint64_t>(frame.layers.size()));
     hashCombine(seed, static_cast<std::uint64_t>(frame.durationFrames));
 
     for (const Layer& layer : frame.layers) {
-        hashCombine(seed, layerRevisionHash(layer));
+        hashCombine(seed, layerRevisionValue(layer));
     }
 
     return seed;

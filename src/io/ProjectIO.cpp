@@ -3,6 +3,7 @@
 // UIや描画キャッシュには依存せず、ドメインデータだけを扱う。
 // Phase 1.5 Step 19では、バケツ塗り専用FillStrokeの1chマスクを保存する。
 // Phase 1.5 Step 19k: FillStrokeのbitmapはJSONへBase64埋め込みせず、layer_NNN_fills.binへ分離して保存する。
+// Phase 1.5 Step 19l: fills.binを width*height 生バイト形式へ整理し、Base64保存経路を使わない。
 
 #include "io/ProjectIO.h"
 
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -191,7 +193,6 @@ std::vector<Stroke> loadFillStrokesFile(const fs::path& path)
     for (std::uint32_t strokeIndex = 0U; strokeIndex < strokeCount; ++strokeIndex) {
         std::uint32_t bitmapWidth = 0U;
         std::uint32_t bitmapHeight = 0U;
-        std::uint32_t byteCount = 0U;
         Stroke stroke;
         stroke.brushEngine = StrokeBrushEngine::Fill;
 
@@ -203,19 +204,19 @@ std::vector<Stroke> loadFillStrokesFile(const fs::path& path)
                 return {};
             }
         }
-        if (!readFloat32(file, stroke.opacity) || !readUint32(file, byteCount)) {
+        if (!readFloat32(file, stroke.opacity)) {
             return {};
         }
 
         const std::uint64_t expectedSize = static_cast<std::uint64_t>(bitmapWidth) * static_cast<std::uint64_t>(bitmapHeight);
-        if (bitmapWidth == 0U || bitmapHeight == 0U || byteCount != expectedSize) {
+        if (bitmapWidth == 0U || bitmapHeight == 0U || expectedSize > static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())) {
             return {};
         }
 
         stroke.bitmapWidth = static_cast<int>(bitmapWidth);
         stroke.bitmapHeight = static_cast<int>(bitmapHeight);
         stroke.opacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
-        stroke.bitmap.resize(static_cast<std::size_t>(byteCount));
+        stroke.bitmap.resize(static_cast<std::size_t>(expectedSize));
         file.read(reinterpret_cast<char*>(stroke.bitmap.data()), static_cast<std::streamsize>(stroke.bitmap.size()));
         if (!file) {
             return {};
@@ -230,7 +231,11 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
 {
     std::uint32_t fillCount = 0U;
     for (const Stroke& stroke : layer.strokes) {
-        if (stroke.brushEngine == StrokeBrushEngine::Fill && !stroke.bitmap.empty() && stroke.bitmapWidth > 0 && stroke.bitmapHeight > 0) {
+        const std::uint64_t expectedSize = static_cast<std::uint64_t>(stroke.bitmapWidth) * static_cast<std::uint64_t>(stroke.bitmapHeight);
+        if (stroke.brushEngine == StrokeBrushEngine::Fill
+            && stroke.bitmapWidth > 0
+            && stroke.bitmapHeight > 0
+            && expectedSize == static_cast<std::uint64_t>(stroke.bitmap.size())) {
             ++fillCount;
         }
     }
@@ -247,20 +252,20 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
 
     writeUint32(file, fillCount);
     for (const Stroke& stroke : layer.strokes) {
-        if (stroke.brushEngine != StrokeBrushEngine::Fill || stroke.bitmap.empty() || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0) {
+        const std::uint64_t expectedSize = static_cast<std::uint64_t>(stroke.bitmapWidth) * static_cast<std::uint64_t>(stroke.bitmapHeight);
+        if (stroke.brushEngine != StrokeBrushEngine::Fill
+            || stroke.bitmapWidth <= 0
+            || stroke.bitmapHeight <= 0
+            || expectedSize != static_cast<std::uint64_t>(stroke.bitmap.size())) {
             continue;
         }
 
-        const std::uint32_t bitmapWidth = static_cast<std::uint32_t>(stroke.bitmapWidth);
-        const std::uint32_t bitmapHeight = static_cast<std::uint32_t>(stroke.bitmapHeight);
-        const std::uint32_t byteCount = static_cast<std::uint32_t>(stroke.bitmap.size());
-        writeUint32(file, bitmapWidth);
-        writeUint32(file, bitmapHeight);
+        writeUint32(file, static_cast<std::uint32_t>(stroke.bitmapWidth));
+        writeUint32(file, static_cast<std::uint32_t>(stroke.bitmapHeight));
         for (float component : stroke.color) {
             writeFloat32(file, component);
         }
         writeFloat32(file, stroke.opacity);
-        writeUint32(file, byteCount);
         file.write(reinterpret_cast<const char*>(stroke.bitmap.data()), static_cast<std::streamsize>(stroke.bitmap.size()));
         if (!file) {
             setError(errorMessage, "failed to write fill binary: " + path.string());

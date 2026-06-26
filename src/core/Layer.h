@@ -4,6 +4,7 @@
 // 1フレーム内の1枚の作画レイヤーを表す。
 // レイヤーはストローク集合を持つが、SDL_Textureなどの描画キャッシュは持たない。
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,6 +33,14 @@ struct Layer {
     std::string blendMode = "normal";
     LayerType type = LayerType::Normal;
     std::vector<Stroke> strokes;
+
+    // 表示キャッシュ用の軽量revision。
+    // ストローク追加/削除/編集やレイヤー属性変更時にインクリメントする。
+    // 保存/読み込みでは永続化せず、読み込み直後は0でよい。
+    // CanvasRenderer は全StrokePointを毎フレーム走査せず、この値と軽量メタ情報だけを見る。
+    std::uint64_t revisionCounter = 0U;
+
+    void touchRevision() noexcept { ++revisionCounter; }
 
     static Layer createDefault(int layerNumber);
 };
