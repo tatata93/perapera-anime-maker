@@ -3,6 +3,8 @@
 // 1レイヤー=1枚のCanvasBitmapという仕様を守り、毎フレーム全ストロークをDrawListへ積まない。
 // Phase 1.5 Step 3: Roughを半透明にし、LayerTypeを表示キャッシュの判定に含める。
 // Phase 1.5 Step 19b: Drawing表示でもPaintを線画より下に描き、線画が塗りで隠れないようにする。
+// Phase 1.5 Step 19d: Paintレイヤー内ではFillStrokeを先に焼き、線・手描きストロークを後から焼く。
+//   FillStrokeのrevision hashはポインタではなく内容サンプルで計算する。
 
 #include "render/CanvasRenderer.h"
 
@@ -328,7 +330,11 @@ void CanvasRenderer::draw(const Frame& frame,
 
             rebuildLayerBitmapIfNeeded(frame, layerIndex, layer);
             CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
-            if (!bitmap.uploadIfDirty(renderer_)) {
+
+            // uploadIfDirty() の false は「更新不要」も含む。
+            // 既にGPU上に有効なTextureがあるなら、dirtyでなくても毎フレーム描画する。
+            bitmap.uploadIfDirty(renderer_);
+            if (!bitmap.hasTexture()) {
                 continue;
             }
 
@@ -365,7 +371,10 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
 
     rebuildOnionBitmapIfNeeded(frame, frameIndex, isPrevious, opacity);
     CanvasBitmap& bitmap = onionBitmaps_.at(OnionCacheKey{frameIndex, isPrevious});
-    if (!bitmap.uploadIfDirty(renderer_)) {
+
+    // オニオンスキンも通常レイヤーと同じく、更新不要でも既存Textureは描く。
+    bitmap.uploadIfDirty(renderer_);
+    if (!bitmap.hasTexture()) {
         return;
     }
 
@@ -396,9 +405,27 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerInd
 
     bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
     bitmap.clear();
-    for (const Stroke& stroke : layer.strokes) {
-        bakeStrokeByEngine(bitmap, stroke, 1.0f);
+
+    if (layer.type == LayerType::Paint) {
+        // Paintレイヤー内では、面塗りであるFillStrokeを必ず先に焼く。
+        // その後にPaintレイヤー上の手描き線や旧Simpleストロークを焼くことで、
+        // バケツ塗り後に同一レイヤー内の線が塗りで消える事故を防ぐ。
+        for (const Stroke& stroke : layer.strokes) {
+            if (stroke.brushEngine == StrokeBrushEngine::Fill) {
+                bakeStrokeByEngine(bitmap, stroke, 1.0f);
+            }
+        }
+        for (const Stroke& stroke : layer.strokes) {
+            if (stroke.brushEngine != StrokeBrushEngine::Fill) {
+                bakeStrokeByEngine(bitmap, stroke, 1.0f);
+            }
+        }
+    } else {
+        for (const Stroke& stroke : layer.strokes) {
+            bakeStrokeByEngine(bitmap, stroke, 1.0f);
+        }
     }
+
     layerRevisions_[key] = revision;
 }
 
@@ -525,13 +552,19 @@ std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
             hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
             hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
             hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
-            // FillStroke の再ベイク判定では、bitmap のポインタアドレスを使わない。
-            // vector 内のストロークが同じ場所に残ると、内容が変わっても pointer hash が
-            // 変わらず、markAllDirty 後の再ベイク抜けに見えることがあるため。
+            // FillStroke の再ベイク判定では pointer address を絶対に使わない。
+            // 先頭・中央・末尾だけでは、塗り範囲が変わっても同じ値になり得るため、
+            // 最大64点を等間隔にサンプリングして内容hashに含める。
             if (!stroke.bitmap.empty()) {
-                hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.front()));
-                hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap[stroke.bitmap.size() / 2U]));
-                hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.back()));
+                const std::size_t sampleCount = std::min<std::size_t>(64U, stroke.bitmap.size());
+                const std::size_t lastIndex = stroke.bitmap.size() - 1U;
+                for (std::size_t sample = 0; sample < sampleCount; ++sample) {
+                    const std::size_t index = sampleCount <= 1U
+                        ? 0U
+                        : (sample * lastIndex) / (sampleCount - 1U);
+                    hashCombine(seed, static_cast<std::uint64_t>(index));
+                    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap[index]));
+                }
             }
         }
     }
