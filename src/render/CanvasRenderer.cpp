@@ -2,6 +2,7 @@
 // CanvasRendererの実装。
 // 1レイヤー=1枚のCanvasBitmapという仕様を守り、毎フレーム全ストロークをDrawListへ積まない。
 // Phase 1.5 Step 3: Roughを半透明にし、LayerTypeを表示キャッシュの判定に含める。
+// Phase 1.5 Step 19b: Drawing表示でもPaintを線画より下に描き、線画が塗りで隠れないようにする。
 
 #include "render/CanvasRenderer.h"
 
@@ -60,12 +61,12 @@ float displayOpacityForLayer(const Layer& layer, CanvasDisplayMode displayMode)
     return layer.opacity;
 }
 
-int coloringLayerRank(LayerType type)
+int displayLayerRank(LayerType type)
 {
-    // Phase 1.5 Step 18e:
-    // 彩色モードではPaintを線画の下に表示する。
-    // バケツ塗りは輪郭線の下へ少し潜り込ませるため、
-    // Paintを先に描いてNormal/ColorTraceを後から重ねるとキャンバス上でも白い隙間が見えにくい。
+    // Paintは常に線画より下へ表示する。
+    // FillStroke化後はPaintが正しい面塗りとして残るため、
+    // Drawingモードでもレイヤー配列順のまま描くと、PaintがNormal/ColorTraceを隠す場合がある。
+    // その結果、ドラッグ中のプレビューだけ見えて、確定後に線が消えたように見える。
     switch (type) {
     case LayerType::Paint:
         return 0;
@@ -309,15 +310,14 @@ void CanvasRenderer::draw(const Frame& frame,
             layerIndices.push_back(layerIndex);
         }
 
-        // 彩色モードでは、仕様に合わせて参照線・彩色・影指定の順序を固定する。
         // Project のレイヤー配列自体は変更せず、表示順だけを変える。
-        if (displayMode == CanvasDisplayMode::Coloring) {
-            std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
-                const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
-                const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
-                return coloringLayerRank(typeA) < coloringLayerRank(typeB);
-            });
-        }
+        // Paintは面塗りなので、Drawing/ColoringのどちらでもNormal/ColorTraceより先に描く。
+        // これで線画確定後にPaintレイヤーへ隠れて「線が消えた」ように見える問題を防ぐ。
+        std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
+            const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
+            const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
+            return displayLayerRank(typeA) < displayLayerRank(typeB);
+        });
 
         for (int layerIndex : layerIndices) {
             const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
