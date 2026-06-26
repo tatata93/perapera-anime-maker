@@ -7,6 +7,7 @@
 //   FillStrokeのrevision hashはポインタではなく内容サンプルで計算する。
 // Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、再生中のFrameコピーでも再ベイクを避ける。
 // Phase 1.5 Step 19l: layerRevisionHashの全StrokePoint走査を廃止し、Layer::revisionCounterベースにする。
+// Phase 1.5 Step 19m: frameIndexキー入口とO(1) revision stampで再生時のCPU負荷をさらに抑える。
 
 #include "render/CanvasRenderer.h"
 
@@ -126,11 +127,15 @@ void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacit
     bitmap.bakeStroke(stroke, combinedOpacity);
 }
 
-std::string frameCacheId(const Frame& frame)
+std::string frameCacheId(const Frame& frame, int frameIndex)
 {
-    // 現在のFrame型は少なくとも name を持つ。別ブランチにある frameId へ直接依存すると
-    // 既存リポジトリでコンパイルできないため、ここでは論理フレーム名をキャッシュキーにする。
-    // 再生時にFrameがコピーされても name は維持されるので、Frame* より安定する。
+    // 再生時は呼び出し元から渡される論理フレーム番号を最優先に使う。
+    // Frame名はユーザー編集可能なので、同名フレームがあるとキャッシュ衝突する。
+    if (frameIndex >= 0) {
+        return std::string{"frame_index_"} + std::to_string(frameIndex);
+    }
+
+    // 旧互換入口ではFrame名へフォールバックする。
     return frame.name.empty() ? std::string{"frame"} : frame.name;
 }
 
@@ -143,16 +148,46 @@ std::string layerCacheId(const Layer& layer, int layerIndex)
     return std::string{"layer_"} + std::to_string(layerIndex);
 }
 
+void hashStrokeO1(std::uint64_t& seed, const Stroke& stroke)
+{
+    // 再生中の毎フレーム判定ではStrokePoint全走査をしない。
+    // size / vector storage / 端点に近い軽量メタ情報だけで、通常のpush/erase/代入を検知する。
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.brushEngine));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
+    hashCombine(seed, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stroke.points.data())));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
+    hashCombine(seed, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stroke.bitmap.data())));
+    hashCombine(seed, hashFloat(stroke.opacity));
+    hashCombine(seed, hashFloat(stroke.radiusPx));
+    if (!stroke.points.empty()) {
+        hashCombine(seed, hashFloat(stroke.points.front().x));
+        hashCombine(seed, hashFloat(stroke.points.front().y));
+        hashCombine(seed, hashFloat(stroke.points.back().x));
+        hashCombine(seed, hashFloat(stroke.points.back().y));
+    }
+}
+
 std::uint64_t layerRevisionValue(const Layer& layer)
 {
-    // 再生中に全ストローク/全点を毎フレームhashしない。
-    // 明示revisionと軽量メタ情報だけでキャッシュ判定する。
+    // 明示revisionを主に使うが、既存コードでtouchRevision()漏れがあっても
+    // 変更検知が完全に死なないよう、O(1)のストローク代表情報も混ぜる。
+    // ここでは全StrokePoint/全Fill bitmapは走査しない。
     std::uint64_t seed = 1099511628211ULL;
     hashCombine(seed, layer.revisionCounter);
     hashCombine(seed, layer.visible ? 1ULL : 0ULL);
     hashCombine(seed, hashFloat(layer.opacity));
     hashCombine(seed, static_cast<std::uint64_t>(layer.type));
     hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
+
+    if (!layer.strokes.empty()) {
+        hashStrokeO1(seed, layer.strokes.front());
+        if (layer.strokes.size() >= 2U) {
+            hashStrokeO1(seed, layer.strokes.back());
+        }
+    }
+
     return seed;
 }
 
@@ -280,9 +315,12 @@ CanvasBitmap* CanvasRenderer::activeBitmap(int layerIndex)
     }
 
     const Layer& layer = activeFrameForDirectAccess_->layers[static_cast<std::size_t>(layerIndex)];
-    rebuildLayerBitmapIfNeeded(*activeFrameForDirectAccess_, layerIndex, layer);
+    const std::string frameId = activeFrameCacheId_.empty()
+        ? frameCacheId(*activeFrameForDirectAccess_, -1)
+        : activeFrameCacheId_;
+    rebuildLayerBitmapIfNeeded(frameId, *activeFrameForDirectAccess_, layerIndex, layer);
 
-    CanvasBitmap& bitmap = bitmapForLayer(*activeFrameForDirectAccess_, layerIndex);
+    CanvasBitmap& bitmap = bitmapForLayer(frameId, *activeFrameForDirectAccess_, layerIndex);
     if (bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_ || !bitmap.hasTexture()) {
         bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
     }
@@ -300,7 +338,10 @@ void CanvasRenderer::markActiveBitmapClean(int layerIndex, const Layer& layer)
         return;
     }
 
-    const LayerCacheKey key{frameCacheId(*activeFrameForDirectAccess_), layerCacheId(layer, layerIndex)};
+    const std::string frameId = activeFrameCacheId_.empty()
+        ? frameCacheId(*activeFrameForDirectAccess_, -1)
+        : activeFrameCacheId_;
+    const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
     layerRevisions_[key] = layerRevisionValue(layer);
 
     // このフレームを前後オニオンとして使っているキャッシュは古くなる可能性がある。
@@ -318,7 +359,22 @@ void CanvasRenderer::draw(const Frame& frame,
                           ImVec2 areaSize,
                           ImDrawList* drawList)
 {
+    draw(frame, -1, activeLayerIndex, currentStroke, currentStrokeOpacity, view, displayMode, areaMin, areaSize, drawList);
+}
+
+void CanvasRenderer::draw(const Frame& frame,
+                          int frameIndex,
+                          int activeLayerIndex,
+                          const Stroke* currentStroke,
+                          float currentStrokeOpacity,
+                          const CanvasView& view,
+                          CanvasDisplayMode displayMode,
+                          ImVec2 areaMin,
+                          ImVec2 areaSize,
+                          ImDrawList* drawList)
+{
     activeFrameForDirectAccess_ = &frame;
+    activeFrameCacheId_ = frameCacheId(frame, frameIndex);
 
     if (drawList == nullptr) {
         return;
@@ -351,8 +407,8 @@ void CanvasRenderer::draw(const Frame& frame,
                 continue;
             }
 
-            rebuildLayerBitmapIfNeeded(frame, layerIndex, layer);
-            CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
+            rebuildLayerBitmapIfNeeded(activeFrameCacheId_, frame, layerIndex, layer);
+            CanvasBitmap& bitmap = bitmapForLayer(activeFrameCacheId_, frame, layerIndex);
 
             // uploadIfDirty() の false は「更新不要」も含む。
             // 既にGPU上に有効なTextureがあるなら、dirtyでなくても毎フレーム描画する。
@@ -405,15 +461,15 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
     drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, 255));
 }
 
-CanvasBitmap& CanvasRenderer::bitmapForLayer(const Frame& frame, int layerIndex)
+CanvasBitmap& CanvasRenderer::bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex)
 {
-    return layerBitmaps_.try_emplace(LayerCacheKey{frameCacheId(frame), layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
+    return layerBitmaps_.try_emplace(LayerCacheKey{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
 }
 
-void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer)
+void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer)
 {
-    CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
-    const LayerCacheKey key{frameCacheId(frame), layerCacheId(layer, layerIndex)};
+    CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+    const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
     const std::uint64_t revision = layerRevisionValue(layer);
     const auto revisionIt = layerRevisions_.find(key);
     const bool needsRebuild = revisionIt == layerRevisions_.end()

@@ -71,7 +71,20 @@ public:
     // 逐次描画でCanvasBitmapへ直接描いたあと、Project側の点列追加とキャッシュrevisionを同期する。
     void markActiveBitmapClean(int layerIndex, const Layer& layer);
 
+    // 旧互換入口。frameIndexを渡せない呼び出し元ではFrame名を論理キーに使う。
     void draw(const Frame& frame,
+              int activeLayerIndex,
+              const Stroke* currentStroke,
+              float currentStrokeOpacity,
+              const CanvasView& view,
+              CanvasDisplayMode displayMode,
+              ImVec2 areaMin,
+              ImVec2 areaSize,
+              ImDrawList* drawList);
+
+    // 再生時はframeIndexを渡し、ユーザー編集可能なFrame名の重複でキャッシュ衝突しないようにする。
+    void draw(const Frame& frame,
+              int frameIndex,
               int activeLayerIndex,
               const Stroke* currentStroke,
               float currentStrokeOpacity,
@@ -115,6 +128,7 @@ private:
 
     SDL_Renderer* renderer_ = nullptr;
     const Frame* activeFrameForDirectAccess_ = nullptr;
+    std::string activeFrameCacheId_;
     int canvasWidth_ = 0;
     int canvasHeight_ = 0;
 
@@ -123,8 +137,8 @@ private:
     std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
 
-    CanvasBitmap& bitmapForLayer(const Frame& frame, int layerIndex);
-    void rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer);
+    CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
+    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
 
     std::uint64_t frameRevisionHash(const Frame& frame) const;

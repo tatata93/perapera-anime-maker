@@ -15,6 +15,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <set>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -132,6 +133,63 @@ std::vector<fs::path> sortedLayerFiles(const fs::path& frameFolder)
     return result;
 }
 
+bool containsName(const std::set<std::string>& names, const std::string& name)
+{
+    return names.find(name) != names.end();
+}
+
+void removeStaleDirectories(const fs::path& root, const std::set<std::string>& expectedNames)
+{
+    std::error_code errorCode;
+    if (!fs::exists(root, errorCode)) {
+        return;
+    }
+    for (const fs::directory_entry& entry : fs::directory_iterator(root, errorCode)) {
+        if (errorCode || !entry.is_directory()) {
+            continue;
+        }
+        const std::string name = entry.path().filename().string();
+        if (!containsName(expectedNames, name)) {
+            fs::remove_all(entry.path(), errorCode);
+            errorCode.clear();
+        }
+    }
+}
+
+void removeStaleLayerFiles(const fs::path& frameFolder, const std::set<std::string>& expectedLayerStems)
+{
+    std::error_code errorCode;
+    if (!fs::exists(frameFolder, errorCode)) {
+        return;
+    }
+    for (const fs::directory_entry& entry : fs::directory_iterator(frameFolder, errorCode)) {
+        if (errorCode || !entry.is_regular_file()) {
+            continue;
+        }
+
+        const fs::path path = entry.path();
+        const std::string filename = path.filename().string();
+        if (filename.rfind("layer_", 0) != 0) {
+            continue;
+        }
+
+        std::string stem;
+        if (path.extension() == ".json") {
+            stem = path.stem().string();
+        } else if (filename.size() > std::string{"_fills.bin"}.size()
+                   && filename.rfind("_fills.bin") == filename.size() - std::string{"_fills.bin"}.size()) {
+            stem = filename.substr(0, filename.size() - std::string{"_fills.bin"}.size());
+        } else {
+            continue;
+        }
+
+        if (!containsName(expectedLayerStems, stem)) {
+            fs::remove(path, errorCode);
+            errorCode.clear();
+        }
+    }
+}
+
 json toJson(const StrokePoint& point)
 {
     return json{{"x", point.x}, {"y", point.y}, {"pressure", point.pressure}};
@@ -241,6 +299,8 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
     }
 
     if (fillCount == 0U) {
+        std::error_code removeError;
+        fs::remove(path, removeError);
         return true;
     }
 
@@ -543,8 +603,10 @@ bool saveFrame(const Frame& frame, const fs::path& frameFolder, std::string* err
     if (!writeJsonFile(frameFolder / "frame.json", frameMetaToJson(frame), errorMessage)) {
         return false;
     }
+    std::set<std::string> expectedLayerStems;
     for (std::size_t layerIndex = 0; layerIndex < frame.layers.size(); ++layerIndex) {
         const std::string layerStem = numberedName("layer", static_cast<int>(layerIndex + 1U));
+        expectedLayerStems.insert(layerStem);
         const fs::path layerPath = frameFolder / (layerStem + ".json");
         const fs::path fillsPath = frameFolder / (layerStem + "_fills.bin");
         if (!saveFillStrokesFile(fillsPath, frame.layers[layerIndex], errorMessage)) {
@@ -554,6 +616,7 @@ bool saveFrame(const Frame& frame, const fs::path& frameFolder, std::string* err
             return false;
         }
     }
+    removeStaleLayerFiles(frameFolder, expectedLayerStems);
     return true;
 }
 
@@ -570,13 +633,17 @@ bool saveCell(const Cell& cell, const fs::path& cellsRoot, std::string* errorMes
     if (!writeJsonFile(cellFolder / "cell.json", cellMetaToJson(cell), errorMessage)) {
         return false;
     }
+    std::set<std::string> expectedFrameFolders;
     for (std::size_t frameIndex = 0; frameIndex < cell.frames.size(); ++frameIndex) {
         const Frame& frame = cell.frames[frameIndex];
-        const fs::path frameFolder = framesRoot / numberedName("frame", static_cast<int>(frameIndex + 1U));
+        const std::string frameFolderName = numberedName("frame", static_cast<int>(frameIndex + 1U));
+        expectedFrameFolders.insert(frameFolderName);
+        const fs::path frameFolder = framesRoot / frameFolderName;
         if (!saveFrame(frame, frameFolder, errorMessage)) {
             return false;
         }
     }
+    removeStaleDirectories(framesRoot, expectedFrameFolders);
     return true;
 }
 
@@ -638,18 +705,19 @@ bool ProjectIO::save(const Project& project, const fs::path& folderPath, std::st
         return false;
     }
     const fs::path cellsRoot = folderPath / "cells";
-    fs::remove_all(cellsRoot, errorCode);
-    errorCode.clear();
     fs::create_directories(cellsRoot, errorCode);
     if (errorCode) {
         setError(errorMessage, "failed to create cells folder: " + cellsRoot.string());
         return false;
     }
+    std::set<std::string> expectedCellFolders;
     for (const Cell& cell : project.cells) {
+        expectedCellFolders.insert(cell.id);
         if (!saveCell(cell, cellsRoot, errorMessage)) {
             return false;
         }
     }
+    removeStaleDirectories(cellsRoot, expectedCellFolders);
     return true;
 }
 
