@@ -8,6 +8,7 @@
 // Phase 1.5 Step 19n: 旧markAllDirty呼び出しでも既存Textureを保持し、ストローク確定時の全線消えを防ぐ。
 // Phase 1.5 Step 19o: Simple確定直後の旧markAllDirtyを吸収し、必要なdirtyだけrevision無効化する。
 // Phase 1.5 Step 19p / Step 20: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
+// Phase 1.5 Step 21b: 再生中に次フレームを少量ずつ先読みし、初回表示時の重さを逃がす。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -106,6 +107,13 @@ public:
                        ImVec2 areaSize,
                        ImDrawList* drawList);
 
+    // 再生中の先読み用。現在フレーム描画後に、次フレームの未構築レイヤーを少しだけ焼く。
+    void warmFrameCache(const Frame& frame,
+                        int frameIndex,
+                        CanvasDisplayMode displayMode,
+                        int layerBudget,
+                        int strokeBudgetPerLayer);
+
 private:
     struct LayerCacheKey {
         std::string frameId;
@@ -154,9 +162,10 @@ private:
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
 
     CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
-    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer);
+    bool layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const;
+    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw = 4);
     bool appendMissingStrokesIfPossible(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
-    bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
+    bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision, int strokeBudgetPerDraw);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
 
     std::uint64_t frameRevisionHash(const Frame& frame) const;

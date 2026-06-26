@@ -199,3 +199,9 @@ A later App-side cleanup should remove redundant `canvasRenderer_.markAllDirty()
 日付: 2026-06-27
 理由: 全画面FillStrokeは2560x1440キャンバスで1枚あたり約3.7MBになり、複数Fillを持つフレームでは `layer_NNN_fills.bin` が数十MBまで膨らむ。再生初回表示では未キャッシュフレームごとに巨大マスクの走査と焼き込みが発生するため、保存サイズと再生ウォームアップの両方で不利になる。
 影響: `Stroke` は `bitmapX` / `bitmapY` / `bitmapWidth` / `bitmapHeight` を持つ。`fills.bin` は新規保存時に `PFF2` ヘッダ付き形式を使い、旧 `count + width + height + color + opacity + bitmap` 形式も読み込む。読み込み時と保存時に旧全画面マスクを非ゼロ外接矩形へクロップする。
+
+## 2026-06-27 Phase 1.5 Step 21b decision: 再生キャッシュは同期一括ではなく少量先読みで温める
+
+日付: 2026-06-27
+理由: 再生開始時に全フレームを一括ベイクすると、押した瞬間にUIが固まる。現在フレーム描画後に次フレームを少量ずつ焼く方が、重さを分散でき、SDL_Texture作成/uploadもメインスレッド前提を守れる。
+影響: `CanvasRenderer::warmFrameCache()` は未構築レイヤーだけを対象にし、1回あたりのレイヤー数とストローク数を制限する。`App::warmPlaybackFrameCache()` は再生中だけ、現在フレーム描画後に次の最大3フレームを少量ずつ先読みする。

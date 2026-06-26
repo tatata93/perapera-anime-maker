@@ -12,6 +12,7 @@
 // Phase 1.5 Step 19o: 旧App dirty通知を吸収し、Simple確定後の全レイヤー再ベイクを避ける。
 // Phase 1.5 Step 19p: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
 // Phase 1.5 Step 20: hashからvectorポインタアドレスを外し、フレームコピー/移動での不要な再ベイクを防ぐ。
+// Phase 1.5 Step 21b: 再生中に次フレームを少量ずつ先読みし、初回表示時の重さを逃がす。
 
 #include "render/CanvasRenderer.h"
 
@@ -588,22 +589,78 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
     drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, 255));
 }
 
+void CanvasRenderer::warmFrameCache(const Frame& frame,
+                                    int frameIndex,
+                                    CanvasDisplayMode displayMode,
+                                    int layerBudget,
+                                    int strokeBudgetPerLayer)
+{
+    if (renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0 || layerBudget <= 0 || strokeBudgetPerLayer <= 0) {
+        return;
+    }
+
+    const std::string frameId = frameCacheId(frame, frameIndex);
+    std::vector<int> layerIndices;
+    layerIndices.reserve(frame.layers.size());
+    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+        layerIndices.push_back(layerIndex);
+    }
+    std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
+        const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
+        const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
+        return displayLayerRank(typeA) < displayLayerRank(typeB);
+    });
+
+    int warmedLayers = 0;
+    for (int layerIndex : layerIndices) {
+        const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+        const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+        if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
+            continue;
+        }
+        if (!layerNeedsBitmapWork(frameId, frame, layerIndex, layer)) {
+            continue;
+        }
+
+        rebuildLayerBitmapIfNeeded(frameId, frame, layerIndex, layer, strokeBudgetPerLayer);
+        CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+        bitmap.uploadIfDirty(renderer_);
+        ++warmedLayers;
+        if (warmedLayers >= layerBudget) {
+            break;
+        }
+    }
+}
+
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex)
 {
     return layerBitmaps_.try_emplace(LayerCacheKey{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
 }
 
-void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer)
+bool CanvasRenderer::layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const
 {
-    CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+    (void)frame;
     const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
-    const std::uint64_t revision = layerRevisionValue(layer);
+    const auto bitmapIt = layerBitmaps_.find(key);
+    if (bitmapIt == layerBitmaps_.end()) {
+        return true;
+    }
+
+    const CanvasBitmap& bitmap = bitmapIt->second;
     const auto revisionIt = layerRevisions_.find(key);
-    const bool needsRebuild = revisionIt == layerRevisions_.end()
+    const std::uint64_t revision = layerRevisionValue(layer);
+    return revisionIt == layerRevisions_.end()
         || revisionIt->second != revision
         || !bitmap.hasTexture()
         || bitmap.width() != canvasWidth_
         || bitmap.height() != canvasHeight_;
+}
+
+void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw)
+{
+    bitmapForLayer(frameId, frame, layerIndex);
+    const std::uint64_t revision = layerRevisionValue(layer);
+    const bool needsRebuild = layerNeedsBitmapWork(frameId, frame, layerIndex, layer);
 
     if (!needsRebuild) {
         return;
@@ -617,7 +674,7 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, cons
 
     // Undo/Redo、消しゴム、レイヤー丸ごと変更、未キャッシュフレームの初回表示などは全再構築が必要。
     // ただし一度のdrawで全レイヤー/全ストロークをまとめて焼くとUIが固まるため、レイヤー単位で段階的に進める。
-    rebuildLayerBitmapProgressively(frameId, frame, layerIndex, layer, revision);
+    rebuildLayerBitmapProgressively(frameId, frame, layerIndex, layer, revision, strokeBudgetPerDraw);
 }
 
 bool CanvasRenderer::appendMissingStrokesIfPossible(const std::string& frameId,
@@ -661,7 +718,8 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
                                                      const Frame& frame,
                                                      int layerIndex,
                                                      const Layer& layer,
-                                                     std::uint64_t revision)
+                                                     std::uint64_t revision,
+                                                     int strokeBudgetPerDraw)
 {
     CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
     const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
@@ -678,7 +736,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
 
     // 1 draw あたりの焼き込み量。大きすぎるとフレーム移動で固まり、小さすぎると表示完了が遅い。
     // FillStrokeは1本でも大きいので、この予算でもFillは1本ずつになる。
-    constexpr int kStrokeBakeBudgetPerDraw = 4;
+    const int strokeBakeBudget = std::max(1, strokeBudgetPerDraw);
     int bakedThisCall = 0;
 
     auto bakeNextMatchingStroke = [&](bool wantFill) -> bool {
@@ -696,7 +754,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
     };
 
     if (layer.type == LayerType::Paint) {
-        while (bakedThisCall < kStrokeBakeBudgetPerDraw) {
+        while (bakedThisCall < strokeBakeBudget) {
             if (state.pass == 0) {
                 if (bakeNextMatchingStroke(true)) {
                     continue;
@@ -712,7 +770,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
             }
         }
     } else {
-        while (bakedThisCall < kStrokeBakeBudgetPerDraw && state.nextStrokeIndex < layer.strokes.size()) {
+        while (bakedThisCall < strokeBakeBudget && state.nextStrokeIndex < layer.strokes.size()) {
             bakeStrokeByEngine(bitmap, layer.strokes[state.nextStrokeIndex], 1.0f);
             ++state.nextStrokeIndex;
             ++bakedThisCall;

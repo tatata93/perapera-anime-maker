@@ -515,6 +515,7 @@ void App::drawCanvasArea(float rightWidth)
                          areaMin,
                          areaSize,
                          drawList);
+    warmPlaybackFrameCache();
     if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
         drawLightweightEraserPreview(currentStroke_, canvasView_, areaMin, areaSize, drawList);
     }

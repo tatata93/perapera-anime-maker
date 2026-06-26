@@ -472,3 +472,32 @@ src/io/ProjectIO.cpp
 ### 次にやること
 - 既存プロジェクトを一度ロード/保存して、全画面FillStrokeをクロップ形式へ再保存する。
 - まだ再生開始直後が重い場合は、CanvasRendererへ1drawあたり少量の再生先読みAPIを追加する。
+
+## 2026-06-27 Phase 1.5 Step 21b: 再生中フレームキャッシュ先読み
+
+### 作業概要
+- FillStrokeクロップ後も再生開始直後に残る初回キャッシュ生成の重さを、再生中の少量先読みで分散するようにした。
+- 現在フレーム描画を優先し、描画後に次フレーム群を少しだけプリベイクする。
+
+### 変更ファイル
+- `src/render/CanvasRenderer.h`
+- `src/render/CanvasRenderer.cpp`
+- `src/ui/App.h`
+- `src/ui/AppInput.cpp`
+- `src/ui/AppDrawingMode.cpp`
+
+### 実装内容
+- `CanvasRenderer::warmFrameCache()` を追加。
+- 先読みでは未構築レイヤーだけを対象にし、1回あたりのレイヤー数とストローク数を上限付きにした。
+- 先読み時もSDL_Texture uploadまでメインスレッドで行う。
+- `App::warmPlaybackFrameCache()` を追加し、再生中に次の最大3フレームへ少量ずつ先読みするようにした。
+- 現在フレームの `draw()` 後に先読みを呼び、通常描画を先に終わらせる順序にした。
+
+### 動作確認
+- `cmake --build .\build --config Debug --target perapera_anime_maker` 成功。
+
+### 未完了
+- 実機で再生開始直後の体感速度確認。
+
+### 次にやること
+- まだ重い場合は、先読み量の調整、またはFillStroke合成ループ自体の高速化を検討する。

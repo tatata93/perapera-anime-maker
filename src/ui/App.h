@@ -120,6 +120,7 @@ private:
     void updateFramePlayback();
     bool stepActiveFrame(int delta);
     bool advancePlaybackFrame();
+    void warmPlaybackFrameCache();
 
     void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize);
     void beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);

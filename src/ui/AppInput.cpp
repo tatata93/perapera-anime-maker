@@ -118,6 +118,57 @@ void App::updateFramePlayback()
     }
 }
 
+void App::warmPlaybackFrameCache()
+{
+    if (!isPlayingFrames_ || isDrawingStroke_) {
+        return;
+    }
+
+    const Cell* cell = activeCell();
+    if (cell == nullptr || cell->frames.size() <= 1U) {
+        return;
+    }
+
+    const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
+    int direction = playbackDirection_ == 0 ? 1 : playbackDirection_;
+    int cursor = activeFrameIndex_;
+
+    constexpr int kLookAheadFrames = 3;
+    constexpr int kWarmLayerBudget = 1;
+    constexpr int kWarmStrokeBudgetPerLayer = 1;
+
+    const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
+        ? CanvasDisplayMode::Coloring
+        : CanvasDisplayMode::Drawing;
+
+    for (int step = 0; step < kLookAheadFrames; ++step) {
+        int nextIndex = cursor + direction;
+        if (nextIndex < 0 || nextIndex > lastIndex) {
+            if (playbackPingPong_) {
+                direction = -direction;
+                nextIndex = cursor + direction;
+            } else {
+                nextIndex = nextIndex > lastIndex ? 0 : lastIndex;
+            }
+        }
+
+        nextIndex = std::clamp(nextIndex, 0, lastIndex);
+        if (nextIndex == activeFrameIndex_) {
+            break;
+        }
+
+        const Frame* frame = cell->frameOrNull(nextIndex);
+        if (frame != nullptr) {
+            canvasRenderer_.warmFrameCache(*frame,
+                                           nextIndex,
+                                           displayMode,
+                                           kWarmLayerBudget,
+                                           kWarmStrokeBudgetPerLayer);
+        }
+        cursor = nextIndex;
+    }
+}
+
 void App::handleFrameShortcuts()
 {
     ImGuiIO& io = ImGui::GetIO();
