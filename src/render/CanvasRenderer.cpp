@@ -159,6 +159,8 @@ void hashStrokeO1(std::uint64_t& seed, const Stroke& stroke)
     // 同じ内容でもdata()の住所が変わり、キャッシュミスと再ベイクを誘発するため。
     hashCombine(seed, static_cast<std::uint64_t>(stroke.brushEngine));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapX));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapY));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));

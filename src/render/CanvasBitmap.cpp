@@ -1,6 +1,7 @@
 // このファイルの役割:
 // CanvasBitmapのRGBA8ピクセルバッファ、SDL_Texture、ストローク焼き込みを実装する。
 // Phase 1.5 Step 19では、バケツ塗り専用のFillStrokeをマスクから直接ピクセルへ焼く。
+// Phase 1.5 Step 19dでは、旧0/1 FillStrokeマスクも255相当として扱い、表示を安定させる。
 
 #include "render/CanvasBitmap.h"
 
@@ -114,7 +115,7 @@ void CanvasBitmap::resize(SDL_Renderer* renderer, int width, int height)
 
 void CanvasBitmap::clear()
 {
-    std::fill(pixels_.begin(), pixels_.end(), 0U);
+    std::fill(pixels_.begin(), pixels_.end(), static_cast<std::uint8_t>(0U));
     expandDirty(0, 0, width_, height_);
 }
 
@@ -195,23 +196,45 @@ void CanvasBitmap::bakeStroke(const Stroke& stroke, float opacity)
     const std::uint8_t b = toByte(stroke.color[2]);
 
     if (stroke.brushEngine == StrokeBrushEngine::Fill) {
-        if (stroke.bitmap.empty() || stroke.bitmapWidth != width_ || stroke.bitmapHeight != height_) {
+        const std::size_t expectedSize = static_cast<std::size_t>(std::max(0, stroke.bitmapWidth)) *
+                                         static_cast<std::size_t>(std::max(0, stroke.bitmapHeight));
+        if (stroke.bitmap.empty() || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0 ||
+            expectedSize != stroke.bitmap.size()) {
             return;
         }
 
-        for (int y = 0; y < height_; ++y) {
-            for (int x = 0; x < width_; ++x) {
-                const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(width_) +
-                                        static_cast<std::size_t>(x);
+        const int dirtyX0 = std::clamp(stroke.bitmapX, 0, width_);
+        const int dirtyY0 = std::clamp(stroke.bitmapY, 0, height_);
+        const int dirtyX1 = std::clamp(stroke.bitmapX + stroke.bitmapWidth, 0, width_);
+        const int dirtyY1 = std::clamp(stroke.bitmapY + stroke.bitmapHeight, 0, height_);
+        if (dirtyX0 >= dirtyX1 || dirtyY0 >= dirtyY1) {
+            return;
+        }
+
+        for (int localY = 0; localY < stroke.bitmapHeight; ++localY) {
+            const int y = stroke.bitmapY + localY;
+            if (y < 0 || y >= height_) {
+                continue;
+            }
+            for (int localX = 0; localX < stroke.bitmapWidth; ++localX) {
+                const int x = stroke.bitmapX + localX;
+                if (x < 0 || x >= width_) {
+                    continue;
+                }
+                const std::size_t idx = static_cast<std::size_t>(localY) * static_cast<std::size_t>(stroke.bitmapWidth) +
+                                        static_cast<std::size_t>(localX);
                 const std::uint8_t mask = stroke.bitmap[idx];
                 if (mask == 0U) {
                     continue;
                 }
-                const float maskOpacity = static_cast<float>(mask) / 255.0f;
+                // FillStrokeの正規マスクは 0 / 255。
+                // Step 19初期パッケージを適用済みのセッションでは 0 / 1 のマスクが残る可能性があるため、
+                // 1も「塗る」として扱い、既存作業中データの表示を安定させる。
+                const float maskOpacity = mask == 1U ? 1.0f : static_cast<float>(mask) / 255.0f;
                 blendPixel(x, y, r, g, b, toByte(combinedOpacity * maskOpacity));
             }
         }
-        expandDirty(0, 0, width_, height_);
+        expandDirty(dirtyX0, dirtyY0, dirtyX1, dirtyY1);
         return;
     }
 

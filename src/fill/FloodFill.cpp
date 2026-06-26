@@ -305,18 +305,47 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    // FillStrokeの正規マスクは 0 / 255 とし、CanvasBitmap/PngExporterで直接焼ける正データにする。
-    for (std::uint8_t& pixel : filled) {
-        pixel = pixel == 0U ? 0U : 255U;
+    int minX = width;
+    int minY = height;
+    int maxX = -1;
+    int maxY = -1;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (filled[indexOf(x, y, width)] == 0U) {
+                continue;
+            }
+            minX = std::min(minX, x);
+            minY = std::min(minY, y);
+            maxX = std::max(maxX, x);
+            maxY = std::max(maxY, y);
+        }
+    }
+    if (maxX < minX || maxY < minY) {
+        result.message = "nothing to fill";
+        return result;
+    }
+
+    const int croppedWidth = maxX - minX + 1;
+    const int croppedHeight = maxY - minY + 1;
+    std::vector<std::uint8_t> croppedMask(static_cast<std::size_t>(croppedWidth) *
+                                          static_cast<std::size_t>(croppedHeight), 0U);
+    for (int y = 0; y < croppedHeight; ++y) {
+        for (int x = 0; x < croppedWidth; ++x) {
+            const std::uint8_t value = filled[indexOf(minX + x, minY + y, width)];
+            croppedMask[static_cast<std::size_t>(y) * static_cast<std::size_t>(croppedWidth) +
+                        static_cast<std::size_t>(x)] = value == 0U ? 0U : 255U;
+        }
     }
 
     Stroke fillStroke;
     fillStroke.color = fillColor;
     fillStroke.opacity = 1.0f;
     fillStroke.brushEngine = StrokeBrushEngine::Fill;
-    fillStroke.bitmap = std::move(filled);
-    fillStroke.bitmapWidth = width;
-    fillStroke.bitmapHeight = height;
+    fillStroke.bitmap = std::move(croppedMask);
+    fillStroke.bitmapX = minX;
+    fillStroke.bitmapY = minY;
+    fillStroke.bitmapWidth = croppedWidth;
+    fillStroke.bitmapHeight = croppedHeight;
     result.strokes.push_back(std::move(fillStroke));
     result.success = true;
     result.message = "filled";

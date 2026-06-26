@@ -480,9 +480,11 @@ void App::drawCanvasArea(float rightWidth)
     fitCanvasToArea(areaSize);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
-    const ImU32 background = isColoringMode
-        ? IM_COL32(255, 255, 255, 255)
-        : ImGui::ColorConvertFloat4ToU32(ui::themeColors().canvasBackground);
+
+    // Phase 1.5 Step 18:
+    // 作画・彩色どちらでも、実際の紙に近い白いキャンバス背景にする。
+    // パネルやアプリ全体のダークテーマは維持し、描画範囲だけ白くする。
+    const ImU32 background = IM_COL32(255, 255, 255, 255);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
     const bool drawAssistOverlays = !isPlayingFrames_ || !playbackSkipAssistOverlays_;
     if (drawAssistOverlays) {
@@ -504,6 +506,7 @@ void App::drawCanvasArea(float rightWidth)
         && brushSettings_.tool == ui::ToolKind::Brush
         && !myPaintRealtimePreview) ? &currentStroke_ : nullptr;
     canvasRenderer_.draw(*frame,
+                         activeFrameIndex_,
                          activeLayerIndex_,
                          preview,
                          1.0f,
