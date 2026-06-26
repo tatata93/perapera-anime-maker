@@ -525,7 +525,9 @@ std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
             hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
             hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
             hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
-            hashCombine(seed, reinterpret_cast<std::uintptr_t>(stroke.bitmap.data()));
+            // FillStroke の再ベイク判定では、bitmap のポインタアドレスを使わない。
+            // vector 内のストロークが同じ場所に残ると、内容が変わっても pointer hash が
+            // 変わらず、markAllDirty 後の再ベイク抜けに見えることがあるため。
             if (!stroke.bitmap.empty()) {
                 hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.front()));
                 hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap[stroke.bitmap.size() / 2U]));
