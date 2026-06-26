@@ -5,6 +5,7 @@
 // v14: オニオンキャッシュのキーからFrame*を外し、frameIndex+前後種別だけで管理する。
 // Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、frame.name + layer.layerId で管理する。
 // Phase 1.5 Step 19l: 再生時の毎フレーム全StrokePoint hashを廃止し、Layer::revisionCounterベースにする。
+// Phase 1.5 Step 19n: 旧markAllDirty呼び出しでも既存Textureを保持し、ストローク確定時の全線消えを防ぐ。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -48,14 +49,14 @@ public:
     void setRenderer(SDL_Renderer* renderer);
     void setCanvasSize(int width, int height);
 
-    // ストローク変更の通知。Phase 1では安全優先で全キャッシュを破棄する。
+    // ストローク変更の通知。既存Textureは保持し、O(1) revision stampで必要なレイヤーだけ再構築する。
     void markDirty(int layerIndex);
     void markAllDirty();
 
     // 旧Step互換入口。現在はProject内のストローク点列を正本にし、次回drawで再構築する。
     void bakeStroke(int layerIndex, const Stroke& stroke, float opacity);
 
-    // Simple互換の確定時焼き込み入口。現状はbakeStrokeと同じくキャッシュ再構築へ委譲する。
+    // Simple互換の確定時焼き込み入口。可能なら現在のアクティブBitmapへ1本だけ追い焼きする。
     void bakeStrokeOnLayer(int layerIndex, const Stroke& stroke, float opacity);
 
     void eraseCircle(int layerIndex, float canvasX, float canvasY, float radius);

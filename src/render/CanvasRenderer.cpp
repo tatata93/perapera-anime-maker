@@ -8,6 +8,7 @@
 // Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、再生中のFrameコピーでも再ベイクを避ける。
 // Phase 1.5 Step 19l: layerRevisionHashの全StrokePoint走査を廃止し、Layer::revisionCounterベースにする。
 // Phase 1.5 Step 19m: frameIndexキー入口とO(1) revision stampで再生時のCPU負荷をさらに抑える。
+// Phase 1.5 Step 19n: markAllDirtyで既存テクスチャを捨てず、ストローク確定時の全線一瞬消えを防ぐ。
 
 #include "render/CanvasRenderer.h"
 
@@ -180,6 +181,8 @@ std::uint64_t layerRevisionValue(const Layer& layer)
     hashCombine(seed, hashFloat(layer.opacity));
     hashCombine(seed, static_cast<std::uint64_t>(layer.type));
     hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
+    hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.capacity()));
+    hashCombine(seed, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(layer.strokes.data())));
 
     if (!layer.strokes.empty()) {
         hashStrokeO1(seed, layer.strokes.front());
@@ -247,7 +250,12 @@ void CanvasRenderer::setRenderer(SDL_Renderer* renderer)
     }
 
     renderer_ = renderer;
-    markAllDirty();
+
+    // SDL_Rendererが変わると既存SDL_Textureは無効になるため、ここだけは完全破棄する。
+    layerBitmaps_.clear();
+    layerRevisions_.clear();
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
 }
 
 void CanvasRenderer::setCanvasSize(int width, int height)
@@ -260,34 +268,74 @@ void CanvasRenderer::setCanvasSize(int width, int height)
 
     canvasWidth_ = safeWidth;
     canvasHeight_ = safeHeight;
-    markAllDirty();
-}
 
-void CanvasRenderer::markDirty(int layerIndex)
-{
-    (void)layerIndex;
-    markAllDirty();
-}
-
-void CanvasRenderer::markAllDirty()
-{
+    // キャンバスサイズ変更時はCanvasBitmap自体の寸法が変わるため完全破棄する。
     layerBitmaps_.clear();
     layerRevisions_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
 }
 
+void CanvasRenderer::markDirty(int layerIndex)
+{
+    // 旧API互換: App側は多くの場所で「何か変わったらmarkAllDirty」を呼んでいる。
+    // ここで全Textureを消すと、ストローク確定直後や再生フレーム送りで全レイヤーが一瞬消える。
+    // 通常レイヤーは layerRevisionValue() のO(1) stampで差分検知するため、既存Textureは保持する。
+    (void)layerIndex;
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
+}
+
+void CanvasRenderer::markAllDirty()
+{
+    // 名前はAllDirtyだが、表示中の既存Textureは破棄しない。
+    // 破棄が必要なのはrenderer変更/キャンバスサイズ変更だけで、それらはsetRenderer/setCanvasSizeで直接clearする。
+    // ここをclearにすると、AppDrawingMode::finishStrokeのSimple確定後markAllDirtyで
+    // 全レイヤーが空になり、次フレームの再ベイクまで線が一瞬消える。
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
+}
+
 void CanvasRenderer::bakeStroke(int layerIndex, const Stroke& stroke, float opacity)
 {
-    (void)layerIndex;
-    (void)stroke;
-    (void)opacity;
-    markAllDirty();
+    bakeStrokeOnLayer(layerIndex, stroke, opacity);
 }
 
 void CanvasRenderer::bakeStrokeOnLayer(int layerIndex, const Stroke& stroke, float opacity)
 {
-    bakeStroke(layerIndex, stroke, opacity);
+    (void)opacity;
+
+    if (activeFrameForDirectAccess_ == nullptr || renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0) {
+        markDirty(layerIndex);
+        return;
+    }
+    if (layerIndex < 0 || layerIndex >= static_cast<int>(activeFrameForDirectAccess_->layers.size())) {
+        markDirty(layerIndex);
+        return;
+    }
+
+    const Layer& layer = activeFrameForDirectAccess_->layers[static_cast<std::size_t>(layerIndex)];
+    const std::string frameId = activeFrameCacheId_.empty()
+        ? frameCacheId(*activeFrameForDirectAccess_, -1)
+        : activeFrameCacheId_;
+
+    CanvasBitmap& bitmap = bitmapForLayer(frameId, *activeFrameForDirectAccess_, layerIndex);
+    if (bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_ || !bitmap.hasTexture()) {
+        // まだキャッシュがない場合だけ、そのレイヤーだけを作り直す。
+        // 全レイヤーを破棄しない。
+        rebuildLayerBitmapIfNeeded(frameId, *activeFrameForDirectAccess_, layerIndex, layer);
+        return;
+    }
+
+    // App側では push_back 後にこの関数が呼ばれるため、ここでは新しい1本だけを追い焼きする。
+    // bakeStrokeByEngineはStroke::opacityを内部で掛けるため、引数opacityは1.0固定にする。
+    bakeStrokeByEngine(bitmap, stroke, 1.0f);
+
+    const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
+    layerRevisions_[key] = layerRevisionValue(layer);
+
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
 }
 
 void CanvasRenderer::eraseCircle(int layerIndex, float canvasX, float canvasY, float radius)
