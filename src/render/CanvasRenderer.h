@@ -3,10 +3,12 @@
 // このファイルの役割:
 // CanvasBitmapをフレーム+レイヤー単位で管理し、ImGuiのDrawListへキャンバスを表示する。
 // v14: オニオンキャッシュのキーからFrame*を外し、frameIndex+前後種別だけで管理する。
+// Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、frame.name + layer.layerId で管理する。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 
 #include <SDL3/SDL.h>
@@ -89,8 +91,8 @@ public:
 
 private:
     struct LayerCacheKey {
-        const Frame* frame = nullptr;
-        int layerIndex = 0;
+        std::string frameId;
+        std::string layerId;
 
         bool operator==(const LayerCacheKey& other) const noexcept;
     };

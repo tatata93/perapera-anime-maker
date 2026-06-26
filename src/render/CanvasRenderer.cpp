@@ -5,6 +5,7 @@
 // Phase 1.5 Step 19b: Drawing表示でもPaintを線画より下に描き、線画が塗りで隠れないようにする。
 // Phase 1.5 Step 19d: Paintレイヤー内ではFillStrokeを先に焼き、線・手描きストロークを後から焼く。
 //   FillStrokeのrevision hashはポインタではなく内容サンプルで計算する。
+// Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、再生中のFrameコピーでも再ベイクを避ける。
 
 #include "render/CanvasRenderer.h"
 
@@ -15,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -128,16 +130,28 @@ void bakeStrokeByEngine(CanvasBitmap& bitmap, const Stroke& stroke, float opacit
     bitmap.bakeStroke(stroke, combinedOpacity);
 }
 
-std::size_t pointerHash(const void* pointer)
+std::string frameCacheId(const Frame& frame)
 {
-    return std::hash<const void*>{}(pointer);
+    // 現在のFrame型は少なくとも name を持つ。別ブランチにある frameId へ直接依存すると
+    // 既存リポジトリでコンパイルできないため、ここでは論理フレーム名をキャッシュキーにする。
+    // 再生時にFrameがコピーされても name は維持されるので、Frame* より安定する。
+    return frame.name.empty() ? std::string{"frame"} : frame.name;
+}
+
+std::string layerCacheId(const Layer& layer, int layerIndex)
+{
+    // layerId は既存フィールド。空や重複に備えて、空の時だけindexで補完する。
+    if (!layer.layerId.empty()) {
+        return layer.layerId;
+    }
+    return std::string{"layer_"} + std::to_string(layerIndex);
 }
 
 } // namespace
 
 bool CanvasRenderer::LayerCacheKey::operator==(const LayerCacheKey& other) const noexcept
 {
-    return frame == other.frame && layerIndex == other.layerIndex;
+    return frameId == other.frameId && layerId == other.layerId;
 }
 
 bool CanvasRenderer::OnionCacheKey::operator==(const OnionCacheKey& other) const noexcept
@@ -147,8 +161,8 @@ bool CanvasRenderer::OnionCacheKey::operator==(const OnionCacheKey& other) const
 
 std::size_t CanvasRenderer::LayerCacheKeyHash::operator()(const LayerCacheKey& key) const noexcept
 {
-    std::size_t seed = pointerHash(key.frame);
-    seed ^= std::hash<int>{}(key.layerIndex) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+    std::size_t seed = std::hash<std::string>{}(key.frameId);
+    seed ^= std::hash<std::string>{}(key.layerId) + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
     return seed;
 }
 
@@ -277,7 +291,7 @@ void CanvasRenderer::markActiveBitmapClean(int layerIndex, const Layer& layer)
         return;
     }
 
-    const LayerCacheKey key{activeFrameForDirectAccess_, layerIndex};
+    const LayerCacheKey key{frameCacheId(*activeFrameForDirectAccess_), layerCacheId(layer, layerIndex)};
     layerRevisions_[key] = layerRevisionHash(layer);
 
     // このフレームを前後オニオンとして使っているキャッシュは古くなる可能性がある。
@@ -384,13 +398,13 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
 
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const Frame& frame, int layerIndex)
 {
-    return layerBitmaps_.try_emplace(LayerCacheKey{&frame, layerIndex}).first->second;
+    return layerBitmaps_.try_emplace(LayerCacheKey{frameCacheId(frame), layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
 }
 
 void CanvasRenderer::rebuildLayerBitmapIfNeeded(const Frame& frame, int layerIndex, const Layer& layer)
 {
     CanvasBitmap& bitmap = bitmapForLayer(frame, layerIndex);
-    const LayerCacheKey key{&frame, layerIndex};
+    const LayerCacheKey key{frameCacheId(frame), layerCacheId(layer, layerIndex)};
     const std::uint64_t revision = layerRevisionHash(layer);
     const auto revisionIt = layerRevisions_.find(key);
     const bool needsRebuild = revisionIt == layerRevisions_.end()
