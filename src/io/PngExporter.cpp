@@ -5,6 +5,8 @@
 // Phase 1.5 Step 18: Composite出力時だけColorTrace線を隣接Paint色で置換する。
 // Phase 1.5 Step 18c〜18g: 一時的に出力時の白フチ補正を追加していた。
 // Phase 1.5 Step 19: PaintはFillStrokeとして正データ化したため、出力時の白フチ補正は削除する。
+// Phase 1.5 Step 19d: Paintレイヤー内はFillStrokeを先に焼き、手描きストロークを後から焼く。
+// Phase 1.5 Step 19q: Composite出力でColorTrace線を単純スキップせず、近傍Paint色へ置換して白抜けを防ぐ。
 
 #include "io/PngExporter.h"
 
@@ -127,6 +129,78 @@ void blendLayerBitmap(ImageRgba& image, const CanvasBitmap& bitmap, float layerO
     }
 }
 
+bool sampleNearestPaintColor(const ImageRgba& paintReference,
+                             int centerX,
+                             int centerY,
+                             std::array<std::uint8_t, 4U>& color)
+{
+    // ColorTrace線は最終Compositeでは表示色を残さず、線の左右にあるPaint色へ置換する。
+    // FillStrokeでは線芯を塗らないため、ColorTrace線上そのものはPaintが透明になりやすい。
+    constexpr int kSampleRadius = 16;
+    constexpr std::uint8_t kMinPaintAlpha = 8U;
+
+    for (int radius = 0; radius <= kSampleRadius; ++radius) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                if (std::max(std::abs(dx), std::abs(dy)) != radius) {
+                    continue;
+                }
+                const int x = centerX + dx;
+                const int y = centerY + dy;
+                if (x < 0 || y < 0 || x >= paintReference.width || y >= paintReference.height) {
+                    continue;
+                }
+                const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(paintReference.width) +
+                                            static_cast<std::size_t>(x)) * 4U;
+                if (paintReference.pixels[offset + 3U] < kMinPaintAlpha) {
+                    continue;
+                }
+                color = {paintReference.pixels[offset + 0U],
+                         paintReference.pixels[offset + 1U],
+                         paintReference.pixels[offset + 2U],
+                         paintReference.pixels[offset + 3U]};
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void blendColorTraceAsPaintColor(ImageRgba& image,
+                                 const CanvasBitmap& colorTraceBitmap,
+                                 const ImageRgba& paintReference,
+                                 float layerOpacity)
+{
+    const std::vector<std::uint8_t>& pixels = colorTraceBitmap.pixelsRgba();
+    if (colorTraceBitmap.width() != image.width || colorTraceBitmap.height() != image.height || pixels.empty()) {
+        return;
+    }
+
+    const float safeLayerOpacity = std::clamp(layerOpacity, 0.0f, 1.0f);
+    if (safeLayerOpacity <= 0.0f) {
+        return;
+    }
+
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
+                                        static_cast<std::size_t>(x)) * 4U;
+            const std::uint8_t traceAlpha = pixels[offset + 3U];
+            if (traceAlpha == 0U) {
+                continue;
+            }
+
+            std::array<std::uint8_t, 4U> replacementColor{};
+            const bool hasPaintColor = sampleNearestPaintColor(paintReference, x, y, replacementColor);
+            const std::uint8_t outR = hasPaintColor ? replacementColor[0U] : pixels[offset + 0U];
+            const std::uint8_t outG = hasPaintColor ? replacementColor[1U] : pixels[offset + 1U];
+            const std::uint8_t outB = hasPaintColor ? replacementColor[2U] : pixels[offset + 2U];
+            const std::uint8_t outA = toByte((static_cast<float>(traceAlpha) / 255.0f) * safeLayerOpacity);
+            blendPixel(image, x, y, outR, outG, outB, outA);
+        }
+    }
+}
+
 
 bool usesWhiteBackground(ExportMode mode)
 {
@@ -167,6 +241,11 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
     std::vector<RenderedLayer> renderedLayers;
     renderedLayers.reserve(frame.layers.size());
 
+    ImageRgba paintReference;
+    paintReference.width = image.width;
+    paintReference.height = image.height;
+    paintReference.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+
     for (const Layer& layer : frame.layers) {
         if (!layer.visible || layer.opacity <= 0.0f || !shouldExportLayer(layer, mode)) {
             continue;
@@ -178,8 +257,28 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
         rendered.bitmap.resize(nullptr, image.width, image.height);
         rendered.bitmap.clear();
 
-        for (const Stroke& stroke : layer.strokes) {
-            rasterizeStrokeToBitmap(rendered.bitmap, stroke);
+        if (layer.type == LayerType::Paint) {
+            // 表示側と同じく、Paint内ではFillStrokeを先に焼く。
+            // その後に手描きストロークを重ねることで、同一Paintレイヤー内の線が
+            // バケツ塗りで消える出力差を防ぐ。
+            for (const Stroke& stroke : layer.strokes) {
+                if (stroke.brushEngine == StrokeBrushEngine::Fill) {
+                    rasterizeStrokeToBitmap(rendered.bitmap, stroke);
+                }
+            }
+            for (const Stroke& stroke : layer.strokes) {
+                if (stroke.brushEngine != StrokeBrushEngine::Fill) {
+                    rasterizeStrokeToBitmap(rendered.bitmap, stroke);
+                }
+            }
+        } else {
+            for (const Stroke& stroke : layer.strokes) {
+                rasterizeStrokeToBitmap(rendered.bitmap, stroke);
+            }
+        }
+
+        if (mode == ExportMode::Composite && layer.type == LayerType::Paint) {
+            blendLayerBitmap(paintReference, rendered.bitmap, layer.opacity);
         }
 
         renderedLayers.push_back(std::move(rendered));
@@ -187,8 +286,9 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
 
     for (const RenderedLayer& rendered : renderedLayers) {
         if (mode == ExportMode::Composite && rendered.type == LayerType::ColorTrace) {
-            // CompositeではColorTraceの赤・青・黄緑をそのまま描かない。
-            // PaintはFillStrokeとして線下まで焼かれているため、出力時の隙間補正は行わない。
+            // CompositeではColorTrace色をそのまま残さない。
+            // ただし単純にスキップすると、線芯だけ白背景が露出するため、近傍Paint色で置換する。
+            blendColorTraceAsPaintColor(image, rendered.bitmap, paintReference, rendered.opacity);
             continue;
         }
         blendLayerBitmap(image, rendered.bitmap, rendered.opacity);

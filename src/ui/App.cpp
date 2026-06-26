@@ -1,9 +1,11 @@
 // このファイルの役割:
 // Appの基本状態、メインレイアウト、モード切り替え、Undo/Redo、保存/書き出しを実装する。
+// Phase 1.5 Step 20: Undo/RedoをアクティブFrame単位のSnapshotへ変更し、FillStroke増加時のProject全体コピーを避ける。
 
 #include "ui/App.h"
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 #include <imgui.h>
@@ -48,15 +50,13 @@ AppMode modeFromIndex(int index)
     return static_cast<AppMode>(index);
 }
 
-
 } // namespace
 
 App::App()
     : project_(Project::createDefault())
 {
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
-
-    lastMessage_ = "Phase 1 Step 1-4 stability v11: ready";
+    lastMessage_ = "Phase 1.5 Step 20: ready";
 }
 
 void App::setRenderer(SDL_Renderer* renderer)
@@ -117,7 +117,6 @@ void App::drawMainMenuBar()
     if (!ImGui::BeginMainMenuBar()) {
         return;
     }
-
     if (ImGui::BeginMenu(u8c(u8"ファイル"))) {
         if (ImGui::MenuItem(u8c(u8"保存"), "Ctrl+S")) {
             saveProject();
@@ -130,7 +129,6 @@ void App::drawMainMenuBar()
         ImGui::MenuItem(u8c(u8"別名保存"), nullptr, false, false);
         ImGui::EndMenu();
     }
-
     if (ImGui::BeginMenu(u8c(u8"編集"))) {
         if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
             undo();
@@ -140,7 +138,6 @@ void App::drawMainMenuBar()
         }
         ImGui::EndMenu();
     }
-
     if (ImGui::BeginMenu(u8c(u8"表示"))) {
         if (ImGui::MenuItem(u8c(u8"全体表示"), "F")) {
             canvasViewInitialized_ = false;
@@ -148,13 +145,11 @@ void App::drawMainMenuBar()
         ImGui::MenuItem(u8c(u8"グリッド表示"), nullptr, false, false);
         ImGui::EndMenu();
     }
-
     if (ImGui::BeginMenu(u8c(u8"ヘルプ"))) {
-        ImGui::TextUnformatted(u8c(u8"ぺらぺらアニメ作り機 Phase 1 Step 1-4"));
-        ImGui::TextUnformatted(u8c(u8"作画UIをCanvasRendererへ接続済み。"));
+        ImGui::TextUnformatted(u8c(u8"ぺらぺらアニメ作り機 Phase 1.5 Step 20"));
+        ImGui::TextUnformatted(u8c(u8"速度問題とColorTrace出力を修正中。"));
         ImGui::EndMenu();
     }
-
     ImGui::EndMainMenuBar();
 }
 
@@ -163,13 +158,11 @@ void App::drawMainLayout()
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
-
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoNavFocus;
-
     ImGui::Begin("MainLayout", nullptr, flags);
     drawModeTabs();
     drawModeWorkspace();
@@ -180,17 +173,14 @@ void App::drawMainLayout()
 void App::drawModeTabs()
 {
     ImGui::BeginChild("ModeTabs", ImVec2(0.0f, 42.0f), true);
-
     for (int index = 0; index < static_cast<int>(kModes.size()); ++index) {
         if (index > 0) {
             ImGui::SameLine();
         }
-
         const bool selected = index == modeIndex(currentMode_);
         if (selected) {
             ImGui::PushStyleColor(ImGuiCol_Button, ui::themeColors().accent);
         }
-
         if (ImGui::Button(kModes[static_cast<std::size_t>(index)].tabLabel, ImVec2(150.0f, 28.0f))) {
             const AppMode nextMode = modeFromIndex(index);
             currentMode_ = nextMode;
@@ -198,19 +188,16 @@ void App::drawModeTabs()
                 enterColoringMode();
             }
         }
-
         if (selected) {
             ImGui::PopStyleColor();
         }
     }
-
     ImGui::SameLine();
     ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 170.0f);
     if (ImGui::Button(u8c(u8"レイアウトリセット"), ImVec2(155.0f, 28.0f))) {
         canvasViewInitialized_ = false;
         lastMessage_ = "layout reset";
     }
-
     ImGui::EndChild();
 }
 
@@ -220,11 +207,9 @@ void App::drawModeWorkspace()
         drawDrawingMode();
         return;
     }
-
     const ModeInfo& mode = kModes[static_cast<std::size_t>(modeIndex(currentMode_))];
     drawPlaceholderMode(mode.title, mode.description);
 }
-
 
 void App::enterColoringMode()
 {
@@ -256,7 +241,6 @@ bool App::selectPaintLayerForColoring(bool createIfMissing)
     }
 
     pushUndoSnapshot();
-
     Layer paintLayer = Layer::createDefault(static_cast<int>(frame->layers.size()) + 1);
     paintLayer.name = "彩色";
     paintLayer.type = LayerType::Paint;
@@ -284,7 +268,6 @@ void App::drawStatusBar()
     const Layer* layer = activeLayer();
     const int frameCount = activeCell() == nullptr ? 0 : static_cast<int>(activeCell()->frames.size());
     const int layerCount = frame == nullptr ? 0 : static_cast<int>(frame->layers.size());
-
     ImGui::BeginChild("StatusBar", ImVec2(0.0f, 24.0f), true);
     ImGui::Text("fps: %.1f | canvas: %dx%d | zoom: %.0f%% | frame: %d/%d | layer: %d/%d | brush: %.1f px",
                 ImGui::GetIO().Framerate,
@@ -304,8 +287,16 @@ void App::drawStatusBar()
 
 void App::pushUndoSnapshot()
 {
-    undoStack_.push_back(project_);
-    if (undoStack_.size() > 32U) {
+    const Frame* frame = activeFrame();
+    if (frame == nullptr) {
+        return;
+    }
+    FrameSnapshot snapshot;
+    snapshot.cellIndex = activeCellIndex_;
+    snapshot.frameIndex = activeFrameIndex_;
+    snapshot.frame = *frame;
+    undoStack_.push_back(std::move(snapshot));
+    if (undoStack_.size() > 50U) {
         undoStack_.erase(undoStack_.begin());
     }
     redoStack_.clear();
@@ -318,9 +309,26 @@ void App::undo()
         return;
     }
 
-    redoStack_.push_back(project_);
-    project_ = undoStack_.back();
+    if (const Frame* current = activeFrame(); current != nullptr) {
+        FrameSnapshot redoSnapshot;
+        redoSnapshot.cellIndex = activeCellIndex_;
+        redoSnapshot.frameIndex = activeFrameIndex_;
+        redoSnapshot.frame = *current;
+        redoStack_.push_back(std::move(redoSnapshot));
+    }
+
+    FrameSnapshot snapshot = std::move(undoStack_.back());
     undoStack_.pop_back();
+
+    if (snapshot.cellIndex >= 0 && snapshot.cellIndex < static_cast<int>(project_.cells.size())) {
+        Cell& cell = project_.cells[static_cast<std::size_t>(snapshot.cellIndex)];
+        if (snapshot.frameIndex >= 0 && snapshot.frameIndex < static_cast<int>(cell.frames.size())) {
+            activeCellIndex_ = snapshot.cellIndex;
+            activeFrameIndex_ = snapshot.frameIndex;
+            cell.frames[static_cast<std::size_t>(snapshot.frameIndex)] = std::move(snapshot.frame);
+        }
+    }
+
     afterProjectChanged();
     lastMessage_ = "undo";
 }
@@ -332,9 +340,26 @@ void App::redo()
         return;
     }
 
-    undoStack_.push_back(project_);
-    project_ = redoStack_.back();
+    if (const Frame* current = activeFrame(); current != nullptr) {
+        FrameSnapshot undoSnapshot;
+        undoSnapshot.cellIndex = activeCellIndex_;
+        undoSnapshot.frameIndex = activeFrameIndex_;
+        undoSnapshot.frame = *current;
+        undoStack_.push_back(std::move(undoSnapshot));
+    }
+
+    FrameSnapshot snapshot = std::move(redoStack_.back());
     redoStack_.pop_back();
+
+    if (snapshot.cellIndex >= 0 && snapshot.cellIndex < static_cast<int>(project_.cells.size())) {
+        Cell& cell = project_.cells[static_cast<std::size_t>(snapshot.cellIndex)];
+        if (snapshot.frameIndex >= 0 && snapshot.frameIndex < static_cast<int>(cell.frames.size())) {
+            activeCellIndex_ = snapshot.cellIndex;
+            activeFrameIndex_ = snapshot.frameIndex;
+            cell.frames[static_cast<std::size_t>(snapshot.frameIndex)] = std::move(snapshot.frame);
+        }
+    }
+
     afterProjectChanged();
     lastMessage_ = "redo";
 }

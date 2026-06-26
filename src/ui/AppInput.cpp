@@ -1,6 +1,7 @@
 // このファイルの役割:
 // 作画キャンバス内のマウス入力を処理する。
 // 入力中ストロークだけDrawListでプレビューし、確定時にProjectとCanvasBitmapへ反映する。
+// Phase 1.5 Step 20: フレーム移動では全dirtyを出さず、FloodFill確定は対象レイヤーだけdirty化する。
 
 #include "ui/App.h"
 
@@ -28,11 +29,11 @@ float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 
 bool isPointInside(ImVec2 point, ImVec2 min, ImVec2 size)
 {
-    return point.x >= min.x && point.y >= min.y && point.x <= min.x + size.x && point.y <= min.y + size.y;
+    return point.x >= min.x && point.y >= min.y &&
+           point.x <= min.x + size.x && point.y <= min.y + size.y;
 }
 
 } // namespace
-
 
 bool App::stepActiveFrame(int delta)
 {
@@ -50,7 +51,8 @@ bool App::stepActiveFrame(int delta)
     }
 
     clampSelection();
-    canvasRenderer_.markAllDirty();
+    // フレーム移動は表示対象キーが変わるだけなので、全dirtyは不要。
+    // ここでmarkAllDirty()すると任意フレーム選択のたびにキャッシュ判定・再ベイク待ちが出る。
     lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
     return true;
 }
@@ -82,10 +84,6 @@ bool App::advancePlaybackFrame()
 
     activeFrameIndex_ = nextIndex;
     clampSelection();
-
-    // 再生中のフレーム送りでは markAllDirty() を呼ばない。
-    // CanvasRenderer は Frame* ごとにキャッシュを持つため、
-    // ここで全キャッシュを破棄すると毎コマ全レイヤー再焼き込みになりFPSが落ちる。
     return true;
 }
 
@@ -162,7 +160,7 @@ void App::handleFrameShortcuts()
             isPlayingFrames_ = false;
             activeFrameIndex_ = 0;
             clampSelection();
-            canvasRenderer_.markAllDirty();
+            lastMessage_ = "frame stepped to 1";
         }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_End)) {
@@ -173,7 +171,7 @@ void App::handleFrameShortcuts()
                 isPlayingFrames_ = false;
                 activeFrameIndex_ = lastIndex;
                 clampSelection();
-                canvasRenderer_.markAllDirty();
+                lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
             }
         }
     }
@@ -192,7 +190,7 @@ void App::drawFingerPlaybackControls()
             isPlayingFrames_ = false;
             activeFrameIndex_ = 0;
             clampSelection();
-            canvasRenderer_.markAllDirty();
+            lastMessage_ = "frame stepped to 1";
         }
     }
     ImGui::SameLine();
@@ -216,7 +214,7 @@ void App::drawFingerPlaybackControls()
             isPlayingFrames_ = false;
             activeFrameIndex_ = static_cast<int>(cell->frames.size()) - 1;
             clampSelection();
-            canvasRenderer_.markAllDirty();
+            lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
         }
     }
 
@@ -284,7 +282,6 @@ void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize)
     }
 }
 
-
 void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
 {
     Frame* frame = activeFrame();
@@ -323,9 +320,10 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
         return;
     }
     targetLayer->strokes.insert(targetLayer->strokes.end(), result.strokes.begin(), result.strokes.end());
-    canvasRenderer_.markAllDirty();
+    targetLayer->touchRevision();
+    canvasRenderer_.markDirty(activeLayerIndex_);
     lastMessage_ = "flood fill: " + std::to_string(result.filledPixelCount) +
-                   " px / " + std::to_string(result.strokes.size()) + " spans";
+                   " px / " + std::to_string(result.strokes.size()) + " fills";
 }
 
 void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
@@ -366,14 +364,9 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     currentStroke_.dryRate = std::clamp(brushSettings_.dryRate, 0.0f, 1.0f);
 
     if (brushSettings_.tool == ui::ToolKind::Eraser) {
-        // 消しゴムはプレビュー用に赤色で表示するが、
-        // radiusPx は brushSettings_.radiusPx をそのまま使う。
-        // ここで color だけ変えて radiusPx は変えない。
         currentStroke_.color = {1.0f, 0.2f, 0.2f, 0.75f};
     }
 
-    // MyPaintエンジンが選択されている場合は逐次処理を開始する。
-    // beginStroke() 内で brush の初期化と mypaint_brush_new_stroke() が走る。
     isMyPaintStrokeActive_ = false;
     if (brushSettings_.tool == ui::ToolKind::Brush &&
         currentStroke_.brushEngine == StrokeBrushEngine::MyPaint &&
@@ -386,9 +379,7 @@ void App::beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     }
 
     isDrawingStroke_ = true;
-
     updateStroke(mouseScreen, areaMin, areaSize);
-    (void)areaSize;
 }
 
 void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
@@ -404,7 +395,6 @@ void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     point.pressure = 1.0f;
 
     const bool useMyPaintRealtime = isMyPaintStrokeActive_;
-
     if (currentStroke_.points.empty()) {
         currentStroke_.points.push_back(point);
         if (useMyPaintRealtime) {
@@ -416,7 +406,6 @@ void App::updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     StrokePoint filteredPoint = point;
     if (brushSettings_.tool == ui::ToolKind::Brush && brushSettings_.stabilizer > 0.0f) {
         const StrokePoint& previous = currentStroke_.points.back();
-        // 手ぶれ補正は「前の点に少し寄せる」だけにして、既存の描画感を壊さない。
         const float follow = 1.0f - std::clamp(brushSettings_.stabilizer, 0.0f, 1.0f) * 0.85f;
         filteredPoint.x = previous.x + (point.x - previous.x) * follow;
         filteredPoint.y = previous.y + (point.y - previous.y) * follow;

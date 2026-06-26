@@ -11,6 +11,7 @@
 // Phase 1.5 Step 19n: markAllDirtyで既存テクスチャを捨てず、ストローク確定時の全線一瞬消えを防ぐ。
 // Phase 1.5 Step 19o: 旧App dirty通知を吸収し、Simple確定後の全レイヤー再ベイクを避ける。
 // Phase 1.5 Step 19p: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
+// Phase 1.5 Step 20: hashからvectorポインタアドレスを外し、フレームコピー/移動での不要な再ベイクを防ぐ。
 
 #include "render/CanvasRenderer.h"
 
@@ -154,21 +155,37 @@ std::string layerCacheId(const Layer& layer, int layerIndex)
 void hashStrokeO1(std::uint64_t& seed, const Stroke& stroke)
 {
     // 再生中の毎フレーム判定ではStrokePoint全走査をしない。
-    // size / vector storage / 端点に近い軽量メタ情報だけで、通常のpush/erase/代入を検知する。
+    // vectorのポインタアドレスは使わない。フレームコピー/Undo/Redo/読み込みで
+    // 同じ内容でもdata()の住所が変わり、キャッシュミスと再ベイクを誘発するため。
     hashCombine(seed, static_cast<std::uint64_t>(stroke.brushEngine));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
-    hashCombine(seed, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stroke.points.data())));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
-    hashCombine(seed, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(stroke.bitmap.data())));
     hashCombine(seed, hashFloat(stroke.opacity));
     hashCombine(seed, hashFloat(stroke.radiusPx));
+    hashCombine(seed, hashFloat(stroke.hardness));
+    hashCombine(seed, hashFloat(stroke.spacing));
+    hashCombine(seed, hashFloat(stroke.pressureToSize));
+    hashCombine(seed, hashFloat(stroke.pressureToOpacity));
+    hashCombine(seed, hashFloat(stroke.watercolorBleed));
+    hashCombine(seed, hashFloat(stroke.colorMix));
+    hashCombine(seed, hashFloat(stroke.dryRate));
+    for (float component : stroke.color) {
+        hashCombine(seed, hashFloat(component));
+    }
     if (!stroke.points.empty()) {
         hashCombine(seed, hashFloat(stroke.points.front().x));
         hashCombine(seed, hashFloat(stroke.points.front().y));
+        hashCombine(seed, hashFloat(stroke.points.front().pressure));
         hashCombine(seed, hashFloat(stroke.points.back().x));
         hashCombine(seed, hashFloat(stroke.points.back().y));
+        hashCombine(seed, hashFloat(stroke.points.back().pressure));
+    }
+    if (!stroke.bitmap.empty()) {
+        hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.front()));
+        hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap[stroke.bitmap.size() / 2U]));
+        hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.back()));
     }
 }
 
@@ -177,13 +194,12 @@ std::uint64_t layerRevisionValue(const Layer& layer)
     // 明示revisionを主に使うが、既存コードでtouchRevision()漏れがあっても
     // 変更検知が完全に死なないよう、O(1)のストローク代表情報も混ぜる。
     // ここでは全StrokePoint/全Fill bitmapは走査しない。
+    // vectorのcapacity/dataアドレスも使わない。フレームコピーだけでキャッシュミスするため。
     // opacity/visibleはdraw時のtint/skipで処理できるため、bitmap再ベイク条件には入れない。
     std::uint64_t seed = 1099511628211ULL;
     hashCombine(seed, layer.revisionCounter);
     hashCombine(seed, static_cast<std::uint64_t>(layer.type));
     hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
-    hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.capacity()));
-    hashCombine(seed, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(layer.strokes.data())));
 
     if (!layer.strokes.empty()) {
         hashStrokeO1(seed, layer.strokes.front());
@@ -660,7 +676,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
 
     // 1 draw あたりの焼き込み量。大きすぎるとフレーム移動で固まり、小さすぎると表示完了が遅い。
     // FillStrokeは1本でも大きいので、この予算でもFillは1本ずつになる。
-    constexpr int kStrokeBakeBudgetPerDraw = 12;
+    constexpr int kStrokeBakeBudgetPerDraw = 4;
     int bakedThisCall = 0;
 
     auto bakeNextMatchingStroke = [&](bool wantFill) -> bool {

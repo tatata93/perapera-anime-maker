@@ -7,7 +7,7 @@
 // Phase 1.5 Step 19l: 再生時の毎フレーム全StrokePoint hashを廃止し、Layer::revisionCounterベースにする。
 // Phase 1.5 Step 19n: 旧markAllDirty呼び出しでも既存Textureを保持し、ストローク確定時の全線消えを防ぐ。
 // Phase 1.5 Step 19o: Simple確定直後の旧markAllDirtyを吸収し、必要なdirtyだけrevision無効化する。
-// Phase 1.5 Step 19p: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
+// Phase 1.5 Step 19p / Step 20: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>

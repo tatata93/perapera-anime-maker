@@ -1,8 +1,8 @@
 #pragma once
-
 // このファイルの役割:
 // アプリ全体の状態を保持し、UI描画、作画入力、保存・読み込み、Undo/Redoを束ねる。
 // SDL初期化やImGui初期化は main.cpp に残し、このクラスはアプリ内部の責務だけを持つ。
+// Phase 1.5 Step 20: Undo/RedoをProject全体コピーからアクティブFrame単位へ軽量化する。
 
 #include <array>
 #include <filesystem>
@@ -10,7 +10,9 @@
 #include <vector>
 
 #include <SDL3/SDL.h>
+#include <imgui.h>
 
+#include "core/Frame.h"
 #include "core/Project.h"
 #include "core/Stroke.h"
 #include "brush/MyPaintBrushEngine.h"
@@ -39,9 +41,16 @@ public:
     void draw();
 
 private:
+    struct FrameSnapshot {
+        int cellIndex = 0;
+        int frameIndex = 0;
+        Frame frame;
+    };
+
     SDL_Renderer* renderer_ = nullptr;
     Project project_;
     CanvasRenderer canvasRenderer_;
+
     // libmypaintブラシエンジン（逐次処理用）。
     // PERAPERA_HAS_LIBMYPAINTが未定義の場合はSimple互換として動作する。
     MyPaintBrushEngine myPaintEngine_;
@@ -64,7 +73,6 @@ private:
     bool canvasViewInitialized_ = false;
     bool onionPrevious_ = true;
     bool onionNext_ = false;
-
     bool lightTableEnabled_ = false;
     float lightTableOpacity_ = 0.35f;
     int lightTableColorMode_ = 0;
@@ -77,8 +85,8 @@ private:
     float playbackSpeed_ = 1.0f;
     float playbackAccumulator_ = 0.0f;
 
-    std::vector<Project> undoStack_;
-    std::vector<Project> redoStack_;
+    std::vector<FrameSnapshot> undoStack_;
+    std::vector<FrameSnapshot> redoStack_;
     std::string lastMessage_ = "Phase 1 Step 1-4: ready";
 
     Cell* activeCell();
@@ -96,7 +104,6 @@ private:
     bool selectPaintLayerForColoring(bool createIfMissing);
     void drawPlaceholderMode(const char* title, const char* description);
     void drawStatusBar();
-
     void drawDrawingMode();
     void drawCanvasArea(float rightWidth);
     void drawLeftSidebar();

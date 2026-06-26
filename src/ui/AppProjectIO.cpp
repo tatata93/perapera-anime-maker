@@ -1,9 +1,10 @@
 // このファイルの役割:
 // Appの保存・読み込み・PNG/MP4書き出しを実装する。
-// v12ではProjectIOの保存データを読み直して検証し、再起動後の選択状態も復元する。
+// Phase 1.5 Step 20: 通常保存時の検証リロードを外し、重い全ストローク再走査を明示チェック操作へ分離する。
 
 #include "ui/App.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <utility>
@@ -38,23 +39,14 @@ void App::saveProject()
         return;
     }
 
-    Project reloaded;
-    if (!ProjectIO::load(projectFolder, reloaded, &error)) {
-        lastMessage_ = "save verify load failed: " + error;
-        return;
-    }
-    appio::normalizeProjectForStep14(reloaded);
-    const appio::ProjectStats reloadedStats = appio::collectProjectStats(reloaded);
-    if (!appio::sameStats(stats, reloadedStats) || appio::projectSignature(toSave) != appio::projectSignature(reloaded)) {
-        lastMessage_ = "save verify mismatch: saved " + appio::statsToText(stats) +
-            " / loaded " + appio::statsToText(reloadedStats);
-        return;
-    }
-
+    // Step 20:
+    // 以前はここでProjectIO::load()してprojectSignature()まで走査していた。
+    // FillStrokeが増えると保存のたびに全フレーム/全ストローク/全bitmapを読むため遅い。
+    // 検証は saveLoadRoundTripCheck() の明示ボタンだけで行う。
     project_ = std::move(toSave);
     afterProjectChanged();
     const appio::SavedSelection selection{activeCellIndex_, activeFrameIndex_, activeLayerIndex_, true};
-    lastMessage_ = "project saved+verified: " + projectFolder.string() + " | " +
+    lastMessage_ = "project saved: " + projectFolder.string() + " | " +
         appio::statsToText(stats) + " | " + appio::selectionText(selection);
 }
 
@@ -88,12 +80,15 @@ void App::loadProject()
         }
     }
 
-    pushUndoSnapshot();
+    // ロード前の巨大ProjectをUndoへ積むと、開くだけで重くなる。
+    // 別プロジェクトへの切替後に古いプロジェクトへUndoする操作も危険なので、履歴はクリアする。
+    undoStack_.clear();
+    redoStack_.clear();
+
     project_ = std::move(loaded);
     activeCellIndex_ = selection.cellIndex;
     activeFrameIndex_ = selection.frameIndex;
     activeLayerIndex_ = selection.layerIndex;
-    redoStack_.clear();
     afterProjectChanged();
     if (!loadColorPalette(projectFolder, &error)) {
         lastMessage_ = "project loaded, but palette load failed: " + error;
@@ -172,9 +167,8 @@ void App::exportActivePng()
     const std::filesystem::path output = appio::absolutePath(exportState_.exportFolder) / "active_frame.png";
     std::string error;
     if (PngExporter::exportFrame(*frame, output, project_.canvas.width, project_.canvas.height,
-                                  exportState_.exportMode, &error)) {
-        lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) +
-            "]: " + output.string();
+                                 exportState_.exportMode, &error)) {
+        lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) + "]: " + output.string();
     } else {
         lastMessage_ = "PNG export failed: " + error;
     }
@@ -191,9 +185,9 @@ void App::exportPngSequence()
     const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
     std::string error;
     if (PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height,
-                                          exportState_.exportMode, &error)) {
-        lastMessage_ = "PNG sequence exported [" + std::string(exportModeToString(exportState_.exportMode)) +
-            "]: " + pngFolder.string();
+                                         exportState_.exportMode, &error)) {
+        lastMessage_ = "PNG sequence exported [" + std::string(exportModeToString(exportState_.exportMode)) + "]: " +
+            pngFolder.string();
     } else {
         lastMessage_ = "PNG sequence failed: " + error;
     }
@@ -210,9 +204,8 @@ void App::exportMp4()
     const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
     const std::filesystem::path mp4Output = appio::absolutePath(exportState_.mp4Path);
     const std::filesystem::path logPath = appio::mp4LogPathForOutput(mp4Output);
-
     appio::resetMp4PreflightLog(logPath, exportState_.ffmpegPath, pngFolder, mp4Output, project_.output.fps);
-    appio::appendTextLog(logPath, "Step15: exporting PNG sequence before FFmpeg. mode=");
+    appio::appendTextLog(logPath, "Step20: exporting PNG sequence before FFmpeg.\nmode=");
     appio::appendTextLog(logPath, exportModeToString(exportState_.exportMode));
     appio::appendTextLog(logPath, "\n");
 
@@ -226,12 +219,10 @@ void App::exportMp4()
     }
 
     const std::filesystem::path firstFrame = pngFolder / "frame_001.png";
-    appio::appendTextLog(logPath, "PNG sequence exported. Expected first frame: " + firstFrame.string() + "\n");
-
+    appio::appendTextLog(logPath, "PNG sequence exported.\nExpected first frame: " + firstFrame.string() + "\n");
     const std::filesystem::path inputPattern = pngFolder / "frame_%03d.png";
     if (FfmpegRunner::pngSequenceToMp4(exportState_.ffmpegPath, inputPattern, project_.output.fps, mp4Output, &error)) {
-        lastMessage_ = "MP4 exported [" + std::string(exportModeToString(exportState_.exportMode)) +
-            "]: " + mp4Output.string();
+        lastMessage_ = "MP4 exported [" + std::string(exportModeToString(exportState_.exportMode)) + "]: " + mp4Output.string();
     } else {
         const std::string logText = appio::readLogForStatus(logPath);
         lastMessage_ = logText.empty() ? "MP4 failed: " + error : "MP4 failed: " + error + " | log: " + logText;
