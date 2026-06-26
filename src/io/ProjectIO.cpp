@@ -1,7 +1,8 @@
 // このファイルの役割:
 // Project を project.json + cells/ 以下のJSON群として保存・読み込みする。
 // UIや描画キャッシュには依存せず、ドメインデータだけを扱う。
-// Phase 1.5 Step 19では、バケツ塗り専用FillStrokeの1chマスクをBase64で保存する。
+// Phase 1.5 Step 19では、バケツ塗り専用FillStrokeの1chマスクを保存する。
+// Phase 1.5 Step 19k: FillStrokeのbitmapはJSONへBase64埋め込みせず、layer_NNN_fills.binへ分離して保存する。
 
 #include "io/ProjectIO.h"
 
@@ -25,7 +26,6 @@ namespace fs = std::filesystem;
 using nlohmann::json;
 
 constexpr int kProjectFormatVersion = 1;
-constexpr char kBase64Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 void setError(std::string* errorMessage, const std::string& message)
 {
@@ -41,69 +41,26 @@ std::string numberedName(const char* prefix, int number)
     return stream.str();
 }
 
-std::string base64Encode(const std::vector<std::uint8_t>& data)
+void writeUint32(std::ofstream& file, std::uint32_t value)
 {
-    std::string output;
-    output.reserve(((data.size() + 2U) / 3U) * 4U);
-
-    for (std::size_t index = 0; index < data.size(); index += 3U) {
-        const std::uint32_t a = data[index];
-        const std::uint32_t b = index + 1U < data.size() ? data[index + 1U] : 0U;
-        const std::uint32_t c = index + 2U < data.size() ? data[index + 2U] : 0U;
-        const std::uint32_t triple = (a << 16U) | (b << 8U) | c;
-
-        output.push_back(kBase64Alphabet[(triple >> 18U) & 0x3fU]);
-        output.push_back(kBase64Alphabet[(triple >> 12U) & 0x3fU]);
-        output.push_back(index + 1U < data.size() ? kBase64Alphabet[(triple >> 6U) & 0x3fU] : '=');
-        output.push_back(index + 2U < data.size() ? kBase64Alphabet[triple & 0x3fU] : '=');
-    }
-
-    return output;
+    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-int base64Value(char c)
+void writeFloat32(std::ofstream& file, float value)
 {
-    if (c >= 'A' && c <= 'Z') {
-        return c - 'A';
-    }
-    if (c >= 'a' && c <= 'z') {
-        return c - 'a' + 26;
-    }
-    if (c >= '0' && c <= '9') {
-        return c - '0' + 52;
-    }
-    if (c == '+') {
-        return 62;
-    }
-    if (c == '/') {
-        return 63;
-    }
-    return -1;
+    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-std::vector<std::uint8_t> base64Decode(const std::string& text)
+bool readUint32(std::ifstream& file, std::uint32_t& value)
 {
-    std::vector<std::uint8_t> output;
-    int value = 0;
-    int bits = -8;
+    file.read(reinterpret_cast<char*>(&value), sizeof(value));
+    return static_cast<bool>(file);
+}
 
-    for (char c : text) {
-        if (c == '=') {
-            break;
-        }
-        const int digit = base64Value(c);
-        if (digit < 0) {
-            continue;
-        }
-        value = (value << 6) | digit;
-        bits += 6;
-        if (bits >= 0) {
-            output.push_back(static_cast<std::uint8_t>((value >> bits) & 0xff));
-            bits -= 8;
-        }
-    }
-
-    return output;
+bool readFloat32(std::ifstream& file, float& value)
+{
+    file.read(reinterpret_cast<char*>(&value), sizeof(value));
+    return static_cast<bool>(file);
 }
 
 bool writeJsonFile(const fs::path& path, const json& value, std::string* errorMessage)
@@ -187,16 +144,12 @@ StrokePoint strokePointFromJson(const json& value)
     return point;
 }
 
-json toJson(const Stroke& stroke)
+json toJson(const Stroke& stroke, int fillIndex = -1)
 {
     if (stroke.brushEngine == StrokeBrushEngine::Fill) {
         return json{
             {"brushEngine", "Fill"},
-            {"color", stroke.color},
-            {"opacity", stroke.opacity},
-            {"bitmapWidth", stroke.bitmapWidth},
-            {"bitmapHeight", stroke.bitmapHeight},
-            {"bitmapBase64", base64Encode(stroke.bitmap)},
+            {"fillIndex", fillIndex},
         };
     }
 
@@ -221,7 +174,104 @@ json toJson(const Stroke& stroke)
     };
 }
 
-std::optional<Stroke> strokeFromJson(const json& value)
+std::vector<Stroke> loadFillStrokesFile(const fs::path& path)
+{
+    std::vector<Stroke> result;
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return result;
+    }
+
+    std::uint32_t strokeCount = 0U;
+    if (!readUint32(file, strokeCount)) {
+        return result;
+    }
+
+    result.reserve(strokeCount);
+    for (std::uint32_t strokeIndex = 0U; strokeIndex < strokeCount; ++strokeIndex) {
+        std::uint32_t bitmapWidth = 0U;
+        std::uint32_t bitmapHeight = 0U;
+        std::uint32_t byteCount = 0U;
+        Stroke stroke;
+        stroke.brushEngine = StrokeBrushEngine::Fill;
+
+        if (!readUint32(file, bitmapWidth) || !readUint32(file, bitmapHeight)) {
+            return {};
+        }
+        for (float& component : stroke.color) {
+            if (!readFloat32(file, component)) {
+                return {};
+            }
+        }
+        if (!readFloat32(file, stroke.opacity) || !readUint32(file, byteCount)) {
+            return {};
+        }
+
+        const std::uint64_t expectedSize = static_cast<std::uint64_t>(bitmapWidth) * static_cast<std::uint64_t>(bitmapHeight);
+        if (bitmapWidth == 0U || bitmapHeight == 0U || byteCount != expectedSize) {
+            return {};
+        }
+
+        stroke.bitmapWidth = static_cast<int>(bitmapWidth);
+        stroke.bitmapHeight = static_cast<int>(bitmapHeight);
+        stroke.opacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
+        stroke.bitmap.resize(static_cast<std::size_t>(byteCount));
+        file.read(reinterpret_cast<char*>(stroke.bitmap.data()), static_cast<std::streamsize>(stroke.bitmap.size()));
+        if (!file) {
+            return {};
+        }
+        result.push_back(std::move(stroke));
+    }
+
+    return result;
+}
+
+bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* errorMessage)
+{
+    std::uint32_t fillCount = 0U;
+    for (const Stroke& stroke : layer.strokes) {
+        if (stroke.brushEngine == StrokeBrushEngine::Fill && !stroke.bitmap.empty() && stroke.bitmapWidth > 0 && stroke.bitmapHeight > 0) {
+            ++fillCount;
+        }
+    }
+
+    if (fillCount == 0U) {
+        return true;
+    }
+
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        setError(errorMessage, "failed to open fill binary for write: " + path.string());
+        return false;
+    }
+
+    writeUint32(file, fillCount);
+    for (const Stroke& stroke : layer.strokes) {
+        if (stroke.brushEngine != StrokeBrushEngine::Fill || stroke.bitmap.empty() || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0) {
+            continue;
+        }
+
+        const std::uint32_t bitmapWidth = static_cast<std::uint32_t>(stroke.bitmapWidth);
+        const std::uint32_t bitmapHeight = static_cast<std::uint32_t>(stroke.bitmapHeight);
+        const std::uint32_t byteCount = static_cast<std::uint32_t>(stroke.bitmap.size());
+        writeUint32(file, bitmapWidth);
+        writeUint32(file, bitmapHeight);
+        for (float component : stroke.color) {
+            writeFloat32(file, component);
+        }
+        writeFloat32(file, stroke.opacity);
+        writeUint32(file, byteCount);
+        file.write(reinterpret_cast<const char*>(stroke.bitmap.data()), static_cast<std::streamsize>(stroke.bitmap.size()));
+        if (!file) {
+            setError(errorMessage, "failed to write fill binary: " + path.string());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::optional<Stroke> strokeFromJson(const json& value, const std::vector<Stroke>& fillStrokes)
 {
     const std::string engineText = value.value("brushEngine", std::string("Simple"));
     const bool isSimple = engineText == "Simple" || engineText == "SimpleBrushEngine" || engineText.empty();
@@ -231,6 +281,14 @@ std::optional<Stroke> strokeFromJson(const json& value)
         return std::nullopt;
     }
 
+    if (isFill) {
+        const int fillIndex = value.value("fillIndex", -1);
+        if (fillIndex < 0 || fillIndex >= static_cast<int>(fillStrokes.size())) {
+            return std::nullopt;
+        }
+        return fillStrokes[static_cast<std::size_t>(fillIndex)];
+    }
+
     Stroke stroke;
     if (value.contains("color") && value.at("color").is_array() && value.at("color").size() == 4) {
         for (std::size_t index = 0; index < 4; ++index) {
@@ -238,20 +296,6 @@ std::optional<Stroke> strokeFromJson(const json& value)
         }
     }
     stroke.opacity = std::clamp(value.value("opacity", 1.0f), 0.05f, 1.0f);
-
-    if (isFill) {
-        stroke.brushEngine = StrokeBrushEngine::Fill;
-        stroke.bitmapWidth = value.value("bitmapWidth", 0);
-        stroke.bitmapHeight = value.value("bitmapHeight", 0);
-        stroke.bitmap = base64Decode(value.value("bitmapBase64", std::string()));
-        const std::size_t expectedSize = static_cast<std::size_t>(std::max(0, stroke.bitmapWidth)) *
-                                         static_cast<std::size_t>(std::max(0, stroke.bitmapHeight));
-        if (stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0 || stroke.bitmap.size() != expectedSize) {
-            return std::nullopt;
-        }
-        return stroke;
-    }
-
     stroke.radiusPx = value.value("radiusPx", 4.0f);
     stroke.brushEngine = isMyPaint ? StrokeBrushEngine::MyPaint : StrokeBrushEngine::Simple;
     stroke.hardness = std::clamp(value.value("hardness", 1.0f), 0.0f, 1.0f);
@@ -273,8 +317,17 @@ std::optional<Stroke> strokeFromJson(const json& value)
 json toJson(const Layer& layer)
 {
     json strokes = json::array();
+    int fillIndex = 0;
     for (const Stroke& stroke : layer.strokes) {
-        strokes.push_back(toJson(stroke));
+        if (stroke.brushEngine == StrokeBrushEngine::Fill) {
+            if (stroke.bitmap.empty() || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0) {
+                continue;
+            }
+            strokes.push_back(toJson(stroke, fillIndex));
+            ++fillIndex;
+        } else {
+            strokes.push_back(toJson(stroke));
+        }
     }
 
     return json{
@@ -289,7 +342,7 @@ json toJson(const Layer& layer)
     };
 }
 
-Layer layerFromJson(const json& value)
+Layer layerFromJson(const json& value, const std::vector<Stroke>& fillStrokes)
 {
     Layer layer;
     layer.layerId = value.value("layerId", std::string("layer_001"));
@@ -301,7 +354,7 @@ Layer layerFromJson(const json& value)
 
     if (value.contains("strokes") && value.at("strokes").is_array()) {
         for (const json& strokeJson : value.at("strokes")) {
-            std::optional<Stroke> stroke = strokeFromJson(strokeJson);
+            std::optional<Stroke> stroke = strokeFromJson(strokeJson, fillStrokes);
             if (stroke.has_value()) {
                 layer.strokes.push_back(std::move(*stroke));
             }
@@ -486,7 +539,12 @@ bool saveFrame(const Frame& frame, const fs::path& frameFolder, std::string* err
         return false;
     }
     for (std::size_t layerIndex = 0; layerIndex < frame.layers.size(); ++layerIndex) {
-        const fs::path layerPath = frameFolder / (numberedName("layer", static_cast<int>(layerIndex + 1U)) + ".json");
+        const std::string layerStem = numberedName("layer", static_cast<int>(layerIndex + 1U));
+        const fs::path layerPath = frameFolder / (layerStem + ".json");
+        const fs::path fillsPath = frameFolder / (layerStem + "_fills.bin");
+        if (!saveFillStrokesFile(fillsPath, frame.layers[layerIndex], errorMessage)) {
+            return false;
+        }
         if (!writeJsonFile(layerPath, toJson(frame.layers[layerIndex]), errorMessage)) {
             return false;
         }
@@ -535,7 +593,9 @@ bool loadCellFrames(Cell& cell, const fs::path& cellFolder, std::string* errorMe
             if (!readJsonFile(layerFile, layerJson, errorMessage)) {
                 return false;
             }
-            frame.layers.push_back(layerFromJson(layerJson));
+            const fs::path fillsPath = layerFile.parent_path() / (layerFile.stem().string() + "_fills.bin");
+            const std::vector<Stroke> fillStrokes = loadFillStrokesFile(fillsPath);
+            frame.layers.push_back(layerFromJson(layerJson, fillStrokes));
         }
         if (frame.layers.empty()) {
             frame.layers.push_back(Layer::createDefault(1));
