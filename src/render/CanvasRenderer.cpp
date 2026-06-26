@@ -520,6 +520,18 @@ std::uint64_t CanvasRenderer::layerRevisionHash(const Layer& layer) const
             hashCombine(seed, hashFloat(point.y));
             hashCombine(seed, hashFloat(point.pressure));
         }
+
+        if (stroke.brushEngine == StrokeBrushEngine::Fill) {
+            hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
+            hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
+            hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
+            hashCombine(seed, reinterpret_cast<std::uintptr_t>(stroke.bitmap.data()));
+            if (!stroke.bitmap.empty()) {
+                hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.front()));
+                hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap[stroke.bitmap.size() / 2U]));
+                hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.back()));
+            }
+        }
     }
 
     return seed;

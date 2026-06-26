@@ -1,14 +1,20 @@
 // このファイルの役割:
 // Project を project.json + cells/ 以下のJSON群として保存・読み込みする。
 // UIや描画キャッシュには依存せず、ドメインデータだけを扱う。
+// Phase 1.5 Step 19では、バケツ塗り専用FillStrokeの1chマスクをBase64で保存する。
 
 #include "io/ProjectIO.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <optional>
 #include <sstream>
+#include <string>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -19,6 +25,7 @@ namespace fs = std::filesystem;
 using nlohmann::json;
 
 constexpr int kProjectFormatVersion = 1;
+constexpr char kBase64Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 void setError(std::string* errorMessage, const std::string& message)
 {
@@ -33,6 +40,72 @@ std::string numberedName(const char* prefix, int number)
     stream << prefix << '_' << std::setw(3) << std::setfill('0') << number;
     return stream.str();
 }
+
+std::string base64Encode(const std::vector<std::uint8_t>& data)
+{
+    std::string output;
+    output.reserve(((data.size() + 2U) / 3U) * 4U);
+
+    for (std::size_t index = 0; index < data.size(); index += 3U) {
+        const std::uint32_t a = data[index];
+        const std::uint32_t b = index + 1U < data.size() ? data[index + 1U] : 0U;
+        const std::uint32_t c = index + 2U < data.size() ? data[index + 2U] : 0U;
+        const std::uint32_t triple = (a << 16U) | (b << 8U) | c;
+
+        output.push_back(kBase64Alphabet[(triple >> 18U) & 0x3fU]);
+        output.push_back(kBase64Alphabet[(triple >> 12U) & 0x3fU]);
+        output.push_back(index + 1U < data.size() ? kBase64Alphabet[(triple >> 6U) & 0x3fU] : '=');
+        output.push_back(index + 2U < data.size() ? kBase64Alphabet[triple & 0x3fU] : '=');
+    }
+
+    return output;
+}
+
+int base64Value(char c)
+{
+    if (c >= 'A' && c <= 'Z') {
+        return c - 'A';
+    }
+    if (c >= 'a' && c <= 'z') {
+        return c - 'a' + 26;
+    }
+    if (c >= '0' && c <= '9') {
+        return c - '0' + 52;
+    }
+    if (c == '+') {
+        return 62;
+    }
+    if (c == '/') {
+        return 63;
+    }
+    return -1;
+}
+
+std::vector<std::uint8_t> base64Decode(const std::string& text)
+{
+    std::vector<std::uint8_t> output;
+    int value = 0;
+    int bits = -8;
+
+    for (char c : text) {
+        if (c == '=') {
+            break;
+        }
+        const int digit = base64Value(c);
+        if (digit < 0) {
+            continue;
+        }
+        value = (value << 6) | digit;
+        bits += 6;
+        if (bits >= 0) {
+            output.push_back(static_cast<std::uint8_t>((value >> bits) & 0xff));
+            bits -= 8;
+        }
+    }
+
+    return output;
+}
+
 bool writeJsonFile(const fs::path& path, const json& value, std::string* errorMessage)
 {
     std::ofstream file(path);
@@ -47,6 +120,7 @@ bool writeJsonFile(const fs::path& path, const json& value, std::string* errorMe
     }
     return true;
 }
+
 bool readJsonFile(const fs::path& path, json& value, std::string* errorMessage)
 {
     std::ifstream file(path);
@@ -62,10 +136,48 @@ bool readJsonFile(const fs::path& path, json& value, std::string* errorMessage)
     }
     return true;
 }
+
+std::vector<fs::path> sortedDirectories(const fs::path& root)
+{
+    std::vector<fs::path> result;
+    std::error_code errorCode;
+    if (!fs::exists(root, errorCode)) {
+        return result;
+    }
+    for (const fs::directory_entry& entry : fs::directory_iterator(root, errorCode)) {
+        if (!errorCode && entry.is_directory()) {
+            result.push_back(entry.path());
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
+std::vector<fs::path> sortedLayerFiles(const fs::path& frameFolder)
+{
+    std::vector<fs::path> result;
+    std::error_code errorCode;
+    if (!fs::exists(frameFolder, errorCode)) {
+        return result;
+    }
+    for (const fs::directory_entry& entry : fs::directory_iterator(frameFolder, errorCode)) {
+        if (errorCode || !entry.is_regular_file()) {
+            continue;
+        }
+        const std::string filename = entry.path().filename().string();
+        if (filename.rfind("layer_", 0) == 0 && entry.path().extension() == ".json") {
+            result.push_back(entry.path());
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
 json toJson(const StrokePoint& point)
 {
     return json{{"x", point.x}, {"y", point.y}, {"pressure", point.pressure}};
 }
+
 StrokePoint strokePointFromJson(const json& value)
 {
     StrokePoint point;
@@ -74,8 +186,20 @@ StrokePoint strokePointFromJson(const json& value)
     point.pressure = value.value("pressure", 1.0f);
     return point;
 }
+
 json toJson(const Stroke& stroke)
 {
+    if (stroke.brushEngine == StrokeBrushEngine::Fill) {
+        return json{
+            {"brushEngine", "Fill"},
+            {"color", stroke.color},
+            {"opacity", stroke.opacity},
+            {"bitmapWidth", stroke.bitmapWidth},
+            {"bitmapHeight", stroke.bitmapHeight},
+            {"bitmapBase64", base64Encode(stroke.bitmap)},
+        };
+    }
+
     json points = json::array();
     for (const StrokePoint& point : stroke.points) {
         points.push_back(toJson(point));
@@ -96,17 +220,40 @@ json toJson(const Stroke& stroke)
         {"points", points},
     };
 }
-Stroke strokeFromJson(const json& value)
+
+std::optional<Stroke> strokeFromJson(const json& value)
 {
+    const std::string engineText = value.value("brushEngine", std::string("Simple"));
+    const bool isSimple = engineText == "Simple" || engineText == "SimpleBrushEngine" || engineText.empty();
+    const bool isMyPaint = engineText == "MyPaint" || engineText == "MyPaintBrushEngine";
+    const bool isFill = engineText == "Fill" || engineText == "FillStroke";
+    if (!isSimple && !isMyPaint && !isFill) {
+        return std::nullopt;
+    }
+
     Stroke stroke;
     if (value.contains("color") && value.at("color").is_array() && value.at("color").size() == 4) {
         for (std::size_t index = 0; index < 4; ++index) {
             stroke.color[index] = value.at("color").at(index).get<float>();
         }
     }
-    stroke.radiusPx = value.value("radiusPx", 4.0f);
-    stroke.brushEngine = strokeBrushEngineFromString(value.value("brushEngine", std::string("Simple")));
     stroke.opacity = std::clamp(value.value("opacity", 1.0f), 0.05f, 1.0f);
+
+    if (isFill) {
+        stroke.brushEngine = StrokeBrushEngine::Fill;
+        stroke.bitmapWidth = value.value("bitmapWidth", 0);
+        stroke.bitmapHeight = value.value("bitmapHeight", 0);
+        stroke.bitmap = base64Decode(value.value("bitmapBase64", std::string()));
+        const std::size_t expectedSize = static_cast<std::size_t>(std::max(0, stroke.bitmapWidth)) *
+                                         static_cast<std::size_t>(std::max(0, stroke.bitmapHeight));
+        if (stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0 || stroke.bitmap.size() != expectedSize) {
+            return std::nullopt;
+        }
+        return stroke;
+    }
+
+    stroke.radiusPx = value.value("radiusPx", 4.0f);
+    stroke.brushEngine = isMyPaint ? StrokeBrushEngine::MyPaint : StrokeBrushEngine::Simple;
     stroke.hardness = std::clamp(value.value("hardness", 1.0f), 0.0f, 1.0f);
     stroke.spacing = std::clamp(value.value("spacing", 0.25f), 0.05f, 1.0f);
     stroke.pressureToSize = std::clamp(value.value("pressureToSize", 0.0f), 0.0f, 1.0f);
@@ -122,6 +269,7 @@ Stroke strokeFromJson(const json& value)
     }
     return stroke;
 }
+
 json toJson(const Layer& layer)
 {
     json strokes = json::array();
@@ -153,15 +301,20 @@ Layer layerFromJson(const json& value)
 
     if (value.contains("strokes") && value.at("strokes").is_array()) {
         for (const json& strokeJson : value.at("strokes")) {
-            layer.strokes.push_back(strokeFromJson(strokeJson));
+            std::optional<Stroke> stroke = strokeFromJson(strokeJson);
+            if (stroke.has_value()) {
+                layer.strokes.push_back(std::move(*stroke));
+            }
         }
     }
     return layer;
 }
+
 json frameMetaToJson(const Frame& frame)
 {
     return json{{"format_version", kProjectFormatVersion}, {"name", frame.name}, {"durationFrames", frame.durationFrames}};
 }
+
 Frame frameMetaFromJson(const json& value, int frameNumber)
 {
     Frame frame = Frame::createDefault(frameNumber);
@@ -170,14 +323,10 @@ Frame frameMetaFromJson(const json& value, int frameNumber)
     frame.layers.clear();
     return frame;
 }
+
 json toJson(const CellPlacement& placement)
 {
-    return json{
-        {"x", placement.x},
-        {"y", placement.y},
-        {"scale", placement.scale},
-        {"rotation", placement.rotation},
-    };
+    return json{{"x", placement.x}, {"y", placement.y}, {"scale", placement.scale}, {"rotation", placement.rotation}};
 }
 
 CellPlacement placementFromJson(const json& value)
@@ -189,13 +338,10 @@ CellPlacement placementFromJson(const json& value)
     placement.rotation = value.value("rotation", 0.0f);
     return placement;
 }
+
 json toJson(const CellMotionKey& key)
 {
-    return json{
-        {"frame", key.frame},
-        {"placement", toJson(key.placement)},
-        {"interpolation", key.interpolation},
-    };
+    return json{{"frame", key.frame}, {"placement", toJson(key.placement)}, {"interpolation", key.interpolation}};
 }
 
 CellMotionKey motionKeyFromJson(const json& value)
@@ -208,6 +354,7 @@ CellMotionKey motionKeyFromJson(const json& value)
     key.interpolation = value.value("interpolation", std::string("linear"));
     return key;
 }
+
 json cellMetaToJson(const Cell& cell)
 {
     json motionKeys = json::array();
@@ -253,16 +400,12 @@ Cell cellMetaFromJson(const json& value)
     }
     return cell;
 }
+
 json projectToJson(const Project& project)
 {
     json cameraKeys = json::array();
     for (const CameraKey& key : project.camera.keys) {
-        cameraKeys.push_back(json{
-            {"frame", key.frame},
-            {"centerX", key.centerX},
-            {"centerY", key.centerY},
-            {"zoom", key.zoom},
-        });
+        cameraKeys.push_back(json{{"frame", key.frame}, {"centerX", key.centerX}, {"centerY", key.centerY}, {"zoom", key.zoom}});
     }
 
     return json{
@@ -270,25 +413,10 @@ json projectToJson(const Project& project)
         {"version", project.version},
         {"name", project.name},
         {"canvas", {{"width", project.canvas.width}, {"height", project.canvas.height}}},
-        {"output", {
-            {"width", project.output.width},
-            {"height", project.output.height},
-            {"fps", project.output.fps},
-            {"pixelAspect", project.output.pixelAspect},
-        }},
+        {"output", {{"width", project.output.width}, {"height", project.output.height}, {"fps", project.output.fps}, {"pixelAspect", project.output.pixelAspect}}},
         {"timeline", {{"totalFrames", project.timeline.totalFrames}}},
-        {"camera", {
-            {"centerX", project.camera.centerX},
-            {"centerY", project.camera.centerY},
-            {"zoom", project.camera.zoom},
-            {"animationEnabled", project.camera.animationEnabled},
-            {"keys", cameraKeys},
-        }},
-        {"audio", {
-            {"enabled", project.audio.enabled},
-            {"filePath", project.audio.filePath},
-            {"startFrame", project.audio.startFrame},
-        }},
+        {"camera", {{"centerX", project.camera.centerX}, {"centerY", project.camera.centerY}, {"zoom", project.camera.zoom}, {"animationEnabled", project.camera.animationEnabled}, {"keys", cameraKeys}}},
+        {"audio", {{"enabled", project.audio.enabled}, {"filePath", project.audio.filePath}, {"startFrame", project.audio.startFrame}}},
         {"cellOrder", project.cellOrder},
     };
 }
@@ -322,6 +450,17 @@ Project projectFromJson(const json& value)
         project.camera.centerY = camera.value("centerY", project.camera.centerY);
         project.camera.zoom = camera.value("zoom", project.camera.zoom);
         project.camera.animationEnabled = camera.value("animationEnabled", project.camera.animationEnabled);
+        project.camera.keys.clear();
+        if (camera.contains("keys") && camera.at("keys").is_array()) {
+            for (const json& keyJson : camera.at("keys")) {
+                CameraKey key;
+                key.frame = keyJson.value("frame", key.frame);
+                key.centerX = keyJson.value("centerX", key.centerX);
+                key.centerY = keyJson.value("centerY", key.centerY);
+                key.zoom = keyJson.value("zoom", key.zoom);
+                project.camera.keys.push_back(key);
+            }
+        }
     }
     if (value.contains("audio") && value.at("audio").is_object()) {
         const json& audio = value.at("audio");
@@ -334,6 +473,27 @@ Project projectFromJson(const json& value)
     }
     return project;
 }
+
+bool saveFrame(const Frame& frame, const fs::path& frameFolder, std::string* errorMessage)
+{
+    std::error_code errorCode;
+    fs::create_directories(frameFolder, errorCode);
+    if (errorCode) {
+        setError(errorMessage, "failed to create frame folder: " + frameFolder.string());
+        return false;
+    }
+    if (!writeJsonFile(frameFolder / "frame.json", frameMetaToJson(frame), errorMessage)) {
+        return false;
+    }
+    for (std::size_t layerIndex = 0; layerIndex < frame.layers.size(); ++layerIndex) {
+        const fs::path layerPath = frameFolder / (numberedName("layer", static_cast<int>(layerIndex + 1U)) + ".json");
+        if (!writeJsonFile(layerPath, toJson(frame.layers[layerIndex]), errorMessage)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool saveCell(const Cell& cell, const fs::path& cellsRoot, std::string* errorMessage)
 {
     const fs::path cellFolder = cellsRoot / cell.id;
@@ -349,51 +509,14 @@ bool saveCell(const Cell& cell, const fs::path& cellsRoot, std::string* errorMes
     }
     for (std::size_t frameIndex = 0; frameIndex < cell.frames.size(); ++frameIndex) {
         const Frame& frame = cell.frames[frameIndex];
-        const fs::path frameFolder = framesRoot / numberedName("frame", static_cast<int>(frameIndex + 1));
-        fs::create_directories(frameFolder, errorCode);
-        if (errorCode) {
-            setError(errorMessage, "failed to create frame folder: " + frameFolder.string());
+        const fs::path frameFolder = framesRoot / numberedName("frame", static_cast<int>(frameIndex + 1U));
+        if (!saveFrame(frame, frameFolder, errorMessage)) {
             return false;
-        }
-        if (!writeJsonFile(frameFolder / "frame.json", frameMetaToJson(frame), errorMessage)) {
-            return false;
-        }
-        for (std::size_t layerIndex = 0; layerIndex < frame.layers.size(); ++layerIndex) {
-            const fs::path layerPath = frameFolder / (numberedName("layer", static_cast<int>(layerIndex + 1)) + ".json");
-            if (!writeJsonFile(layerPath, toJson(frame.layers[layerIndex]), errorMessage)) {
-                return false;
-            }
         }
     }
     return true;
 }
-std::vector<fs::path> sortedDirectories(const fs::path& folder)
-{
-    std::vector<fs::path> result;
-    std::error_code errorCode;
-    if (!fs::exists(folder, errorCode)) {
-        return result;
-    }
-    for (const fs::directory_entry& entry : fs::directory_iterator(folder, errorCode)) {
-        if (entry.is_directory()) {
-            result.push_back(entry.path());
-        }
-    }
-    std::sort(result.begin(), result.end());
-    return result;
-}
-std::vector<fs::path> sortedLayerFiles(const fs::path& folder)
-{
-    std::vector<fs::path> result;
-    std::error_code errorCode;
-    for (const fs::directory_entry& entry : fs::directory_iterator(folder, errorCode)) {
-        if (entry.is_regular_file() && entry.path().filename().string().rfind("layer_", 0) == 0) {
-            result.push_back(entry.path());
-        }
-    }
-    std::sort(result.begin(), result.end());
-    return result;
-}
+
 bool loadCellFrames(Cell& cell, const fs::path& cellFolder, std::string* errorMessage)
 {
     const fs::path framesRoot = cellFolder / "frames";
@@ -426,6 +549,7 @@ bool loadCellFrames(Cell& cell, const fs::path& cellFolder, std::string* errorMe
     }
     return true;
 }
+
 std::vector<std::string> discoverCellIds(const fs::path& cellsRoot)
 {
     std::vector<std::string> result;
@@ -434,6 +558,7 @@ std::vector<std::string> discoverCellIds(const fs::path& cellsRoot)
     }
     return result;
 }
+
 } // namespace
 
 bool ProjectIO::save(const Project& project, const fs::path& folderPath, std::string* errorMessage)
@@ -462,6 +587,7 @@ bool ProjectIO::save(const Project& project, const fs::path& folderPath, std::st
     }
     return true;
 }
+
 bool ProjectIO::load(const fs::path& folderPath, Project& project, std::string* errorMessage)
 {
     project = Project::createDefault();
@@ -499,4 +625,5 @@ bool ProjectIO::load(const fs::path& folderPath, Project& project, std::string* 
     project = loadedProject;
     return true;
 }
+
 } // namespace perapera

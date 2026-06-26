@@ -226,7 +226,8 @@ void drawBrushPanel(BrushSettings& settings)
         ImGui::SliderInt(u8c(u8"境界下塗りpx"), &settings.fillInsetPx, 0, 16);
         ImGui::SliderInt(u8c(u8"漏れ防止%"), &settings.fillLeakGuardPercent, 0, 100);
         ImGui::TextDisabled(u8c(u8"Paintレイヤー上でクリックして塗る"));
-        ImGui::TextDisabled(u8c(u8"境界下塗りは線の内側だけへ伸ばす。細線では外側へ漏れないよう制限。"));
+        ImGui::TextDisabled(u8c(u8"塗り結果はFillStrokeのビットマップとして保存する。"));
+        ImGui::TextDisabled(u8c(u8"細線の外側へ漏れず、MyPaint線の下までピクセル単位で届かせる。"));
         ImGui::TextDisabled(u8c(u8"MyPaint線で隙間が残る時は境界下塗りを少し上げて再塗りする。"));
         ImGui::TextDisabled(u8c(u8"漏れ防止0%=無効。ON時は面積が指定%を超えた塗りを止める。"));
     }

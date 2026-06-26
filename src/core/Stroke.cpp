@@ -1,6 +1,5 @@
 // このファイルの役割:
-// Stroke の小さな補助処理を実装する。
-// UIやSDLには依存しない。
+// Strokeの小さなユーティリティと外接矩形計算を実装する。
 
 #include "core/Stroke.h"
 
@@ -16,6 +15,8 @@ const char* strokeBrushEngineToString(StrokeBrushEngine engine)
         return "Simple";
     case StrokeBrushEngine::MyPaint:
         return "MyPaint";
+    case StrokeBrushEngine::Fill:
+        return "Fill";
     }
     return "Simple";
 }
@@ -25,11 +26,17 @@ StrokeBrushEngine strokeBrushEngineFromString(const std::string& value)
     if (value == "MyPaint" || value == "MyPaintBrushEngine") {
         return StrokeBrushEngine::MyPaint;
     }
+    if (value == "Fill" || value == "FillStroke") {
+        return StrokeBrushEngine::Fill;
+    }
     return StrokeBrushEngine::Simple;
 }
 
 bool Stroke::empty() const
 {
+    if (brushEngine == StrokeBrushEngine::Fill) {
+        return bitmap.empty() || bitmapWidth <= 0 || bitmapHeight <= 0;
+    }
     return points.empty();
 }
 
@@ -41,27 +48,40 @@ void Stroke::addPoint(const StrokePoint& point)
 StrokeBounds Stroke::bounds() const
 {
     StrokeBounds result;
+    if (brushEngine == StrokeBrushEngine::Fill) {
+        if (bitmap.empty() || bitmapWidth <= 0 || bitmapHeight <= 0) {
+            return result;
+        }
+        result.minX = 0.0f;
+        result.minY = 0.0f;
+        result.maxX = static_cast<float>(bitmapWidth);
+        result.maxY = static_cast<float>(bitmapHeight);
+        result.valid = true;
+        return result;
+    }
+
     if (points.empty()) {
         return result;
     }
 
-    float minX = points.front().x;
-    float minY = points.front().y;
-    float maxX = points.front().x;
-    float maxY = points.front().y;
+    result.minX = points.front().x;
+    result.minY = points.front().y;
+    result.maxX = points.front().x;
+    result.maxY = points.front().y;
+    result.valid = true;
 
     for (const StrokePoint& point : points) {
-        minX = std::min(minX, point.x);
-        minY = std::min(minY, point.y);
-        maxX = std::max(maxX, point.x);
-        maxY = std::max(maxY, point.y);
+        result.minX = std::min(result.minX, point.x);
+        result.minY = std::min(result.minY, point.y);
+        result.maxX = std::max(result.maxX, point.x);
+        result.maxY = std::max(result.maxY, point.y);
     }
 
-    result.minX = minX - radiusPx;
-    result.minY = minY - radiusPx;
-    result.maxX = maxX + radiusPx;
-    result.maxY = maxY + radiusPx;
-    result.valid = true;
+    const float padding = std::max(1.0f, radiusPx + 2.0f);
+    result.minX -= padding;
+    result.minY -= padding;
+    result.maxX += padding;
+    result.maxY += padding;
     return result;
 }
 

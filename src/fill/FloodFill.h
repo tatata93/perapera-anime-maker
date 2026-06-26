@@ -6,6 +6,8 @@
 // Phase 1.5 Step 18g: ColorTrace線の半透明エッジ下までPaintを潜り込ませる。
 // Phase 1.5 Step 18h: 1px白フチ対策としてPaintマスクの最終シールを追加。
 // Phase 1.5 Step 18i: MyPaint線の隙間と細い線のはみ出しを分けて抑える。
+// Phase 1.5 Step 18j: 境界近傍はドット、内部は横スパンで保存して、隙間とはみ出しを両立して抑える。
+// Phase 1.5 Step 19: バケツ塗り結果をFillStrokeの1chマスクとして保存する。
 
 #include <array>
 #include <string>

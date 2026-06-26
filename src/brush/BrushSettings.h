@@ -54,6 +54,7 @@ struct BrushSettings {
     // tolerance は壁判定の感度、gapClosePx は小さな隙間閉じの半径px。
     // fillInsetPx は境界下塗り量。Normal/ColorTrace線の半透明エッジ下へPaintを伸ばし、白い1px隙間を防ぐ。
     // Step 18i以降は、外側へ越えないように外側到達マスクで制限する。
+    // Step 19では、バケツ塗り結果をFillStrokeのビットマップとして保存する。
     // leakGuardPercent は閉じていない領域をクリックした時の巨大塗りを止める安全弁。
     // 0なら安全弁OFF。0以外なら、塗り面積がキャンバス全体の指定%を超えた時だけ止める。
     int fillTolerance = 24;

@@ -1,10 +1,11 @@
 #pragma once
 
 // このファイルの役割:
-// ペンで引いた1本の線を表す。
-// 点列、色、太さを保持し、描画キャッシュ更新に使う外接矩形を計算する。
+// ペンで引いた1本の線、またはバケツ塗りで作ったFillStrokeを表す。
+// Simple/MyPaintは点列を正データにし、Fillはキャンバスサイズの1chマスクを正データにする。
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -13,10 +14,11 @@
 namespace perapera {
 
 // ストロークをどのブラシエンジンで焼いたかを保持する。
-// 既存プロジェクトはSimple扱いにし、MyPaintはPhase 1.5 Step 13以降の追加機能として扱う。
+// Fillはバケツ塗り専用で、pointsを使わずbitmapを直接CanvasBitmapへ焼く。
 enum class StrokeBrushEngine {
     Simple,
     MyPaint,
+    Fill,
 };
 
 const char* strokeBrushEngineToString(StrokeBrushEngine engine);
@@ -34,11 +36,10 @@ struct Stroke {
     // RGBA。各要素は 0.0〜1.0 を想定する。
     std::array<float, 4> color = {0.05f, 0.05f, 0.05f, 1.0f};
 
-    // キャンバス上の半径px。
+    // キャンバス上の半径px。Fillでは使わない。
     float radiusPx = 4.0f;
 
     // このストロークを焼き込む時に使うブラシエンジン。
-    // JSONでは文字列で保存し、古いデータには影響を出さない。
     StrokeBrushEngine brushEngine = StrokeBrushEngine::Simple;
 
     // Phase 1.5 Step 14: ブラシ設定をストロークへ保存する。
@@ -52,13 +53,21 @@ struct Stroke {
     float colorMix = 0.0f;
     float dryRate = 1.0f;
 
+    // Simple / MyPaint 用の点列。Fillでは空のまま使わない。
     std::vector<StrokePoint> points;
+
+    // Fill エンジンのときだけ使う。
+    // bitmapWidth × bitmapHeight の 1ch マスク（0=塗らない / 255=塗る）。
+    // points は空のまま使わない。
+    std::vector<std::uint8_t> bitmap;
+    int bitmapWidth = 0;
+    int bitmapHeight = 0;
 
     bool empty() const;
     void addPoint(const StrokePoint& point);
 
     // 点列の外接矩形を返す。
-    // ブラシ半径ぶん外側に広げるので、dirty矩形計算にそのまま使える。
+    // Fillはキャンバスサイズ全体を返す。将来、Fillのdirty矩形を別途保存する余地は残す。
     StrokeBounds bounds() const;
 };
 

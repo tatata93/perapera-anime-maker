@@ -15,6 +15,14 @@
 //   - MyPaint線は低アルファまで壁として拾い、線画と塗りの隙間を減らす。
 //   - 細いSimple線では下塗りが線の外側へ抜けないよう、外側到達マスクで制限する。
 //   - Paintスパンストロークを太らせすぎない設定に戻し、細線の外側へ色が見える事故を減らす。
+// Phase 1.5 Step 18j:
+//   - Paintをそのまま横長スパンだけで保存すると、細線では端の丸キャップが外へ見え、
+//     MyPaint線では逆に境界の被覆が足りないことがあった。
+//   - そこで境界近傍は小さなドット群、内部は横スパンとして分離し、
+//     境界はしっかり埋めつつ、線外へのはみ出しを減らす。
+// Phase 1.5 Step 19:
+//   - Step 18系のスパン/ドット変換を削除し、filledマスクをFillStroke::bitmapへ直接保存する。
+//   - CanvasBitmapがFillStrokeを直接焼くため、ブラシの丸キャップ・アンチエイリアス変換誤差をなくす。
 
 #include "fill/FloodFill.h"
 
@@ -26,6 +34,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace perapera::fill {
@@ -399,30 +408,8 @@ void sealOnePixelGapsForPaintRasterization(std::vector<std::uint8_t>& filled,
     }
 }
 
-Stroke makeSpanStroke(int y, int x0, int x1, const std::array<float, 4>& color)
-{
-    Stroke stroke;
-    stroke.color = color;
-    stroke.opacity = 1.0f;
-    stroke.brushEngine = StrokeBrushEngine::Simple;
 
-    // Step 18hでは白点を消すためにPaintスパンを太くしすぎ、
-    // 細いSimple線の外側へ塗り色が見える副作用があった。
-    // Step 18iではマスク側で1px穴を塞ぎ、ストローク側は必要最小限の太さに戻す。
-    stroke.radiusPx = 1.05f;
 
-    const float fy = static_cast<float>(y) + 0.5f;
-    if (x1 - x0 <= 1) {
-        const float centerX = static_cast<float>(x0) + 0.5f;
-        stroke.points.push_back(StrokePoint{centerX, fy, 1.0f});
-    } else {
-        const float startX = static_cast<float>(x0) + 0.25f;
-        const float endX = static_cast<float>(x1) - 0.25f;
-        stroke.points.push_back(StrokePoint{startX, fy, 1.0f});
-        stroke.points.push_back(StrokePoint{endX, fy, 1.0f});
-    }
-    return stroke;
-}
 
 } // namespace
 
@@ -525,28 +512,22 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    for (int y = 0; y < height; ++y) {
-        int x = 0;
-        while (x < width) {
-            while (x < width && filled[indexOf(x, y, width)] == 0U) {
-                ++x;
-            }
-            const int start = x;
-            while (x < width && filled[indexOf(x, y, width)] != 0U) {
-                ++x;
-            }
-            if (start < x) {
-                result.strokes.push_back(makeSpanStroke(y, start, x, fillColor));
-            }
-        }
+    // Step 19: バケツ塗りはブラシストローク群へ変換しない。
+    // filledマスクをそのままFillStrokeの正データとして保存する。
+    for (std::uint8_t& pixel : filled) {
+        pixel = pixel == 0U ? 0U : 255U;
     }
 
-    result.success = !result.strokes.empty();
-    if (result.success) {
-        result.message = "filled with exterior-guarded underpaint";
-    } else {
-        result.message = "no spans generated";
-    }
+    Stroke fillStroke;
+    fillStroke.color = fillColor;
+    fillStroke.opacity = 1.0f;
+    fillStroke.brushEngine = StrokeBrushEngine::Fill;
+    fillStroke.bitmap = std::move(filled);
+    fillStroke.bitmapWidth = width;
+    fillStroke.bitmapHeight = height;
+    result.strokes.push_back(std::move(fillStroke));
+    result.success = true;
+    result.message = "filled";
     return result;
 }
 
