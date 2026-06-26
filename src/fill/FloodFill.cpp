@@ -8,6 +8,12 @@
 // Phase 1.5 Step 19g:
 //   - FillStroke化後に不要になった下塗り滲み出し処理を削除する。
 //   - BFSでwallを越えずに得たfilledマスクをそのまま0/255化して保存し、線外へのはみ出しを防ぐ。
+// Phase 1.5 Step 19h:
+//   - BFS確定後、filledに隣接するwallピクセルだけをfilledへ取り込み、
+//     線のアンチエイリアス端と塗りの間に残る1px隙間を塞ぐ。
+// Phase 1.5 Step 19i:
+//   - 不透明な線芯までfilledへ取り込むと塗り色が線へまとわりついて見えるため、
+//     lineCoreマスクを追加し、半透明エッジだけを取り込む。
 
 #include "fill/FloodFill.h"
 
@@ -107,20 +113,34 @@ void addBitmapAlphaToMask(std::vector<std::uint8_t>& mask,
     }
 }
 
-std::vector<std::uint8_t> buildWallMask(const Frame& frame,
-                                        int targetLayerIndex,
-                                        int width,
-                                        int height,
-                                        const FloodFillSettings& settings)
+struct WallMask {
+    // BFSが越えない壁。線マスクを gapClosePx ぶん膨張したもの。
+    std::vector<std::uint8_t> wall;
+
+    // 線の不透明コア。ここは塗りに取り込まない。
+    // 半透明エッジだけを取り込むことで、白フチを消しつつ線への色まとわりつきを避ける。
+    std::vector<std::uint8_t> lineCore;
+};
+
+WallMask buildWallMask(const Frame& frame,
+                       int targetLayerIndex,
+                       int width,
+                       int height,
+                       const FloodFillSettings& settings)
 {
-    std::vector<std::uint8_t> wall(
-        static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
+    WallMask masks;
+    masks.wall.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
+    masks.lineCore.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0U);
 
     // tolerance が高いほど薄い線も壁として扱う。
     // MyPaintは線端や筆圧の弱い部分が低アルファになりやすいため、
     // ある程度低いしきい値で壁に入れる。
     const auto wallThreshold = static_cast<std::uint8_t>(
         std::clamp(24 - settings.tolerance / 12, 2, 255));
+
+    // この値以上は線の芯として扱う。
+    // wallには含めるが、filledへは取り込まない。
+    constexpr std::uint8_t kLineCoreThreshold = 200U;
 
     CanvasBitmap layerBitmap;
     layerBitmap.resize(nullptr, width, height);
@@ -139,15 +159,17 @@ std::vector<std::uint8_t> buildWallMask(const Frame& frame,
         for (const Stroke& stroke : layer.strokes) {
             bakeStrokeToBitmap(layerBitmap, stroke, layer.opacity);
         }
-        addBitmapAlphaToMask(wall, layerBitmap, width, height, wallThreshold);
+        addBitmapAlphaToMask(masks.wall, layerBitmap, width, height, wallThreshold);
+        addBitmapAlphaToMask(masks.lineCore, layerBitmap, width, height, kLineCoreThreshold);
     }
 
     // 線の小穴（閉じていない隙間）を塞ぐための膨張。
-    // FillStrokeでは下塗り滲み出しを使わないため、BFSが越えてはいけないwallだけを強める。
+    // lineCoreは膨張しない。膨張したwallのうち、lineCoreでない場所だけが
+    // 1px隙間塞ぎとしてfilledへ取り込まれる。
     const int wallGrowRadius = std::max(1, std::clamp(settings.gapClosePx, 0, 8));
-    dilateMask(wall, width, height, wallGrowRadius);
+    dilateMask(masks.wall, width, height, wallGrowRadius);
 
-    return wall;
+    return masks;
 }
 
 int countMaskPixels(const std::vector<std::uint8_t>& mask)
@@ -182,7 +204,9 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    const std::vector<std::uint8_t> wall = buildWallMask(frame, targetLayerIndex, width, height, settings);
+    const WallMask masks = buildWallMask(frame, targetLayerIndex, width, height, settings);
+    const std::vector<std::uint8_t>& wall = masks.wall;
+    const std::vector<std::uint8_t>& lineCore = masks.lineCore;
     const std::size_t seedIndex = indexOf(seedX, seedY, width);
     if (wall[seedIndex] != 0U) {
         result.message = "clicked on wall line";
@@ -240,8 +264,41 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    // Step 19g: FillStrokeではBFSでwallを越えずに得たマスクをそのまま使う。
-    // 下塗り滲み出しや1px穴シールは、線外へのはみ出しを作るため削除した。
+    // BFS確定後、wall上のピクセルのうち filled に隣接するものを filled に取り込む。
+    // ただし lineCore（線の不透明コア）は取り込まない。
+    // 半透明エッジだけを塗りの下地に含めることで、1px白フチを塞ぎつつ、
+    // 線芯への色まとわりつきを防ぐ。
+    // wallの外側にある非wall領域は追加しないため、Step 18系の滲み出し処理のような
+    // 塗りのはみ出しは作らない。
+    {
+        constexpr int kDx[4] = {1, -1, 0, 0};
+        constexpr int kDy[4] = {0, 0, 1, -1};
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            for (int y = 0; y < height; ++y) {
+                for (int x = 0; x < width; ++x) {
+                    const std::size_t idx = indexOf(x, y, width);
+                    if (filled[idx] != 0U || wall[idx] == 0U || lineCore[idx] != 0U) {
+                        continue;
+                    }
+                    for (int d = 0; d < 4; ++d) {
+                        const int nx = x + kDx[d];
+                        const int ny = y + kDy[d];
+                        if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                            continue;
+                        }
+                        if (filled[indexOf(nx, ny, width)] != 0U) {
+                            filled[idx] = 1U;
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     result.filledPixelCount = countMaskPixels(filled);
     if (result.filledPixelCount <= 0) {
         result.message = "nothing to fill";
