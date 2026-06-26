@@ -6,6 +6,8 @@
 // Phase 1.5 Step 19j: 通常レイヤーキャッシュキーからFrame*を外し、frame.name + layer.layerId で管理する。
 // Phase 1.5 Step 19l: 再生時の毎フレーム全StrokePoint hashを廃止し、Layer::revisionCounterベースにする。
 // Phase 1.5 Step 19n: 旧markAllDirty呼び出しでも既存Textureを保持し、ストローク確定時の全線消えを防ぐ。
+// Phase 1.5 Step 19o: Simple確定直後の旧markAllDirtyを吸収し、必要なdirtyだけrevision無効化する。
+// Phase 1.5 Step 19p: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
@@ -127,19 +129,34 @@ private:
         std::size_t operator()(const OnionCacheKey& key) const noexcept;
     };
 
+    struct LayerRebuildState {
+        std::uint64_t targetRevision = 0U;
+        std::size_t nextStrokeIndex = 0U;
+        int pass = 0; // Paint: 0=Fill, 1=non-Fill. Other layers: 1 pass only.
+    };
+
     SDL_Renderer* renderer_ = nullptr;
     const Frame* activeFrameForDirectAccess_ = nullptr;
     std::string activeFrameCacheId_;
     int canvasWidth_ = 0;
     int canvasHeight_ = 0;
 
+    // App側には歴史的に bakeStrokeOnLayer() 直後の markAllDirty() が残っている。
+    // その呼び出しを全キャッシュ無効化として扱うと、Simpleストローク1本ごとに重くなるため、
+    // 追い焼き済み直後の1回だけ旧markAllDirtyを吸収する。
+    bool suppressNextAllDirty_ = false;
+
     std::unordered_map<LayerCacheKey, CanvasBitmap, LayerCacheKeyHash> layerBitmaps_;
     std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerRevisions_;
+    std::unordered_map<LayerCacheKey, std::size_t, LayerCacheKeyHash> layerCachedStrokeCounts_;
+    std::unordered_map<LayerCacheKey, LayerRebuildState, LayerCacheKeyHash> layerRebuildStates_;
     std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
 
     CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
     void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer);
+    bool appendMissingStrokesIfPossible(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
+    bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
 
     std::uint64_t frameRevisionHash(const Frame& frame) const;

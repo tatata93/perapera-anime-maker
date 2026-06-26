@@ -9,6 +9,8 @@
 // Phase 1.5 Step 19l: layerRevisionHashの全StrokePoint走査を廃止し、Layer::revisionCounterベースにする。
 // Phase 1.5 Step 19m: frameIndexキー入口とO(1) revision stampで再生時のCPU負荷をさらに抑える。
 // Phase 1.5 Step 19n: markAllDirtyで既存テクスチャを捨てず、ストローク確定時の全線一瞬消えを防ぐ。
+// Phase 1.5 Step 19o: 旧App dirty通知を吸収し、Simple確定後の全レイヤー再ベイクを避ける。
+// Phase 1.5 Step 19p: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
 
 #include "render/CanvasRenderer.h"
 
@@ -175,10 +177,9 @@ std::uint64_t layerRevisionValue(const Layer& layer)
     // 明示revisionを主に使うが、既存コードでtouchRevision()漏れがあっても
     // 変更検知が完全に死なないよう、O(1)のストローク代表情報も混ぜる。
     // ここでは全StrokePoint/全Fill bitmapは走査しない。
+    // opacity/visibleはdraw時のtint/skipで処理できるため、bitmap再ベイク条件には入れない。
     std::uint64_t seed = 1099511628211ULL;
     hashCombine(seed, layer.revisionCounter);
-    hashCombine(seed, layer.visible ? 1ULL : 0ULL);
-    hashCombine(seed, hashFloat(layer.opacity));
     hashCombine(seed, static_cast<std::uint64_t>(layer.type));
     hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
     hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.capacity()));
@@ -192,6 +193,34 @@ std::uint64_t layerRevisionValue(const Layer& layer)
     }
 
     return seed;
+}
+
+bool paintAppendOrderIsSafe(const Layer& layer, std::size_t fromIndex)
+{
+    if (layer.type != LayerType::Paint || fromIndex >= layer.strokes.size()) {
+        return true;
+    }
+
+    bool appendedHasFill = false;
+    for (std::size_t index = fromIndex; index < layer.strokes.size(); ++index) {
+        if (layer.strokes[index].brushEngine == StrokeBrushEngine::Fill) {
+            appendedHasFill = true;
+            break;
+        }
+    }
+    if (!appendedHasFill) {
+        // 手描きストロークを既存のFillの上に足すだけなら順序は壊れない。
+        return true;
+    }
+
+    // FillはPaintレイヤー内では下地扱い。既存の非Fillストロークがある後にFillを追い焼きすると、
+    // その線を塗りで覆うため危険。既存がFillだけなら追い焼きできる。
+    for (std::size_t index = 0; index < fromIndex; ++index) {
+        if (layer.strokes[index].brushEngine != StrokeBrushEngine::Fill) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -254,6 +283,8 @@ void CanvasRenderer::setRenderer(SDL_Renderer* renderer)
     // SDL_Rendererが変わると既存SDL_Textureは無効になるため、ここだけは完全破棄する。
     layerBitmaps_.clear();
     layerRevisions_.clear();
+    layerCachedStrokeCounts_.clear();
+    layerRebuildStates_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
 }
@@ -272,27 +303,51 @@ void CanvasRenderer::setCanvasSize(int width, int height)
     // キャンバスサイズ変更時はCanvasBitmap自体の寸法が変わるため完全破棄する。
     layerBitmaps_.clear();
     layerRevisions_.clear();
+    layerCachedStrokeCounts_.clear();
+    layerRebuildStates_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
 }
 
 void CanvasRenderer::markDirty(int layerIndex)
 {
-    // 旧API互換: App側は多くの場所で「何か変わったらmarkAllDirty」を呼んでいる。
-    // ここで全Textureを消すと、ストローク確定直後や再生フレーム送りで全レイヤーが一瞬消える。
-    // 通常レイヤーは layerRevisionValue() のO(1) stampで差分検知するため、既存Textureは保持する。
-    (void)layerIndex;
-    onionBitmaps_.clear();
+    // 既存Textureは破棄しない。現在draw中/直近draw中のフレームIDが分かる場合だけ、
+    // 対象レイヤーのrevision記録を消して次回drawでそのレイヤーだけ再構築させる。
+    if (activeFrameForDirectAccess_ != nullptr &&
+        layerIndex >= 0 &&
+        layerIndex < static_cast<int>(activeFrameForDirectAccess_->layers.size())) {
+        const Layer& layer = activeFrameForDirectAccess_->layers[static_cast<std::size_t>(layerIndex)];
+        const std::string frameId = activeFrameCacheId_.empty()
+            ? frameCacheId(*activeFrameForDirectAccess_, -1)
+            : activeFrameCacheId_;
+        const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
+        layerRevisions_.erase(key);
+        layerCachedStrokeCounts_.erase(key);
+        layerRebuildStates_.erase(key);
+    }
+
+    // 変更された通常フレームがオニオンスキン参照にも使われる可能性があるため、
+    // オニオンだけは軽く無効化する。通常レイヤーTextureは保持する。
     onionRevisions_.clear();
 }
 
 void CanvasRenderer::markAllDirty()
 {
-    // 名前はAllDirtyだが、表示中の既存Textureは破棄しない。
-    // 破棄が必要なのはrenderer変更/キャンバスサイズ変更だけで、それらはsetRenderer/setCanvasSizeで直接clearする。
-    // ここをclearにすると、AppDrawingMode::finishStrokeのSimple確定後markAllDirtyで
-    // 全レイヤーが空になり、次フレームの再ベイクまで線が一瞬消える。
-    onionBitmaps_.clear();
+    // Simpleブラシ確定では AppDrawingMode が
+    //   bakeStrokeOnLayer(...);
+    //   markAllDirty();
+    // を続けて呼ぶ旧経路が残っている。bakeStrokeOnLayer側でアクティブBitmapへ
+    // 追い焼き済みなので、この直後1回のmarkAllDirtyは全レイヤー無効化しない。
+    if (suppressNextAllDirty_) {
+        suppressNextAllDirty_ = false;
+        onionRevisions_.clear();
+        return;
+    }
+
+    // 旧Appはフレームを選ぶだけでもmarkAllDirty()を呼ぶ。
+    // ここで通常レイヤーrevisionを全部消すと、任意フレーム移動や再生開始時に全レイヤー再ベイクになって固まる。
+    // 通常レイヤーは layerRevisionValue() で実データ差分を検知できるため、ここではTexture/通常revisionを保持する。
+    // Undo/Redoやロードのように実データが差し替わった場合も、strokes.size/data/capacity/代表点のO(1) stampで検知する。
     onionRevisions_.clear();
 }
 
@@ -324,6 +379,7 @@ void CanvasRenderer::bakeStrokeOnLayer(int layerIndex, const Stroke& stroke, flo
         // まだキャッシュがない場合だけ、そのレイヤーだけを作り直す。
         // 全レイヤーを破棄しない。
         rebuildLayerBitmapIfNeeded(frameId, *activeFrameForDirectAccess_, layerIndex, layer);
+        suppressNextAllDirty_ = true;
         return;
     }
 
@@ -333,8 +389,11 @@ void CanvasRenderer::bakeStrokeOnLayer(int layerIndex, const Stroke& stroke, flo
 
     const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
     layerRevisions_[key] = layerRevisionValue(layer);
+    layerCachedStrokeCounts_[key] = layer.strokes.size();
+    layerRebuildStates_.erase(key);
 
-    onionBitmaps_.clear();
+    // 直後の旧markAllDirty()を吸収し、Simple確定1回ごとの全レイヤー再ベイクを避ける。
+    suppressNextAllDirty_ = true;
     onionRevisions_.clear();
 }
 
@@ -391,6 +450,8 @@ void CanvasRenderer::markActiveBitmapClean(int layerIndex, const Layer& layer)
         : activeFrameCacheId_;
     const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
     layerRevisions_[key] = layerRevisionValue(layer);
+    layerCachedStrokeCounts_[key] = layer.strokes.size();
+    layerRebuildStates_.erase(key);
 
     // このフレームを前後オニオンとして使っているキャッシュは古くなる可能性がある。
     onionBitmaps_.clear();
@@ -530,30 +591,129 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, cons
         return;
     }
 
-    bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
-    bitmap.clear();
+    // 既存Bitmapがあり、ストローク末尾に増えただけなら、全消去せず差分だけ追い焼きする。
+    // これがSimple/FillStroke確定後の「何も操作できない時間」の主対策。
+    if (appendMissingStrokesIfPossible(frameId, frame, layerIndex, layer, revision)) {
+        return;
+    }
 
-    if (layer.type == LayerType::Paint) {
-        // Paintレイヤー内では、面塗りであるFillStrokeを必ず先に焼く。
-        // その後にPaintレイヤー上の手描き線や旧Simpleストロークを焼くことで、
-        // バケツ塗り後に同一レイヤー内の線が塗りで消える事故を防ぐ。
-        for (const Stroke& stroke : layer.strokes) {
-            if (stroke.brushEngine == StrokeBrushEngine::Fill) {
-                bakeStrokeByEngine(bitmap, stroke, 1.0f);
-            }
-        }
-        for (const Stroke& stroke : layer.strokes) {
-            if (stroke.brushEngine != StrokeBrushEngine::Fill) {
-                bakeStrokeByEngine(bitmap, stroke, 1.0f);
-            }
-        }
-    } else {
-        for (const Stroke& stroke : layer.strokes) {
-            bakeStrokeByEngine(bitmap, stroke, 1.0f);
-        }
+    // Undo/Redo、消しゴム、レイヤー丸ごと変更、未キャッシュフレームの初回表示などは全再構築が必要。
+    // ただし一度のdrawで全レイヤー/全ストロークをまとめて焼くとUIが固まるため、レイヤー単位で段階的に進める。
+    rebuildLayerBitmapProgressively(frameId, frame, layerIndex, layer, revision);
+}
+
+bool CanvasRenderer::appendMissingStrokesIfPossible(const std::string& frameId,
+                                                    const Frame& frame,
+                                                    int layerIndex,
+                                                    const Layer& layer,
+                                                    std::uint64_t revision)
+{
+    CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+    if (!bitmap.hasTexture() || bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_) {
+        return false;
+    }
+
+    const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
+    const auto countIt = layerCachedStrokeCounts_.find(key);
+    if (countIt == layerCachedStrokeCounts_.end()) {
+        return false;
+    }
+
+    const std::size_t bakedCount = countIt->second;
+    if (bakedCount > layer.strokes.size() || bakedCount == layer.strokes.size()) {
+        return false;
+    }
+
+    if (!paintAppendOrderIsSafe(layer, bakedCount)) {
+        return false;
+    }
+
+    for (std::size_t index = bakedCount; index < layer.strokes.size(); ++index) {
+        bakeStrokeByEngine(bitmap, layer.strokes[index], 1.0f);
     }
 
     layerRevisions_[key] = revision;
+    layerCachedStrokeCounts_[key] = layer.strokes.size();
+    layerRebuildStates_.erase(key);
+    onionRevisions_.clear();
+    return true;
+}
+
+bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
+                                                     const Frame& frame,
+                                                     int layerIndex,
+                                                     const Layer& layer,
+                                                     std::uint64_t revision)
+{
+    CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+    const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
+
+    LayerRebuildState& state = layerRebuildStates_[key];
+    if (state.targetRevision != revision || !bitmap.hasTexture() || bitmap.width() != canvasWidth_ || bitmap.height() != canvasHeight_) {
+        bitmap.resize(renderer_, canvasWidth_, canvasHeight_);
+        bitmap.clear();
+        state = LayerRebuildState{};
+        state.targetRevision = revision;
+        state.pass = layer.type == LayerType::Paint ? 0 : 1;
+        state.nextStrokeIndex = 0U;
+    }
+
+    // 1 draw あたりの焼き込み量。大きすぎるとフレーム移動で固まり、小さすぎると表示完了が遅い。
+    // FillStrokeは1本でも大きいので、この予算でもFillは1本ずつになる。
+    constexpr int kStrokeBakeBudgetPerDraw = 12;
+    int bakedThisCall = 0;
+
+    auto bakeNextMatchingStroke = [&](bool wantFill) -> bool {
+        while (state.nextStrokeIndex < layer.strokes.size()) {
+            const std::size_t index = state.nextStrokeIndex++;
+            const Stroke& stroke = layer.strokes[index];
+            const bool isFill = stroke.brushEngine == StrokeBrushEngine::Fill;
+            if (isFill == wantFill) {
+                bakeStrokeByEngine(bitmap, stroke, 1.0f);
+                ++bakedThisCall;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (layer.type == LayerType::Paint) {
+        while (bakedThisCall < kStrokeBakeBudgetPerDraw) {
+            if (state.pass == 0) {
+                if (bakeNextMatchingStroke(true)) {
+                    continue;
+                }
+                state.pass = 1;
+                state.nextStrokeIndex = 0U;
+            }
+            if (state.pass == 1) {
+                if (bakeNextMatchingStroke(false)) {
+                    continue;
+                }
+                break;
+            }
+        }
+    } else {
+        while (bakedThisCall < kStrokeBakeBudgetPerDraw && state.nextStrokeIndex < layer.strokes.size()) {
+            bakeStrokeByEngine(bitmap, layer.strokes[state.nextStrokeIndex], 1.0f);
+            ++state.nextStrokeIndex;
+            ++bakedThisCall;
+        }
+    }
+
+    const bool finished = layer.type == LayerType::Paint
+        ? (state.pass == 1 && state.nextStrokeIndex >= layer.strokes.size())
+        : (state.nextStrokeIndex >= layer.strokes.size());
+
+    if (finished) {
+        layerRevisions_[key] = revision;
+        layerCachedStrokeCounts_[key] = layer.strokes.size();
+        layerRebuildStates_.erase(key);
+        return true;
+    }
+
+    // まだ途中。次のフレームで続きから焼く。古いrevision値は入れず、完了までdirty扱いにする。
+    return false;
 }
 
 void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity)
