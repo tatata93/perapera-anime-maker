@@ -163,7 +163,7 @@ private:
 
     CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
     bool layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const;
-    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw = 4);
+    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw = 16);
     bool appendMissingStrokesIfPossible(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
     bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision, int strokeBudgetPerDraw);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);

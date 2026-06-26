@@ -120,7 +120,7 @@ void App::updateFramePlayback()
 
 void App::warmPlaybackFrameCache()
 {
-    if (!isPlayingFrames_ || isDrawingStroke_) {
+    if (isDrawingStroke_) {
         return;
     }
 
@@ -133,15 +133,15 @@ void App::warmPlaybackFrameCache()
     int direction = playbackDirection_ == 0 ? 1 : playbackDirection_;
     int cursor = activeFrameIndex_;
 
-    constexpr int kLookAheadFrames = 3;
-    constexpr int kWarmLayerBudget = 1;
-    constexpr int kWarmStrokeBudgetPerLayer = 1;
+    const int lookAheadFrames = isPlayingFrames_ ? 6 : 2;
+    const int warmLayerBudget = isPlayingFrames_ ? 3 : 1;
+    const int warmStrokeBudgetPerLayer = isPlayingFrames_ ? 8 : 1;
 
     const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
         ? CanvasDisplayMode::Coloring
         : CanvasDisplayMode::Drawing;
 
-    for (int step = 0; step < kLookAheadFrames; ++step) {
+    for (int step = 0; step < lookAheadFrames; ++step) {
         int nextIndex = cursor + direction;
         if (nextIndex < 0 || nextIndex > lastIndex) {
             if (playbackPingPong_) {
@@ -162,8 +162,8 @@ void App::warmPlaybackFrameCache()
             canvasRenderer_.warmFrameCache(*frame,
                                            nextIndex,
                                            displayMode,
-                                           kWarmLayerBudget,
-                                           kWarmStrokeBudgetPerLayer);
+                                           warmLayerBudget,
+                                           warmStrokeBudgetPerLayer);
         }
         cursor = nextIndex;
     }
