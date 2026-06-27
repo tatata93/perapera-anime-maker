@@ -3,203 +3,252 @@ param(
     [string]$ProjectDir = ""
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+$issues = New-Object System.Collections.Generic.List[string]
+$warnings = New-Object System.Collections.Generic.List[string]
 
-function Write-Ok($msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
-function Write-WarnLine($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
-function Write-ErrLine($msg) { Write-Host "[ERROR] $msg" -ForegroundColor Red }
-function Write-Info($msg) { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
+function Add-Issue([string]$message) {
+    $script:issues.Add($message) | Out-Null
+    Write-Host "ERROR: $message" -ForegroundColor Red
+}
 
-function Read-JsonFile($path) {
-    if (-not (Test-Path $path)) {
-        throw "Missing json file: $path"
+function Add-WarningLine([string]$message) {
+    $script:warnings.Add($message) | Out-Null
+    Write-Host "WARN : $message" -ForegroundColor Yellow
+}
+
+function Has-JsonProperty($obj, [string]$name) {
+    if ($null -eq $obj) { return $false }
+    return ($obj.PSObject.Properties.Name -contains $name)
+}
+
+function Get-JsonPropertyValue($obj, [string]$name, $defaultValue = $null) {
+    if (Has-JsonProperty $obj $name) {
+        return $obj.PSObject.Properties[$name].Value
     }
-    $bytes = [System.IO.File]::ReadAllBytes($path)
-    $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-    return $text | ConvertFrom-Json
+    return $defaultValue
 }
 
-function Get-PropertyValue($obj, $name, $fallback) {
-    if ($null -eq $obj) { return $fallback }
-    $prop = $obj.PSObject.Properties[$name]
-    if ($null -eq $prop) { return $fallback }
-    return $prop.Value
+function Read-JsonSafe([string]$path, [string]$label) {
+    if (-not (Test-Path $path)) {
+        Add-Issue "$label not found: $path"
+        return $null
+    }
+
+    try {
+        return Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        Add-Issue "$label failed to parse JSON: $path :: $($_.Exception.Message)"
+        return $null
+    }
 }
 
-function Add-Warning([System.Collections.Generic.List[string]]$warnings, $message) {
-    $warnings.Add($message) | Out-Null
-    Write-WarnLine $message
+function To-ArraySafe($value) {
+    if ($null -eq $value) { return @() }
+    if ($value -is [System.Array]) { return @($value) }
+    return @($value)
 }
 
-function Add-Error([System.Collections.Generic.List[string]]$errors, $message) {
-    $errors.Add($message) | Out-Null
-    Write-ErrLine $message
+function Get-CellDisplayName($cellJson, [string]$fallbackId) {
+    $name = [string](Get-JsonPropertyValue $cellJson "name" "")
+    if ([string]::IsNullOrWhiteSpace($name)) { return $fallbackId }
+    return $name
 }
 
-Write-Host "CellPanel v1.7 save/load audit" -ForegroundColor Cyan
-Write-Host "RepoRoot: $RepoRoot"
-
-if ([string]::IsNullOrWhiteSpace($ProjectDir)) {
-    $candidateA = Join-Path $RepoRoot "my_anime_project"
-    $candidateB = Join-Path $RepoRoot "project"
-    if (Test-Path (Join-Path $candidateA "project.json")) {
-        $ProjectDir = $candidateA
-    } elseif (Test-Path (Join-Path $candidateB "project.json")) {
-        $ProjectDir = $candidateB
-    } else {
-        Write-WarnLine "ProjectDir was not specified and no default project.json was found."
-        Write-Host "Run again with:"
-        Write-Host "  powershell -ExecutionPolicy Bypass -File .\tools\VERIFY_CELL_SAVE_LOAD.ps1 -RepoRoot `"$RepoRoot`" -ProjectDir `"<saved project folder>`""
+function Test-NumericRange($value, [double]$min, [double]$max, [string]$label) {
+    if ($null -eq $value) {
+        Add-WarningLine "$label missing"
         return
     }
+
+    $num = 0.0
+    if (-not [double]::TryParse([string]$value, [ref]$num)) {
+        Add-Issue "$label is not numeric: $value"
+        return
+    }
+
+    if ($num -lt $min -or $num -gt $max) {
+        Add-Issue "$label out of range [$min, $max]: $num"
+    }
 }
 
+if ([string]::IsNullOrWhiteSpace($ProjectDir)) {
+    $ProjectDir = Join-Path $RepoRoot "my_anime_project"
+}
+
+Write-Host "=== CellPanel v1.9 save/load audit ===" -ForegroundColor Cyan
+Write-Host "RepoRoot  : $RepoRoot"
 Write-Host "ProjectDir: $ProjectDir"
+Write-Host ""
 
-$warnings = [System.Collections.Generic.List[string]]::new()
-$errors = [System.Collections.Generic.List[string]]::new()
+if (-not (Test-Path $RepoRoot)) {
+    Add-Issue "RepoRoot not found: $RepoRoot"
+}
+if (-not (Test-Path $ProjectDir)) {
+    Add-Issue "ProjectDir not found: $ProjectDir"
+}
 
-try {
-    $projectJsonPath = Join-Path $ProjectDir "project.json"
-    $cellsRoot = Join-Path $ProjectDir "cells"
+$projectJsonPath = Join-Path $ProjectDir "project.json"
+$projectJson = Read-JsonSafe $projectJsonPath "project.json"
 
-    $project = Read-JsonFile $projectJsonPath
-    if (-not (Test-Path $cellsRoot)) {
-        Add-Error $errors "Missing cells folder: $cellsRoot"
+$cellsRoot = Join-Path $ProjectDir "cells"
+if (-not (Test-Path $cellsRoot)) {
+    Add-Issue "cells directory not found: $cellsRoot"
+}
+
+$cellDirs = @()
+if (Test-Path $cellsRoot) {
+    $cellDirs = @(Get-ChildItem $cellsRoot -Directory | Sort-Object Name)
+}
+
+$cellOrder = @()
+if ($null -ne $projectJson) {
+    if (Has-JsonProperty $projectJson "cellOrder") {
+        $cellOrder = @(To-ArraySafe (Get-JsonPropertyValue $projectJson "cellOrder" @())) | ForEach-Object { [string]$_ }
     } else {
-        Write-Ok "cells folder exists"
+        Add-WarningLine "project.json has no cellOrder; folder order will be used for audit"
     }
+}
 
-    $cellOrder = @()
-    $rawCellOrder = Get-PropertyValue $project "cellOrder" @()
-    if ($null -ne $rawCellOrder) {
-        foreach ($id in @($rawCellOrder)) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$id)) {
-                $cellOrder += [string]$id
-            }
-        }
-    }
+Write-Host "=== Project summary ===" -ForegroundColor Cyan
+Write-Host "Cell folders: $($cellDirs.Count)"
+Write-Host "cellOrder   : $($cellOrder.Count)"
 
-    $cellDirs = @()
-    if (Test-Path $cellsRoot) {
-        $cellDirs = Get-ChildItem $cellsRoot -Directory | Sort-Object Name
-    }
+if ($cellDirs.Count -eq 0) {
+    Add-Issue "no cell folders found"
+}
 
-    Write-Info "cellOrder count: $($cellOrder.Count)"
-    Write-Info "cell folder count: $($cellDirs.Count)"
+$folderIds = @($cellDirs | ForEach-Object { $_.Name })
 
-    if ($cellDirs.Count -eq 0) {
-        Add-Error $errors "No cell directories were found. Save may not have written cells."
-    }
-
-    $folderIds = @($cellDirs | ForEach-Object { $_.Name })
-    $seenOrder = @{}
+if ($cellOrder.Count -gt 0) {
     foreach ($id in $cellOrder) {
-        if ($seenOrder.ContainsKey($id)) {
-            Add-Error $errors "Duplicate id in project.json cellOrder: $id"
-        } else {
-            $seenOrder[$id] = $true
-        }
         if ($folderIds -notcontains $id) {
-            Add-Error $errors "project.json cellOrder references missing cell folder: $id"
+            Add-Issue "cellOrder references missing cell folder: $id"
+        }
+    }
+    foreach ($id in $folderIds) {
+        if ($cellOrder -notcontains $id) {
+            Add-WarningLine "cell folder is not listed in cellOrder: $id"
         }
     }
 
-    foreach ($folderId in $folderIds) {
-        if ($cellOrder.Count -gt 0 -and $cellOrder -notcontains $folderId) {
-            Add-Warning $warnings "Cell folder is not present in project.json cellOrder: $folderId"
-        }
+    $duplicates = $cellOrder | Group-Object | Where-Object { $_.Count -gt 1 }
+    foreach ($dup in $duplicates) {
+        Add-Issue "cellOrder contains duplicate id: $($dup.Name)"
+    }
+}
+
+Write-Host ""
+Write-Host "=== Cell summary ===" -ForegroundColor Cyan
+
+$cellRecords = New-Object System.Collections.Generic.List[object]
+
+foreach ($dir in $cellDirs) {
+    $cellIdFromFolder = $dir.Name
+    $cellJsonPath = Join-Path $dir.FullName "cell.json"
+    $cellJson = Read-JsonSafe $cellJsonPath "cell.json for $cellIdFromFolder"
+    if ($null -eq $cellJson) { continue }
+
+    $jsonId = [string](Get-JsonPropertyValue $cellJson "id" $cellIdFromFolder)
+    if ($jsonId -ne $cellIdFromFolder) {
+        Add-WarningLine "cell folder/id mismatch: folder=$cellIdFromFolder json=$jsonId"
     }
 
-    $cellSummaries = @()
-    $expectedZ = 0
-    $idsToInspect = if ($cellOrder.Count -gt 0) { $cellOrder } else { $folderIds }
+    $name = Get-CellDisplayName $cellJson $cellIdFromFolder
+    $category = [string](Get-JsonPropertyValue $cellJson "category" "")
+    $visible = Get-JsonPropertyValue $cellJson "visible" $true
+    $opacity = Get-JsonPropertyValue $cellJson "opacity" $null
+    $zOrder = Get-JsonPropertyValue $cellJson "zOrder" $null
 
-    foreach ($id in $idsToInspect) {
-        $cellFolder = Join-Path $cellsRoot $id
-        $cellJsonPath = Join-Path $cellFolder "cell.json"
-        if (-not (Test-Path $cellJsonPath)) {
-            Add-Error $errors "Missing cell.json for cell: $id"
-            continue
-        }
+    Test-NumericRange $opacity 0.0 1.0 "$cellIdFromFolder opacity"
 
-        $cell = Read-JsonFile $cellJsonPath
-        $cellId = [string](Get-PropertyValue $cell "id" "")
-        $name = [string](Get-PropertyValue $cell "name" "")
-        $category = [string](Get-PropertyValue $cell "category" "")
-        $visible = [bool](Get-PropertyValue $cell "visible" $true)
-        $opacity = [double](Get-PropertyValue $cell "opacity" 1.0)
-        $zOrder = [int](Get-PropertyValue $cell "zOrder" $expectedZ)
+    if ($null -ne $zOrder) {
+        $z = 0
+        if (-not [int]::TryParse([string]$zOrder, [ref]$z)) {
+            Add-Issue "$cellIdFromFolder zOrder is not integer: $zOrder"
+        }
+    } else {
+        Add-WarningLine "$cellIdFromFolder zOrder missing"
+    }
 
-        if ($cellId -ne $id) {
-            Add-Warning $warnings "Cell folder id and cell.json id differ: folder=$id json=$cellId"
-        }
-        if ($opacity -lt 0.0 -or $opacity -gt 1.0) {
-            Add-Error $errors "Opacity out of range for $id : $opacity"
-        }
-        if ($zOrder -ne $expectedZ) {
-            Add-Warning $warnings "zOrder is not normalized for $id : zOrder=$zOrder expected=$expectedZ"
-        }
-
-        $framesRoot = Join-Path $cellFolder "frames"
-        $frameDirs = @()
-        if (Test-Path $framesRoot) {
-            $frameDirs = Get-ChildItem $framesRoot -Directory | Sort-Object Name
-        }
-        if ($frameDirs.Count -eq 0) {
-            Add-Error $errors "No frames found for cell: $id"
-        }
-
+    $framesRoot = Join-Path $dir.FullName "frames"
+    if (-not (Test-Path $framesRoot)) {
+        Add-Issue "$cellIdFromFolder has no frames directory"
+        $frameCount = 0
+        $layerCountTotal = 0
+    } else {
+        $frameDirs = @(Get-ChildItem $framesRoot -Directory | Sort-Object Name)
         $frameCount = $frameDirs.Count
-        $totalLayerCount = 0
+        $layerCountTotal = 0
+        if ($frameCount -eq 0) {
+            Add-Issue "$cellIdFromFolder has zero frame folders"
+        }
+
         foreach ($frameDir in $frameDirs) {
             $frameJsonPath = Join-Path $frameDir.FullName "frame.json"
             if (-not (Test-Path $frameJsonPath)) {
-                Add-Error $errors "Missing frame.json: $($frameDir.FullName)"
+                Add-Issue "$cellIdFromFolder/$($frameDir.Name) missing frame.json"
             }
-            $layerFiles = Get-ChildItem $frameDir.FullName -File -Filter "layer_*.json" | Sort-Object Name
+
+            $layerFiles = @(Get-ChildItem $frameDir.FullName -File -Filter "layer_*.json" | Sort-Object Name)
+            $layerCountTotal += $layerFiles.Count
             if ($layerFiles.Count -eq 0) {
-                Add-Error $errors "No layer json files in frame folder: $($frameDir.FullName)"
+                Add-WarningLine "$cellIdFromFolder/$($frameDir.Name) has no layer_*.json"
             }
-            $totalLayerCount += $layerFiles.Count
-        }
 
-        $cellSummaries += [PSCustomObject]@{
-            Order = $expectedZ
-            Id = $id
-            JsonId = $cellId
-            Name = $name
-            Category = $category
-            Visible = $visible
-            Opacity = $opacity
-            ZOrder = $zOrder
-            Frames = $frameCount
-            Layers = $totalLayerCount
+            foreach ($layerFile in $layerFiles) {
+                $layerJson = Read-JsonSafe $layerFile.FullName "layer json $($layerFile.Name)"
+                if ($null -eq $layerJson) { continue }
+                $layerId = [string](Get-JsonPropertyValue $layerJson "id" (Get-JsonPropertyValue $layerJson "layerId" ""))
+                if (-not [string]::IsNullOrWhiteSpace($layerId)) {
+                    if ($layerId -notlike "*$cellIdFromFolder*") {
+                        Add-WarningLine "$cellIdFromFolder/$($frameDir.Name)/$($layerFile.Name) layer id may not be cell-scoped: $layerId"
+                    }
+                }
+            }
         }
-
-        $expectedZ += 1
     }
 
-    Write-Host ""
-    Write-Host "Cell summary:" -ForegroundColor Cyan
-    $cellSummaries | Format-Table -AutoSize | Out-String | Write-Host
-
-    Write-Host "Audit result:" -ForegroundColor Cyan
-    if ($errors.Count -eq 0 -and $warnings.Count -eq 0) {
-        Write-Ok "Save/load structure looks consistent."
-    } elseif ($errors.Count -eq 0) {
-        Write-WarnLine "No fatal errors, but warnings were found: $($warnings.Count)"
-    } else {
-        Write-ErrLine "Fatal issues were found: $($errors.Count) errors, $($warnings.Count) warnings"
+    $record = [PSCustomObject]@{
+        Id = $cellIdFromFolder
+        Name = $name
+        Category = $category
+        Visible = $visible
+        Opacity = $opacity
+        Z = $zOrder
+        Frames = $frameCount
+        LayersTotal = $layerCountTotal
     }
+    $cellRecords.Add($record) | Out-Null
+}
 
-    Write-Host ""
-    Write-Host "Recommended manual check after this script:" -ForegroundColor Cyan
-    Write-Host "1. Start the app."
-    Write-Host "2. Load the same project."
-    Write-Host "3. Confirm cell count, names, categories, visible flags, opacity, and order."
-    Write-Host "4. Confirm strokes still belong to the correct cell only."
-} catch {
-    Write-ErrLine $_.Exception.Message
-    Write-Host "The terminal was not closed. Fix the issue above and run the script again." -ForegroundColor Yellow
+$cellRecords | Format-Table -AutoSize
+
+if ($cellRecords.Count -gt 0) {
+    $zRecords = @($cellRecords | Where-Object { $null -ne $_.Z -and "$($_.Z)" -ne "" } | Sort-Object {[int]$_.Z})
+    if ($zRecords.Count -eq $cellRecords.Count) {
+        $expected = 0
+        foreach ($record in $zRecords) {
+            $actual = [int]$record.Z
+            if ($actual -ne $expected) {
+                Add-WarningLine "zOrder is not contiguous from zero: expected $expected but $($record.Id) has $actual"
+            }
+            $expected += 1
+        }
+    }
+}
+
+Write-Host ""
+Write-Host "=== Result ===" -ForegroundColor Cyan
+Write-Host "Errors  : $($issues.Count)"
+Write-Host "Warnings: $($warnings.Count)"
+
+if ($issues.Count -eq 0) {
+    Write-Host "Audit completed without fatal errors." -ForegroundColor Green
+} else {
+    Write-Host "Audit found errors. Fix these before moving to timesheet/cell placement work." -ForegroundColor Red
+}
+
+if ($warnings.Count -gt 0) {
+    Write-Host "Warnings may be acceptable for legacy projects, but review them before committing save/load changes." -ForegroundColor Yellow
 }
