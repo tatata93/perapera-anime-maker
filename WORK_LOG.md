@@ -636,3 +636,7 @@ src/io/ProjectIO.cpp
 - Connected CellPanel to the drawing right sidebar.
 - The panel supports cell selection, visibility toggle, and opacity editing.
 - This package avoids UTF-8 reads of existing files and uses byte-safe edits.
+
+## CellPanel v1.2b
+- Added robust multi-cell overlay display connection.
+- The script replaces the active canvasRenderer draw call by locating it inside drawCanvasArea instead of matching one fixed line.

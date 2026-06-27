@@ -10,6 +10,7 @@
 #include <imgui.h>
 #include "ui/Theme.h"
 #include "ui/panels/BrushPanel.h"
+#include "ui/panels/CellPanel.h"
 #include "ui/panels/ColorPanel.h"
 #include "ui/panels/ExportPanel.h"
 #include "ui/panels/FramePanel.h"
@@ -397,45 +398,15 @@ void App::drawLeftSidebar()
 }
 void App::drawRightSidebar()
 {
-    ImGui::TextUnformatted(u8c(u8"\u30bb\u30eb\u4e00\u89a7"));
-
-    if (project_.cells.empty()) {
-        ImGui::TextDisabled("No cells.");
-    } else {
-        for (int i = 0; i < static_cast<int>(project_.cells.size()); ++i) {
-            Cell& listedCell = project_.cells[static_cast<std::size_t>(i)];
-
-            ImGui::PushID(listedCell.id.c_str());
-
-            std::string label = listedCell.name.empty() ? listedCell.id : listedCell.name;
-            if (!listedCell.category.empty()) {
-                label += " [" + listedCell.category + "]";
-            }
-
-            const bool selected = i == activeCellIndex_;
-            if (ImGui::Selectable(label.c_str(), selected)) {
-                if (!selected) {
-                    activeCellIndex_ = i;
-                    clampSelection();
-
-                    // Cell switching changes the visible frame/layer set. Keep this conservative
-                    // so cache keys from a different cell cannot show stale content.
-                    canvasRenderer_.markAllDirty();
-
-                    const std::string cellLabel = listedCell.name.empty() ? listedCell.id : listedCell.name;
-                    lastMessage_ = "active cell: " + cellLabel;
-                }
-            }
-
-            const char* visibleText = listedCell.visible ? "visible" : "hidden";
-            ImGui::TextDisabled("id=%s | %s | opacity=%.2f | frames=%d",
-                listedCell.id.c_str(),
-                visibleText,
-                listedCell.opacity,
-                static_cast<int>(listedCell.frames.size()));
-
-            ImGui::PopID();
-        }
+    const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_);
+    if (cellPanelResult.selectionChanged) {
+        activeCellIndex_ = cellPanelResult.selectedCellIndex;
+        clampSelection();
+        canvasRenderer_.markAllDirty();
+        lastMessage_ = "active cell changed";
+    } else if (cellPanelResult.displayChanged) {
+        canvasRenderer_.markAllDirty();
+        lastMessage_ = "cell display changed";
     }
 
     ImGui::Separator();
@@ -444,11 +415,10 @@ void App::drawRightSidebar()
     Cell* cell = activeCell();
 
     if (frame == nullptr || cell == nullptr) {
-        ImGui::TextUnformatted(u8c(u8"\u30a2\u30af\u30c6\u30a3\u30d6\u306a\u30bb\u30eb\u307e\u305f\u306f\u30d5\u30ec\u30fc\u30e0\u304c\u3042\u308a\u307e\u305b\u3093\u3002"));
+        ImGui::TextUnformatted("No active cell or frame.");
         return;
     }
-
-    ImGui::TextDisabled(currentMode_ == AppMode::Coloring ? "Phase 1.5 Step 17 coloring mode" : "Phase 1.5 Step 13 libmypaint dab connection");
+    ImGui::TextDisabled(currentMode_ == AppMode::Coloring ? "Phase 2-pre CellPanel v1 coloring mode" : "Phase 2-pre CellPanel v1 drawing mode");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -457,9 +427,7 @@ void App::drawRightSidebar()
     } else if (layerAction == ui::LayerPanelAction::ClearLayer) {
         clearActiveLayer();
     }
-
     ImGui::Separator();
-
     const ui::FramePanelAction frameAction = ui::drawFramePanel(*cell, activeFrameIndex_);
     if (frameAction == ui::FramePanelAction::AddFrame) {
         addFrame();
@@ -468,9 +436,7 @@ void App::drawRightSidebar()
     } else if (frameAction == ui::FramePanelAction::DeleteFrame) {
         deleteActiveFrame();
     }
-
     ImGui::Separator();
-
     const ui::ExportPanelAction exportAction = ui::drawExportPanel(exportState_, lastMessage_.c_str());
     if (exportAction == ui::ExportPanelAction::SaveProject) {
         saveProject();
@@ -553,16 +519,51 @@ void App::drawCanvasArea(float rightWidth)
     const Stroke* preview = (isDrawingStroke_
         && brushSettings_.tool == ui::ToolKind::Brush
         && !myPaintRealtimePreview) ? &currentStroke_ : nullptr;
-    canvasRenderer_.draw(*frame,
-                         activeFrameIndex_,
-                         activeLayerIndex_,
-                         preview,
-                         1.0f,
-                         canvasView_,
-                         isColoringMode ? CanvasDisplayMode::Coloring : CanvasDisplayMode::Drawing,
-                         areaMin,
-                         areaSize,
-                         drawList);
+        const CanvasDisplayMode canvasDisplayMode = isColoringMode ? CanvasDisplayMode::Coloring : CanvasDisplayMode::Drawing;
+    const ui::CellDisplayMode cellDisplayMode = ui::currentCellDisplayMode();
+    const int soloCellIndex = ui::currentSoloCellIndex();
+
+    auto drawCellFrame = [&](int cellIndex, const Cell& drawCell, const Frame& drawFrame, int drawFrameIndex) {
+        const bool isActiveCell = cellIndex == activeCellIndex_;
+        const int drawActiveLayer = isActiveCell ? activeLayerIndex_ : -1;
+        const Stroke* drawPreview = isActiveCell ? preview : nullptr;
+        const float drawOpacity = std::clamp(drawCell.opacity, 0.0f, 1.0f);
+        if (drawOpacity <= 0.0f) {
+            return;
+        }
+        canvasRenderer_.draw(drawFrame,
+                             drawFrameIndex,
+                             drawActiveLayer,
+                             drawPreview,
+                             drawOpacity,
+                             canvasView_,
+                             canvasDisplayMode,
+                             areaMin,
+                             areaSize,
+                             drawList);
+    };
+
+    if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
+        drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
+    } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
+        const int safeSoloIndex = std::clamp(soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_, 0, static_cast<int>(project_.cells.size()) - 1);
+        const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
+        if (!soloCell.frames.empty()) {
+            const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
+            const Frame& soloFrame = soloCell.frames[static_cast<std::size_t>(soloFrameIndex)];
+            drawCellFrame(safeSoloIndex, soloCell, soloFrame, soloFrameIndex);
+        }
+    } else {
+        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+            const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
+            if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
+                continue;
+            }
+            const int drawFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(drawCell.frames.size()) - 1);
+            const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
+            drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
+        }
+    }
     warmPlaybackFrameCache();
     if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
         drawLightweightEraserPreview(currentStroke_, canvasView_, areaMin, areaSize, drawList);

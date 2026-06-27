@@ -1,12 +1,10 @@
-// This file's role: Cell management UI for selecting cells, editing visibility/opacity, and adding new cells.
+// This file's role: Cell management UI for selecting cells, adding cells, and controlling multi-cell display.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
-#include <cstring>
-#include <functional>
 #include <string>
 #include <utility>
 
@@ -29,6 +27,8 @@ constexpr std::array<CategoryOption, 6> kCategoryOptions{{
     {"Other", "other"},
 }};
 
+CellDisplayMode gDisplayMode = CellDisplayMode::VisibleCells;
+int gSoloCellIndex = -1;
 
 std::string sanitizeIdComponent(const std::string& value, const std::string& fallback)
 {
@@ -201,6 +201,40 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
     return cell;
 }
 
+void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult& result)
+{
+    ImGui::TextUnformatted("Display Mode");
+
+    int mode = 0;
+    if (gDisplayMode == CellDisplayMode::VisibleCells) {
+        mode = 1;
+    } else if (gDisplayMode == CellDisplayMode::SoloSelected) {
+        mode = 2;
+    }
+
+    if (ImGui::RadioButton("Active Only", mode == 0)) {
+        gDisplayMode = CellDisplayMode::ActiveOnly;
+        result.displayChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Visible Cells", mode == 1)) {
+        gDisplayMode = CellDisplayMode::VisibleCells;
+        result.displayChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Solo", mode == 2)) {
+        gDisplayMode = CellDisplayMode::SoloSelected;
+        gSoloCellIndex = std::clamp(gSoloCellIndex >= 0 ? gSoloCellIndex : activeCellIndex, 0, std::max(0, cellCount - 1));
+        result.displayChanged = true;
+    }
+
+    if (cellCount <= 0) {
+        gSoloCellIndex = -1;
+    } else if (gSoloCellIndex >= cellCount) {
+        gSoloCellIndex = cellCount - 1;
+    }
+}
+
 void drawAddCellSection(Project& project, CellPanelResult& result)
 {
     static bool addOpen = false;
@@ -219,7 +253,7 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
         return;
     }
 
-    ImGui::BeginChild("CellPanel_v11_add", ImVec2(0.0f, 112.0f), true);
+    ImGui::BeginChild("CellPanel_v12_add", ImVec2(0.0f, 112.0f), true);
     ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
 
     const char* preview = kCategoryOptions[static_cast<std::size_t>(std::clamp(
@@ -247,6 +281,7 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
         result.selectionChanged = true;
         result.displayChanged = true;
         result.projectStructureChanged = true;
+        gSoloCellIndex = result.selectedCellIndex;
 
         nameBuffer[0] = '\0';
         categoryIndex = categoryIndexFromValue(project.cells.back().category);
@@ -262,6 +297,16 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
 
 } // namespace
 
+CellDisplayMode currentCellDisplayMode()
+{
+    return gDisplayMode;
+}
+
+int currentSoloCellIndex()
+{
+    return gSoloCellIndex;
+}
+
 CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
 {
     CellPanelResult result{};
@@ -272,8 +317,13 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.1b");
+    ImGui::TextUnformatted("CellPanel v1.2");
     drawAddCellSection(project, result);
+    ImGui::Separator();
+
+    drawDisplayModeControls(result.selectedCellIndex,
+                            static_cast<int>(project.cells.size()),
+                            result);
     ImGui::Separator();
 
     if (project.cells.empty()) {
@@ -285,7 +335,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     const int maxIndex = static_cast<int>(project.cells.size()) - 1;
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
-    ImGui::BeginChild("CellPanel_v11_list", ImVec2(0.0f, 210.0f), true,
+    ImGui::BeginChild("CellPanel_v12_list", ImVec2(0.0f, 240.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
@@ -298,6 +348,10 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
             if (!selected) {
                 result.selectedCellIndex = index;
                 result.selectionChanged = true;
+                if (gDisplayMode == CellDisplayMode::SoloSelected) {
+                    gSoloCellIndex = index;
+                    result.displayChanged = true;
+                }
             }
         }
 
@@ -308,6 +362,13 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         }
 
         ImGui::SameLine();
+        const bool solo = gSoloCellIndex == index;
+        if (ImGui::SmallButton(solo ? "Solo*" : "Solo")) {
+            gSoloCellIndex = index;
+            gDisplayMode = CellDisplayMode::SoloSelected;
+            result.displayChanged = true;
+        }
+
         float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
         ImGui::SetNextItemWidth(-1.0f);
         if (ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f, "%.2f")) {

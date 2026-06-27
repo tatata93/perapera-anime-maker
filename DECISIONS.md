@@ -246,3 +246,6 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 ## CellPanel v1d
 - Cell management UI is kept independent from playback/cache speed work.
 - Scene/Cut migration, cell deletion, and timesheet work are deferred.
+
+## CellPanel v1.2b
+- Keep edit target limited to the active cell while allowing visible cells to be composited for reference.
