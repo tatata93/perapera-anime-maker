@@ -5,6 +5,7 @@
 #include "ui/AppProjectIOSupport.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -12,8 +13,10 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <cstdio>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -45,6 +48,61 @@ int firstLayerWithStrokes(const Frame& frame)
         }
     }
     return 0;
+}
+
+std::string sanitizeIdComponent(const std::string& value, const std::string& fallback)
+{
+    std::string out;
+    out.reserve(value.size());
+    for (unsigned char ch : value) {
+        if (std::isalnum(ch)) {
+            out.push_back(static_cast<char>(std::tolower(ch)));
+        } else if (ch == '_' || ch == '-') {
+            out.push_back('_');
+        }
+    }
+    if (out.empty()) {
+        out = fallback;
+    }
+    return out;
+}
+
+std::string numberedId(const char* prefix, int number)
+{
+    char buffer[48]{};
+    std::snprintf(buffer, sizeof(buffer), "%s_%03d", prefix, std::max(1, number));
+    return std::string(buffer);
+}
+
+bool stringListContains(const std::vector<std::string>& values, const std::string& value)
+{
+    return std::find(values.begin(), values.end(), value) != values.end();
+}
+
+std::string uniqueCellId(const std::vector<std::string>& usedIds, int preferredNumber)
+{
+    int number = std::max(1, preferredNumber);
+    std::string id = numberedId("cell", number);
+    while (stringListContains(usedIds, id)) {
+        ++number;
+        id = numberedId("cell", number);
+    }
+    return id;
+}
+
+std::string expectedLayerIdForCellFrame(const Cell& cell, int cellIndex, int frameIndex, int layerIndex)
+{
+    const std::string fallbackCell = numberedId("cell", cellIndex + 1);
+    const std::string cellKey = sanitizeIdComponent(cell.id, fallbackCell);
+
+    char buffer[96]{};
+    std::snprintf(buffer,
+                  sizeof(buffer),
+                  "%s_f%03d_layer_%03d",
+                  cellKey.c_str(),
+                  std::max(1, frameIndex + 1),
+                  std::max(1, layerIndex + 1));
+    return std::string(buffer);
 }
 
 std::filesystem::path appStatePath(const std::filesystem::path& projectFolder)
@@ -177,28 +235,64 @@ void resetMp4PreflightLog(const std::filesystem::path& logPath,
     log << "fps: " << fps << "\n\n";
 }
 
-void normalizeProjectForStep14(Project& project)
+bool normalizeCellStructure(Project& project)
 {
+    bool changed = false;
     if (project.cells.empty()) {
         project = Project::createDefault();
+        changed = true;
     }
 
     project.cellOrder.clear();
-    for (Cell& cell : project.cells) {
-        if (cell.id.empty()) {
-            cell.id = "cell_001";
+    project.cellOrder.reserve(project.cells.size());
+
+    std::vector<std::string> usedCellIds;
+    usedCellIds.reserve(project.cells.size());
+
+    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
+        Cell& cell = project.cells[static_cast<std::size_t>(cellIndex)];
+        if (cell.id.empty() || stringListContains(usedCellIds, cell.id)) {
+            cell.id = uniqueCellId(usedCellIds, cellIndex + 1);
+            changed = true;
+        }
+        usedCellIds.push_back(cell.id);
+
+        if (cell.zOrder != cellIndex) {
+            cell.zOrder = cellIndex;
+            changed = true;
         }
         project.cellOrder.push_back(cell.id);
         if (cell.frames.empty()) {
             cell.frames.push_back(Frame::createDefault(1));
+            changed = true;
         }
-        for (Frame& frame : cell.frames) {
-            frame.durationFrames = std::max(1, frame.durationFrames);
+        for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
+            Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
+            if (frame.durationFrames < 1) {
+                frame.durationFrames = 1;
+                changed = true;
+            }
             if (frame.layers.empty()) {
                 frame.layers.push_back(Layer::createDefault(1));
+                changed = true;
+            }
+            for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+                Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+                const std::string expectedLayerId = expectedLayerIdForCellFrame(cell, cellIndex, frameIndex, layerIndex);
+                if (layer.layerId != expectedLayerId) {
+                    layer.layerId = expectedLayerId;
+                    layer.touchRevision();
+                    changed = true;
+                }
             }
         }
     }
+    return changed;
+}
+
+void normalizeProjectForStep14(Project& project)
+{
+    (void)normalizeCellStructure(project);
 }
 
 ProjectStats collectProjectStats(const Project& project)

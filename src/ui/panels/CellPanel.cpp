@@ -69,34 +69,6 @@ std::string expectedLayerIdForCellFrame(const Cell& cell, int cellIndex, int fra
     return std::string(buffer);
 }
 
-bool layerIdLooksCellScoped(const Layer& layer, const Cell& cell, int cellIndex)
-{
-    const std::string fallbackCell = numberedId("cell", cellIndex + 1);
-    const std::string cellKey = sanitizeIdComponent(cell.id, fallbackCell);
-    const std::string prefix = cellKey + "_f";
-    return layer.layerId.rfind(prefix, 0) == 0;
-}
-
-bool ensureCellScopedLayerIds(Project& project)
-{
-    bool changed = false;
-    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
-        Cell& cell = project.cells[static_cast<std::size_t>(cellIndex)];
-        for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
-            Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
-            for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
-                Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
-                if (!layerIdLooksCellScoped(layer, cell, cellIndex)) {
-                    layer.layerId = expectedLayerIdForCellFrame(cell, cellIndex, frameIndex, layerIndex);
-                    layer.touchRevision();
-                    changed = true;
-                }
-            }
-        }
-    }
-    return changed;
-}
-
 std::string displayNameForCell(const Cell& cell, int index)
 {
     std::string label = cell.name.empty() ? cell.id : cell.name;
@@ -269,7 +241,6 @@ bool duplicateCell(Project& project, int sourceIndex, CellPanelResult& result)
 
     project.cells.insert(project.cells.begin() + insertIndex, std::move(duplicate));
 
-    ensureCellScopedLayerIds(project);
     rebuildCellOrderAndZ(project);
 
     if (gSoloCellIndex >= insertIndex) {
@@ -491,7 +462,6 @@ void drawEditCellPopup(Project& project,
             cell.name = nextName.empty() ? cell.id : nextName;
             cell.category = kCategoryOptions[static_cast<std::size_t>(safeCategoryIndex)].value;
             result.displayChanged = true;
-            result.projectStructureChanged = true;
             cancelEditCell(editingIndex, editingCellId);
             ImGui::CloseCurrentPopup();
         }
@@ -837,10 +807,6 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     static int pendingDeleteIndex = -1;
     static std::string pendingDeleteCellId;
 
-    if (ensureCellScopedLayerIds(project)) {
-        result.displayChanged = true;
-        result.projectStructureChanged = true;
-    }
     if (rebuildCellOrderAndZ(project)) {
         result.displayChanged = true;
         result.projectStructureChanged = true;

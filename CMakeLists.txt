@@ -169,6 +169,7 @@ add_executable(perapera_anime_maker
     src/ui/AppProjectIOSupport.cpp
     src/ui/CanvasView.cpp
     src/ui/panels/BrushPanel.cpp
+    src/ui/panels/CellPanel.cpp
     src/ui/panels/ColorPanel.cpp
     src/ui/panels/LayerPanel.cpp
     src/ui/panels/FramePanel.cpp

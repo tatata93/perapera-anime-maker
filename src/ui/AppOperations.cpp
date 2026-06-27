@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include "ui/AppProjectIOSupport.h"
+
 namespace perapera {
 namespace {
 
@@ -63,6 +65,7 @@ void App::addLayer()
     pushUndoSnapshot();
     const int newNumber = nextAvailableLayerNumber(*frame);
     frame->layers.push_back(Layer::createDefault(newNumber));
+    appio::normalizeCellStructure(project_);
     activeLayerIndex_ = static_cast<int>(frame->layers.size()) - 1;
     canvasRenderer_.clearLayerCaches();
     lastMessage_ = "layer added";
@@ -79,6 +82,7 @@ void App::deleteActiveLayer()
     pushUndoSnapshot();
     activeLayerIndex_ = std::clamp(activeLayerIndex_, 0, static_cast<int>(frame->layers.size()) - 1);
     frame->layers.erase(frame->layers.begin() + activeLayerIndex_);
+    appio::normalizeCellStructure(project_);
     clampSelection();
     canvasRenderer_.clearLayerCaches();
     lastMessage_ = "layer deleted";
@@ -114,6 +118,7 @@ void App::addFrame()
 
     cell->frames.insert(cell->frames.begin() + insertIndex, Frame::createDefault(insertIndex + 1));
     renumberFrames(*cell);
+    appio::normalizeCellStructure(project_);
 
     activeFrameIndex_ = insertIndex;
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
@@ -137,6 +142,7 @@ void App::duplicateFrame()
     Frame duplicate = *frame;
     cell->frames.insert(cell->frames.begin() + insertIndex, duplicate);
     renumberFrames(*cell);
+    appio::normalizeCellStructure(project_);
     activeFrameIndex_ = insertIndex;
     activeLayerIndex_ = 0;
     clampSelection();
@@ -160,6 +166,7 @@ void App::deleteActiveFrame()
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     cell->frames.erase(cell->frames.begin() + activeFrameIndex_);
     renumberFrames(*cell);
+    appio::normalizeCellStructure(project_);
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
     clampSelection();

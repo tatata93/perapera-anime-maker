@@ -399,9 +399,22 @@ void App::drawLeftSidebar()
 void App::drawRightSidebar()
 {
     const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_);
-    if (cellPanelResult.selectionChanged) {
+    const auto resetPreviewReadiness = [&]() {
+        previewWarmCursor_ = activeFrameIndex_;
+        previewReadyFlags_.clear();
+        previewReadyCount_ = 0;
+        previewReadyScanCursor_ = activeFrameIndex_;
+    };
+    if (cellPanelResult.projectStructureChanged) {
         activeCellIndex_ = cellPanelResult.selectedCellIndex;
         clampSelection();
+        resetPreviewReadiness();
+        canvasRenderer_.clearLayerCaches();
+        lastMessage_ = cellPanelResult.selectionChanged ? "active cell changed" : "cell structure changed";
+    } else if (cellPanelResult.selectionChanged) {
+        activeCellIndex_ = cellPanelResult.selectedCellIndex;
+        clampSelection();
+        resetPreviewReadiness();
         canvasRenderer_.markAllDirty();
         lastMessage_ = "active cell changed";
     } else if (cellPanelResult.displayChanged) {

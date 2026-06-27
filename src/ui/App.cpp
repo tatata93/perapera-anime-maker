@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
 #include "ui/panels/ExportPanel.h"
 
@@ -246,8 +247,9 @@ bool App::selectPaintLayerForColoring(bool createIfMissing)
     paintLayer.type = LayerType::Paint;
     paintLayer.opacity = 1.0f;
     frame->layers.push_back(std::move(paintLayer));
+    appio::normalizeCellStructure(project_);
     activeLayerIndex_ = static_cast<int>(frame->layers.size()) - 1;
-    canvasRenderer_.markAllDirty();
+    canvasRenderer_.clearLayerCaches();
     return true;
 }
 
@@ -366,13 +368,18 @@ void App::redo()
 
 void App::afterProjectChanged()
 {
+    const bool structureChanged = appio::normalizeCellStructure(project_);
     clampSelection();
     previewWarmCursor_ = activeFrameIndex_;
     previewReadyFlags_.clear();
     previewReadyCount_ = 0;
     previewReadyScanCursor_ = activeFrameIndex_;
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
-    canvasRenderer_.markAllDirty();
+    if (structureChanged) {
+        canvasRenderer_.clearLayerCaches();
+    } else {
+        canvasRenderer_.markAllDirty();
+    }
 }
 
 void App::clampSelection()
