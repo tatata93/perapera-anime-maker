@@ -34,6 +34,7 @@ constexpr float kMinZoom = 0.05f;
 constexpr float kMaxZoom = 32.0f;
 constexpr float kCanvasBorderThickness = 1.0f;
 constexpr std::size_t kMaxCachedLayerBitmaps = 128U;
+constexpr std::size_t kMaxCachedOnionBitmaps = 24U;
 
 float clamp01(float value)
 {
@@ -309,6 +310,7 @@ void CanvasRenderer::setRenderer(SDL_Renderer* renderer)
     layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    onionLastUsed_.clear();
     cacheUseClock_ = 0U;
 }
 
@@ -331,6 +333,7 @@ void CanvasRenderer::setCanvasSize(int width, int height)
     layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    onionLastUsed_.clear();
     cacheUseClock_ = 0U;
 }
 
@@ -386,6 +389,7 @@ void CanvasRenderer::clearLayerCaches()
     layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    onionLastUsed_.clear();
     cacheUseClock_ = 0U;
 }
 
@@ -593,6 +597,7 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
 
     (void)opacity;
     drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, 255));
+    pruneOnionCache(OnionCacheKey{frameIndex, isPrevious});
 }
 
 void CanvasRenderer::warmFrameCache(const Frame& frame,
@@ -838,6 +843,7 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
 {
     const OnionCacheKey key{frameIndex, isPrevious};
     CanvasBitmap& bitmap = onionBitmaps_.try_emplace(key).first->second;
+    onionLastUsed_[key] = ++cacheUseClock_;
     std::uint64_t revision = frameRevisionHash(frame);
     hashCombine(revision, isPrevious ? 1ULL : 0ULL);
     hashCombine(revision, hashFloat(opacity));
@@ -913,6 +919,46 @@ void CanvasRenderer::pruneLayerCache(const std::string& protectedFrameId)
         layerCachedStrokeCounts_.erase(victim);
         layerRebuildStates_.erase(victim);
         layerLastUsed_.erase(victim);
+    }
+}
+
+void CanvasRenderer::pruneOnionCache(const OnionCacheKey& protectedKey)
+{
+    for (auto usedIt = onionLastUsed_.begin(); usedIt != onionLastUsed_.end();) {
+        if (onionBitmaps_.find(usedIt->first) == onionBitmaps_.end()) {
+            usedIt = onionLastUsed_.erase(usedIt);
+        } else {
+            ++usedIt;
+        }
+    }
+
+    while (onionBitmaps_.size() > kMaxCachedOnionBitmaps) {
+        bool foundVictim = false;
+        OnionCacheKey victim;
+        std::uint64_t oldestUse = std::numeric_limits<std::uint64_t>::max();
+
+        for (const auto& entry : onionBitmaps_) {
+            const OnionCacheKey& key = entry.first;
+            if (key == protectedKey) {
+                continue;
+            }
+
+            const auto usedIt = onionLastUsed_.find(key);
+            const std::uint64_t lastUsed = usedIt == onionLastUsed_.end() ? 0U : usedIt->second;
+            if (!foundVictim || lastUsed < oldestUse) {
+                foundVictim = true;
+                oldestUse = lastUsed;
+                victim = key;
+            }
+        }
+
+        if (!foundVictim) {
+            break;
+        }
+
+        onionBitmaps_.erase(victim);
+        onionRevisions_.erase(victim);
+        onionLastUsed_.erase(victim);
     }
 }
 

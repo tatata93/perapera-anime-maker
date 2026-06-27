@@ -166,6 +166,7 @@ private:
     std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerLastUsed_;
     std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
+    std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionLastUsed_;
     std::vector<int> displayLayerIndicesScratch_;
     std::uint64_t cacheUseClock_ = 0U;
 
@@ -177,6 +178,7 @@ private:
     bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision, int strokeBudgetPerDraw);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
     void pruneLayerCache(const std::string& protectedFrameId);
+    void pruneOnionCache(const OnionCacheKey& protectedKey);
 
     std::uint64_t frameRevisionHash(const Frame& frame) const;
 
