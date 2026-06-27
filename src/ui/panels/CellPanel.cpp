@@ -1,4 +1,4 @@
-// This file's role: Cell management UI for selecting cells, adding cells, controlling multi-cell display, and editing cell order.
+// This file's role: Cell management UI for selecting cells, adding/duplicating cells, editing names/categories, controlling multi-cell display, and editing cell order.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -220,6 +220,65 @@ bool moveCell(Project& project, int fromIndex, int toIndex, CellPanelResult& res
     return true;
 }
 
+std::string makeDuplicateName(const Cell& source, int copyNumber)
+{
+    std::string base = source.name.empty() ? source.id : source.name;
+    if (base.empty()) {
+        base = "Cell";
+    }
+    return base + " Copy " + std::to_string(std::max(1, copyNumber));
+}
+
+void reassignLayerIdsForCell(Cell& cell, int cellIndex)
+{
+    for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
+        Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
+        for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+            Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+            layer.layerId = expectedLayerIdForCellFrame(cell, cellIndex, frameIndex, layerIndex);
+            layer.touchRevision();
+        }
+    }
+}
+
+bool duplicateCell(Project& project, int sourceIndex, CellPanelResult& result)
+{
+    const int cellCount = static_cast<int>(project.cells.size());
+    if (cellCount <= 0) {
+        return false;
+    }
+
+    sourceIndex = std::clamp(sourceIndex, 0, cellCount - 1);
+    const int insertIndex = sourceIndex + 1;
+
+    Cell duplicate = project.cells[static_cast<std::size_t>(sourceIndex)];
+    duplicate.id = makeUniqueCellId(project);
+    duplicate.name = makeDuplicateName(project.cells[static_cast<std::size_t>(sourceIndex)], cellCount + 1);
+    duplicate.visible = true;
+    duplicate.zOrder = insertIndex;
+
+    reassignLayerIdsForCell(duplicate, insertIndex);
+
+    project.cells.insert(project.cells.begin() + insertIndex, std::move(duplicate));
+
+    // Inserting the duplicate shifts later cells, so every cell's cache-facing layer id is normalized again.
+    ensureCellScopedLayerIds(project);
+    rebuildCellOrderAndZ(project);
+
+    if (gSoloCellIndex >= insertIndex) {
+        ++gSoloCellIndex;
+    }
+    if (gDisplayMode == CellDisplayMode::SoloSelected) {
+        gSoloCellIndex = insertIndex;
+    }
+
+    result.selectedCellIndex = insertIndex;
+    result.selectionChanged = true;
+    result.displayChanged = true;
+    result.projectStructureChanged = true;
+    return true;
+}
+
 Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 {
     // Important: a new cel must not inherit the currently active cell's frame/layer layout.
@@ -322,6 +381,82 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
     }
 }
 
+
+void copyStringToBuffer(char* buffer, std::size_t bufferSize, const std::string& value)
+{
+    if (buffer == nullptr || bufferSize == 0) {
+        return;
+    }
+    std::snprintf(buffer, bufferSize, "%s", value.c_str());
+}
+
+void beginEditCell(int index, const Cell& cell, int& editingIndex, std::string& editingCellId, char* nameBuffer, std::size_t nameBufferSize, int& categoryIndex)
+{
+    editingIndex = index;
+    editingCellId = cell.id;
+    copyStringToBuffer(nameBuffer, nameBufferSize, cell.name.empty() ? cell.id : cell.name);
+    categoryIndex = categoryIndexFromValue(cell.category);
+}
+
+void cancelEditCell(int& editingIndex, std::string& editingCellId)
+{
+    editingIndex = -1;
+    editingCellId.clear();
+}
+
+void drawEditCellSection(Cell& cell,
+                         int index,
+                         int& editingIndex,
+                         std::string& editingCellId,
+                         char* nameBuffer,
+                         std::size_t nameBufferSize,
+                         int& categoryIndex,
+                         CellPanelResult& result)
+{
+    const bool editingThisCell = editingIndex == index && editingCellId == cell.id;
+
+    if (!editingThisCell) {
+        if (ImGui::SmallButton("Edit")) {
+            beginEditCell(index, cell, editingIndex, editingCellId, nameBuffer, nameBufferSize, categoryIndex);
+        }
+        return;
+    }
+
+    ImGui::BeginChild("CellPanel_v15_edit", ImVec2(0.0f, 118.0f), true);
+    ImGui::TextUnformatted("Edit Cell");
+    ImGui::InputText("Name", nameBuffer, nameBufferSize);
+
+    categoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
+    const char* preview = kCategoryOptions[static_cast<std::size_t>(categoryIndex)].label;
+    if (ImGui::BeginCombo("Category", preview)) {
+        for (int optionIndex = 0; optionIndex < static_cast<int>(kCategoryOptions.size()); ++optionIndex) {
+            const bool selected = optionIndex == categoryIndex;
+            if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(optionIndex)].label, selected)) {
+                categoryIndex = optionIndex;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::Button("Apply", ImVec2(100.0f, 0.0f))) {
+        const std::string nextName = nameBuffer != nullptr ? std::string(nameBuffer) : std::string{};
+        const int safeCategoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
+        cell.name = nextName.empty() ? cell.id : nextName;
+        cell.category = kCategoryOptions[static_cast<std::size_t>(safeCategoryIndex)].value;
+        result.displayChanged = true;
+        result.projectStructureChanged = true;
+        cancelEditCell(editingIndex, editingCellId);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+        cancelEditCell(editingIndex, editingCellId);
+    }
+    ImGui::EndChild();
+}
+
 void drawAddCellSection(Project& project, CellPanelResult& result)
 {
     static bool addOpen = false;
@@ -340,7 +475,7 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
         return;
     }
 
-    ImGui::BeginChild("CellPanel_v13_add", ImVec2(0.0f, 112.0f), true);
+    ImGui::BeginChild("CellPanel_v14_add", ImVec2(0.0f, 112.0f), true);
     ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
 
     const char* preview = kCategoryOptions[static_cast<std::size_t>(std::clamp(
@@ -400,6 +535,11 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     CellPanelResult result{};
     result.selectedCellIndex = activeCellIndex;
 
+    static int editingCellIndex = -1;
+    static std::string editingCellId;
+    static char editNameBuffer[128] = "";
+    static int editCategoryIndex = 0;
+
     if (ensureCellScopedLayerIds(project)) {
         result.displayChanged = true;
         result.projectStructureChanged = true;
@@ -409,14 +549,14 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.3");
+    ImGui::TextUnformatted("CellPanel v1.5");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
     drawDisplayModeControls(result.selectedCellIndex,
                             static_cast<int>(project.cells.size()),
                             result);
-    ImGui::TextDisabled("Order: Back draws earlier, Front draws later/on top.");
+    ImGui::TextDisabled("Order: Back draws earlier, Front draws later/on top. Edit changes name/category. Duplicate copies the selected cell.");
     ImGui::Separator();
 
     if (project.cells.empty()) {
@@ -428,7 +568,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     const int maxIndex = static_cast<int>(project.cells.size()) - 1;
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
-    ImGui::BeginChild("CellPanel_v13_list", ImVec2(0.0f, 240.0f), true,
+    ImGui::BeginChild("CellPanel_v15_list", ImVec2(0.0f, 260.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
@@ -493,6 +633,21 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         if (!canMoveFront) {
             ImGui::EndDisabled();
         }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Duplicate")) {
+            duplicateCell(project, index, result);
+            ImGui::PopID();
+            break;
+        }
+        ImGui::SameLine();
+        drawEditCellSection(cell,
+                            index,
+                            editingCellIndex,
+                            editingCellId,
+                            editNameBuffer,
+                            sizeof(editNameBuffer),
+                            editCategoryIndex,
+                            result);
 
         float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
         ImGui::SetNextItemWidth(-1.0f);
