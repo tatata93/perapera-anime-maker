@@ -35,6 +35,14 @@ struct ImageRgba {
     std::vector<std::uint8_t> pixels;
 };
 
+struct PaintColorLookup {
+    int width = 0;
+    int height = 0;
+    bool hasPaint = false;
+    std::vector<std::uint8_t> distance;
+    std::vector<std::uint8_t> colors;
+};
+
 std::uint8_t toByte(float value)
 {
     return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
@@ -184,9 +192,106 @@ bool sampleNearestPaintColor(const ImageRgba& paintReference,
     return false;
 }
 
+PaintColorLookup buildPaintColorLookup(const ImageRgba& paintReference)
+{
+    PaintColorLookup lookup;
+    lookup.width = paintReference.width;
+    lookup.height = paintReference.height;
+    if (paintReference.width <= 0 || paintReference.height <= 0 || paintReference.pixels.empty()) {
+        return lookup;
+    }
+
+    constexpr std::uint8_t kNoPaintDistance = 255U;
+    constexpr std::uint8_t kSampleRadius = 16U;
+    constexpr std::uint8_t kMinPaintAlpha = 8U;
+    const std::size_t pixelCount = static_cast<std::size_t>(paintReference.width) *
+                                   static_cast<std::size_t>(paintReference.height);
+
+    lookup.distance.assign(pixelCount, kNoPaintDistance);
+    lookup.colors.assign(pixelCount * 4U, 0U);
+
+    std::vector<int> queue;
+    queue.reserve(pixelCount / 4U);
+    for (std::size_t pixelIndex = 0; pixelIndex < pixelCount; ++pixelIndex) {
+        const std::size_t offset = pixelIndex * 4U;
+        if (paintReference.pixels[offset + 3U] < kMinPaintAlpha) {
+            continue;
+        }
+
+        lookup.distance[pixelIndex] = 0U;
+        lookup.colors[offset + 0U] = paintReference.pixels[offset + 0U];
+        lookup.colors[offset + 1U] = paintReference.pixels[offset + 1U];
+        lookup.colors[offset + 2U] = paintReference.pixels[offset + 2U];
+        lookup.colors[offset + 3U] = paintReference.pixels[offset + 3U];
+        queue.push_back(static_cast<int>(pixelIndex));
+        lookup.hasPaint = true;
+    }
+
+    for (std::size_t head = 0; head < queue.size(); ++head) {
+        const int pixelIndex = queue[head];
+        const std::uint8_t distance = lookup.distance[static_cast<std::size_t>(pixelIndex)];
+        if (distance >= kSampleRadius) {
+            continue;
+        }
+
+        const int x = pixelIndex % paintReference.width;
+        const int y = pixelIndex / paintReference.width;
+        const std::size_t sourceOffset = static_cast<std::size_t>(pixelIndex) * 4U;
+        for (int dy = -1; dy <= 1; ++dy) {
+            const int nextY = y + dy;
+            if (nextY < 0 || nextY >= paintReference.height) {
+                continue;
+            }
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx == 0 && dy == 0) {
+                    continue;
+                }
+
+                const int nextX = x + dx;
+                if (nextX < 0 || nextX >= paintReference.width) {
+                    continue;
+                }
+
+                const std::size_t nextIndex = static_cast<std::size_t>(nextY) *
+                                              static_cast<std::size_t>(paintReference.width) +
+                                              static_cast<std::size_t>(nextX);
+                if (lookup.distance[nextIndex] != kNoPaintDistance) {
+                    continue;
+                }
+
+                const std::size_t targetOffset = nextIndex * 4U;
+                lookup.distance[nextIndex] = static_cast<std::uint8_t>(distance + 1U);
+                lookup.colors[targetOffset + 0U] = lookup.colors[sourceOffset + 0U];
+                lookup.colors[targetOffset + 1U] = lookup.colors[sourceOffset + 1U];
+                lookup.colors[targetOffset + 2U] = lookup.colors[sourceOffset + 2U];
+                lookup.colors[targetOffset + 3U] = lookup.colors[sourceOffset + 3U];
+                queue.push_back(static_cast<int>(nextIndex));
+            }
+        }
+    }
+
+    return lookup;
+}
+
+bool nearestPaintColorFromLookup(const PaintColorLookup& lookup,
+                                 std::size_t pixelIndex,
+                                 std::array<std::uint8_t, 4U>& color)
+{
+    if (!lookup.hasPaint || pixelIndex >= lookup.distance.size() || lookup.distance[pixelIndex] == 255U) {
+        return false;
+    }
+
+    const std::size_t offset = pixelIndex * 4U;
+    color = {lookup.colors[offset + 0U],
+             lookup.colors[offset + 1U],
+             lookup.colors[offset + 2U],
+             lookup.colors[offset + 3U]};
+    return true;
+}
+
 void blendColorTraceAsPaintColor(ImageRgba& image,
                                  const CanvasBitmap& colorTraceBitmap,
-                                 const ImageRgba& paintReference,
+                                 const PaintColorLookup& paintLookup,
                                  float layerOpacity)
 {
     const std::vector<std::uint8_t>& pixels = colorTraceBitmap.pixelsRgba();
@@ -202,15 +307,16 @@ void blendColorTraceAsPaintColor(ImageRgba& image,
     const std::array<std::uint8_t, 256U> opacityTable = buildOpacityTable(safeLayerOpacity);
     for (int y = 0; y < image.height; ++y) {
         for (int x = 0; x < image.width; ++x) {
-            const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
-                                        static_cast<std::size_t>(x)) * 4U;
+            const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
+                                           static_cast<std::size_t>(x);
+            const std::size_t offset = pixelIndex * 4U;
             const std::uint8_t traceAlpha = pixels[offset + 3U];
             if (traceAlpha == 0U) {
                 continue;
             }
 
             std::array<std::uint8_t, 4U> replacementColor{};
-            const bool hasPaintColor = sampleNearestPaintColor(paintReference, x, y, replacementColor);
+            const bool hasPaintColor = nearestPaintColorFromLookup(paintLookup, pixelIndex, replacementColor);
             const std::uint8_t outR = hasPaintColor ? replacementColor[0U] : pixels[offset + 0U];
             const std::uint8_t outG = hasPaintColor ? replacementColor[1U] : pixels[offset + 1U];
             const std::uint8_t outB = hasPaintColor ? replacementColor[2U] : pixels[offset + 2U];
@@ -261,9 +367,11 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
     renderedLayers.reserve(frame.layers.size());
 
     ImageRgba paintReference;
-    paintReference.width = image.width;
-    paintReference.height = image.height;
-    paintReference.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+    if (mode == ExportMode::Composite) {
+        paintReference.width = image.width;
+        paintReference.height = image.height;
+        paintReference.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+    }
 
     for (const Layer& layer : frame.layers) {
         if (!layer.visible || layer.opacity <= 0.0f || !shouldExportLayer(layer, mode)) {
@@ -303,11 +411,21 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
         renderedLayers.push_back(std::move(rendered));
     }
 
+    PaintColorLookup paintLookup;
+    if (mode == ExportMode::Composite) {
+        const bool hasColorTraceLayer = std::any_of(renderedLayers.begin(), renderedLayers.end(), [](const RenderedLayer& rendered) {
+            return rendered.type == LayerType::ColorTrace;
+        });
+        if (hasColorTraceLayer) {
+            paintLookup = buildPaintColorLookup(paintReference);
+        }
+    }
+
     for (const RenderedLayer& rendered : renderedLayers) {
         if (mode == ExportMode::Composite && rendered.type == LayerType::ColorTrace) {
             // CompositeではColorTrace色をそのまま残さない。
             // ただし単純にスキップすると、線芯だけ白背景が露出するため、近傍Paint色で置換する。
-            blendColorTraceAsPaintColor(image, rendered.bitmap, paintReference, rendered.opacity);
+            blendColorTraceAsPaintColor(image, rendered.bitmap, paintLookup, rendered.opacity);
             continue;
         }
         blendLayerBitmap(image, rendered.bitmap, rendered.opacity);
@@ -326,14 +444,25 @@ ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode m
     return image;
 }
 
-std::uint32_t crc32(const std::uint8_t* data, std::size_t size)
+constexpr std::array<std::uint32_t, 256U> makeCrc32Table()
 {
-    std::uint32_t crc = 0xffffffffU;
-    for (std::size_t i = 0; i < size; ++i) {
-        crc ^= data[i];
+    std::array<std::uint32_t, 256U> table{};
+    for (std::uint32_t value = 0; value < table.size(); ++value) {
+        std::uint32_t crc = value;
         for (int bit = 0; bit < 8; ++bit) {
             crc = (crc >> 1U) ^ (0xedb88320U & (0U - (crc & 1U)));
         }
+        table[value] = crc;
+    }
+    return table;
+}
+
+std::uint32_t crc32(const std::uint8_t* data, std::size_t size)
+{
+    static constexpr std::array<std::uint32_t, 256U> table = makeCrc32Table();
+    std::uint32_t crc = 0xffffffffU;
+    for (std::size_t i = 0; i < size; ++i) {
+        crc = table[(crc ^ data[i]) & 0xffU] ^ (crc >> 8U);
     }
     return crc ^ 0xffffffffU;
 }
@@ -341,11 +470,18 @@ std::uint32_t crc32(const std::uint8_t* data, std::size_t size)
 std::uint32_t adler32(const std::vector<std::uint8_t>& data)
 {
     constexpr std::uint32_t mod = 65521U;
+    constexpr std::size_t maxBlock = 5552U;
     std::uint32_t a = 1U;
     std::uint32_t b = 0U;
-    for (std::uint8_t value : data) {
-        a = (a + value) % mod;
-        b = (b + a) % mod;
+    std::size_t offset = 0;
+    while (offset < data.size()) {
+        const std::size_t end = std::min(data.size(), offset + maxBlock);
+        for (; offset < end; ++offset) {
+            a += data[offset];
+            b += a;
+        }
+        a %= mod;
+        b %= mod;
     }
     return (b << 16U) | a;
 }
@@ -371,6 +507,8 @@ void appendChunk(std::vector<std::uint8_t>& png, const char type[4], const std::
 std::vector<std::uint8_t> zlibStore(const std::vector<std::uint8_t>& raw)
 {
     std::vector<std::uint8_t> out;
+    const std::size_t blockCount = (raw.size() + 65534U) / 65535U;
+    out.reserve(2U + raw.size() + blockCount * 5U + 4U);
     out.push_back(0x78U);
     out.push_back(0x01U);
 

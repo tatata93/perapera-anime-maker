@@ -223,3 +223,9 @@ Impact: The app now reports visible-frame preview cache readiness without touchi
 Date: 2026-06-27
 Rationale: Future complex layer structures increase repeated draw-order setup and export compositing cost. The app already has in-memory display caches, so the next low-risk improvement is to reduce repeated allocations and per-pixel blend overhead instead of adding disk preview artifacts.
 Impact: CanvasRenderer keeps one reusable layer-order scratch vector, and PngExporter blends by direct pixel offset with a per-layer opacity table. Project files and exported mode semantics are unchanged.
+
+## 2026-06-27 Phase 1.5 Step 21g decision: Treat export as its own performance path
+
+Date: 2026-06-27
+Rationale: A 35-frame project taking minutes to export indicates the bottleneck is not preview cache warm-up but export-only CPU work. PNG writing previously used bitwise CRC over large uncompressed IDAT chunks, and Composite ColorTrace replacement scanned nearby Paint pixels for each trace pixel. Both costs scale badly with canvas size and frame count.
+Impact: PNG checksum work is now table/chunk based, and Composite ColorTrace uses a per-frame Paint lookup map. The exported file format and export mode choices are unchanged.

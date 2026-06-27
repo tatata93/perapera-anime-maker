@@ -588,3 +588,21 @@ src/io/ProjectIO.cpp
 
 ### Follow-up
 - For very heavy ColorTrace composites, consider caching nearest Paint replacement colors instead of sampling nearby Paint pixels for every trace pixel.
+
+## 2026-06-27 Phase 1.5 Step 21g: Export path hot-spot fixes
+
+### Summary
+- Replaced PNG CRC32 bit-by-bit calculation with a 256-entry table lookup.
+- Reduced Adler-32 modulo work by processing bytes in bounded chunks.
+- Reserved the zlib-store output buffer to avoid repeated reallocations for large frames.
+- Added a per-frame Paint color lookup for Composite ColorTrace replacement, so trace pixels no longer scan a 16px neighborhood one by one.
+
+### Changed files
+- `src/io/PngExporter.cpp`
+
+### Verification
+- `cmake --build .\build --config Debug --target perapera_anime_maker` succeeded.
+- `cmake --build .\build --config Release --target perapera_anime_maker` succeeded.
+
+### Follow-up
+- Re-test PNG sequence and MP4 export on the 35-frame project. If it is still too slow, profile whether rasterizing MyPaint strokes or writing uncompressed PNG files is now dominant.
