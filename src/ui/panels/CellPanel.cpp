@@ -1,4 +1,4 @@
-// This file's role: Cell management UI for selecting cells, adding/duplicating cells, editing names/categories, controlling multi-cell display, and editing cell order.
+// This file's role: Cell management UI for selecting cells, adding/duplicating cells, editing names/categories, controlling multi-cell display, editing cell order, and editing cell metadata in a popup.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -413,48 +413,63 @@ void drawEditCellSection(Cell& cell,
                          int& categoryIndex,
                          CellPanelResult& result)
 {
-    const bool editingThisCell = editingIndex == index && editingCellId == cell.id;
+    if (ImGui::SmallButton("Edit")) {
+        beginEditCell(index, cell, editingIndex, editingCellId, nameBuffer, nameBufferSize, categoryIndex);
+        ImGui::OpenPopup("Edit Cell");
+    }
 
+    const bool editingThisCell = editingIndex == index && editingCellId == cell.id;
     if (!editingThisCell) {
-        if (ImGui::SmallButton("Edit")) {
-            beginEditCell(index, cell, editingIndex, editingCellId, nameBuffer, nameBufferSize, categoryIndex);
-        }
         return;
     }
 
-    ImGui::BeginChild("CellPanel_v15_edit", ImVec2(0.0f, 118.0f), true);
-    ImGui::TextUnformatted("Edit Cell");
-    ImGui::InputText("Name", nameBuffer, nameBufferSize);
+    // Keep the edit form out of the narrow right sidebar.  The previous inline
+    // child panel overflowed when the sidebar was narrow, so editing now happens
+    // in a small modal popup with fixed item widths.
+    ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Edit Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Edit Cell");
+        ImGui::Separator();
+        ImGui::TextDisabled("id=%s", cell.id.c_str());
 
-    categoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
-    const char* preview = kCategoryOptions[static_cast<std::size_t>(categoryIndex)].label;
-    if (ImGui::BeginCombo("Category", preview)) {
-        for (int optionIndex = 0; optionIndex < static_cast<int>(kCategoryOptions.size()); ++optionIndex) {
-            const bool selected = optionIndex == categoryIndex;
-            if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(optionIndex)].label, selected)) {
-                categoryIndex = optionIndex;
+        ImGui::SetNextItemWidth(280.0f);
+        ImGui::InputText("Name", nameBuffer, nameBufferSize);
+
+        categoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
+        const char* preview = kCategoryOptions[static_cast<std::size_t>(categoryIndex)].label;
+        ImGui::SetNextItemWidth(280.0f);
+        if (ImGui::BeginCombo("Category", preview)) {
+            for (int optionIndex = 0; optionIndex < static_cast<int>(kCategoryOptions.size()); ++optionIndex) {
+                const bool selected = optionIndex == categoryIndex;
+                if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(optionIndex)].label, selected)) {
+                    categoryIndex = optionIndex;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
             }
-            if (selected) {
-                ImGui::SetItemDefaultFocus();
-            }
+            ImGui::EndCombo();
         }
-        ImGui::EndCombo();
-    }
 
-    if (ImGui::Button("Apply", ImVec2(100.0f, 0.0f))) {
-        const std::string nextName = nameBuffer != nullptr ? std::string(nameBuffer) : std::string{};
-        const int safeCategoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
-        cell.name = nextName.empty() ? cell.id : nextName;
-        cell.category = kCategoryOptions[static_cast<std::size_t>(safeCategoryIndex)].value;
-        result.displayChanged = true;
-        result.projectStructureChanged = true;
-        cancelEditCell(editingIndex, editingCellId);
+        ImGui::Spacing();
+        if (ImGui::Button("Apply", ImVec2(120.0f, 0.0f))) {
+            const std::string nextName = nameBuffer != nullptr ? std::string(nameBuffer) : std::string{};
+            const int safeCategoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
+            cell.name = nextName.empty() ? cell.id : nextName;
+            cell.category = kCategoryOptions[static_cast<std::size_t>(safeCategoryIndex)].value;
+            result.displayChanged = true;
+            result.projectStructureChanged = true;
+            cancelEditCell(editingIndex, editingCellId);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            cancelEditCell(editingIndex, editingCellId);
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
-        cancelEditCell(editingIndex, editingCellId);
-    }
-    ImGui::EndChild();
 }
 
 void drawAddCellSection(Project& project, CellPanelResult& result)
@@ -549,14 +564,14 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.5");
+    ImGui::TextUnformatted("CellPanel v1.5b");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
     drawDisplayModeControls(result.selectedCellIndex,
                             static_cast<int>(project.cells.size()),
                             result);
-    ImGui::TextDisabled("Order: Back draws earlier, Front draws later/on top. Edit changes name/category. Duplicate copies the selected cell.");
+    ImGui::TextDisabled("Back/Front order. Edit opens a popup. Duplicate copies a cell.");
     ImGui::Separator();
 
     if (project.cells.empty()) {
@@ -639,7 +654,6 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
             ImGui::PopID();
             break;
         }
-        ImGui::SameLine();
         drawEditCellSection(cell,
                             index,
                             editingCellIndex,
