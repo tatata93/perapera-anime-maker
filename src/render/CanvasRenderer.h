@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -163,8 +164,10 @@ private:
     std::unordered_map<LayerCacheKey, LayerRebuildState, LayerCacheKeyHash> layerRebuildStates_;
     std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
+    std::vector<int> displayLayerIndicesScratch_;
 
     CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
+    const std::vector<int>& displayLayerIndices(const Frame& frame);
     bool layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const;
     void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw = 16);
     bool appendMissingStrokesIfPossible(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);

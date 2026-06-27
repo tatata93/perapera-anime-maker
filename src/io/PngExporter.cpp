@@ -57,32 +57,53 @@ void fillBackground(ImageRgba& image, std::uint8_t r, std::uint8_t g, std::uint8
     }
 }
 
-void blendPixel(ImageRgba& image, int x, int y, std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a)
+void blendPixelAtOffset(ImageRgba& image,
+                        std::size_t offset,
+                        std::uint8_t r,
+                        std::uint8_t g,
+                        std::uint8_t b,
+                        std::uint8_t a)
 {
-    if (x < 0 || y < 0 || x >= image.width || y >= image.height || a == 0U) {
+    if (a == 0U) {
         return;
     }
 
-    const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
-                                static_cast<std::size_t>(x)) * 4U;
-    const float srcA = static_cast<float>(a) / 255.0f;
-    const float dstA = static_cast<float>(image.pixels[offset + 3U]) / 255.0f;
-    const float outA = srcA + dstA * (1.0f - srcA);
-    if (outA <= 0.0f) {
+    const std::uint8_t dstAByte = image.pixels[offset + 3U];
+    if (a == 255U || dstAByte == 0U) {
+        image.pixels[offset + 0U] = r;
+        image.pixels[offset + 1U] = g;
+        image.pixels[offset + 2U] = b;
+        image.pixels[offset + 3U] = a;
         return;
     }
 
-    const float srcR = static_cast<float>(r) / 255.0f;
-    const float srcG = static_cast<float>(g) / 255.0f;
-    const float srcB = static_cast<float>(b) / 255.0f;
-    const float dstR = static_cast<float>(image.pixels[offset + 0U]) / 255.0f;
-    const float dstG = static_cast<float>(image.pixels[offset + 1U]) / 255.0f;
-    const float dstB = static_cast<float>(image.pixels[offset + 2U]) / 255.0f;
+    const std::uint32_t srcA = static_cast<std::uint32_t>(a);
+    const std::uint32_t dstA = static_cast<std::uint32_t>(dstAByte);
+    const std::uint32_t dstFactor = (dstA * (255U - srcA) + 127U) / 255U;
+    const std::uint32_t outA = srcA + dstFactor;
+    if (outA == 0U) {
+        return;
+    }
 
-    image.pixels[offset + 0U] = toByte((srcR * srcA + dstR * dstA * (1.0f - srcA)) / outA);
-    image.pixels[offset + 1U] = toByte((srcG * srcA + dstG * dstA * (1.0f - srcA)) / outA);
-    image.pixels[offset + 2U] = toByte((srcB * srcA + dstB * dstA * (1.0f - srcA)) / outA);
-    image.pixels[offset + 3U] = toByte(outA);
+    auto blendChannel = [&](std::uint8_t src, std::uint8_t dst) {
+        const std::uint32_t value = static_cast<std::uint32_t>(src) * srcA +
+                                    static_cast<std::uint32_t>(dst) * dstFactor;
+        return static_cast<std::uint8_t>((value + outA / 2U) / outA);
+    };
+
+    image.pixels[offset + 0U] = blendChannel(r, image.pixels[offset + 0U]);
+    image.pixels[offset + 1U] = blendChannel(g, image.pixels[offset + 1U]);
+    image.pixels[offset + 2U] = blendChannel(b, image.pixels[offset + 2U]);
+    image.pixels[offset + 3U] = static_cast<std::uint8_t>(outA);
+}
+
+std::array<std::uint8_t, 256U> buildOpacityTable(float opacity)
+{
+    std::array<std::uint8_t, 256U> table{};
+    for (std::size_t alpha = 0; alpha < table.size(); ++alpha) {
+        table[alpha] = toByte((static_cast<float>(alpha) / 255.0f) * opacity);
+    }
+    return table;
 }
 
 void rasterizeStrokeToBitmap(CanvasBitmap& bitmap, const Stroke& stroke)
@@ -114,18 +135,15 @@ void blendLayerBitmap(ImageRgba& image, const CanvasBitmap& bitmap, float layerO
         return;
     }
 
-    for (int y = 0; y < image.height; ++y) {
-        for (int x = 0; x < image.width; ++x) {
-            const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
-                                        static_cast<std::size_t>(x)) * 4U;
-            const std::uint8_t sourceA = pixels[offset + 3U];
-            if (sourceA == 0U) {
-                continue;
-            }
-
-            const std::uint8_t blendedA = toByte((static_cast<float>(sourceA) / 255.0f) * safeLayerOpacity);
-            blendPixel(image, x, y, pixels[offset + 0U], pixels[offset + 1U], pixels[offset + 2U], blendedA);
+    const std::array<std::uint8_t, 256U> opacityTable = buildOpacityTable(safeLayerOpacity);
+    for (std::size_t offset = 0; offset + 3U < pixels.size(); offset += 4U) {
+        const std::uint8_t sourceA = pixels[offset + 3U];
+        if (sourceA == 0U) {
+            continue;
         }
+
+        const std::uint8_t blendedA = opacityTable[sourceA];
+        blendPixelAtOffset(image, offset, pixels[offset + 0U], pixels[offset + 1U], pixels[offset + 2U], blendedA);
     }
 }
 
@@ -181,6 +199,7 @@ void blendColorTraceAsPaintColor(ImageRgba& image,
         return;
     }
 
+    const std::array<std::uint8_t, 256U> opacityTable = buildOpacityTable(safeLayerOpacity);
     for (int y = 0; y < image.height; ++y) {
         for (int x = 0; x < image.width; ++x) {
             const std::size_t offset = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) +
@@ -195,8 +214,8 @@ void blendColorTraceAsPaintColor(ImageRgba& image,
             const std::uint8_t outR = hasPaintColor ? replacementColor[0U] : pixels[offset + 0U];
             const std::uint8_t outG = hasPaintColor ? replacementColor[1U] : pixels[offset + 1U];
             const std::uint8_t outB = hasPaintColor ? replacementColor[2U] : pixels[offset + 2U];
-            const std::uint8_t outA = toByte((static_cast<float>(traceAlpha) / 255.0f) * safeLayerOpacity);
-            blendPixel(image, x, y, outR, outG, outB, outA);
+            const std::uint8_t outA = opacityTable[traceAlpha];
+            blendPixelAtOffset(image, offset, outR, outG, outB, outA);
         }
     }
 }

@@ -570,3 +570,21 @@ src/io/ProjectIO.cpp
 
 ### Follow-up
 - On the real project, confirm that the new preview readiness count rises after launch and that first playback loops feel lighter once it reaches the frame count.
+
+## 2026-06-27 Phase 1.5 Step 21f: Layer-order scratch reuse and faster export compositing
+
+### Summary
+- Reused a CanvasRenderer scratch vector for display layer ordering so draw and cache warm-up no longer allocate a fresh layer index vector every call.
+- Moved PNG/sequence compositing from coordinate-checked float blending to direct-offset blending with fast opaque/empty-destination paths.
+- Added a 256-entry opacity table per composited layer so per-pixel layer opacity keeps the old rounding behavior without per-pixel float work.
+
+### Changed files
+- `src/render/CanvasRenderer.h`
+- `src/render/CanvasRenderer.cpp`
+- `src/io/PngExporter.cpp`
+
+### Verification
+- `cmake --build .\build --config Debug --target perapera_anime_maker` succeeded.
+
+### Follow-up
+- For very heavy ColorTrace composites, consider caching nearest Paint replacement colors instead of sampling nearby Paint pixels for every trace pixel.

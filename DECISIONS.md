@@ -217,3 +217,9 @@ A later App-side cleanup should remove redundant `canvasRenderer_.markAllDirty()
 Date: 2026-06-27
 Rationale: More complex layer structures will make cache warm-up and per-pixel FillStroke compositing more visible. Writing disk preview files during app execution would add invalidation and cleanup complexity, while the existing in-memory CanvasRenderer cache already matches the current editing session. The lower-risk path is to expose cache readiness in the UI and reduce the hot FillStroke blend loop cost.
 Impact: The app now reports visible-frame preview cache readiness without touching stroke payloads, and FillStroke baking avoids per-pixel coordinate clipping and the generic blendPixel call. Project file format is unchanged.
+
+## 2026-06-27 Phase 1.5 Step 21f decision: Optimize repeated compositing loops before adding new preview files
+
+Date: 2026-06-27
+Rationale: Future complex layer structures increase repeated draw-order setup and export compositing cost. The app already has in-memory display caches, so the next low-risk improvement is to reduce repeated allocations and per-pixel blend overhead instead of adding disk preview artifacts.
+Impact: CanvasRenderer keeps one reusable layer-order scratch vector, and PngExporter blends by direct pixel offset with a per-layer opacity table. Project files and exported mode semantics are unchanged.

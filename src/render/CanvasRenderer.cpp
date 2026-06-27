@@ -513,21 +513,7 @@ void CanvasRenderer::draw(const Frame& frame,
     // 背景はApp側で先に塗る。ここで再度塗ると、先に描いたオニオンスキンが隠れる。
 
     if (renderer_ != nullptr && canvasWidth_ > 0 && canvasHeight_ > 0) {
-        std::vector<int> layerIndices;
-        layerIndices.reserve(frame.layers.size());
-        for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
-            layerIndices.push_back(layerIndex);
-        }
-
-        // Project のレイヤー配列自体は変更せず、表示順だけを変える。
-        // Paintは面塗りなので、Drawing/ColoringのどちらでもNormal/ColorTraceより先に描く。
-        // これで線画確定後にPaintレイヤーへ隠れて「線が消えた」ように見える問題を防ぐ。
-        std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
-            const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
-            const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
-            return displayLayerRank(typeA) < displayLayerRank(typeB);
-        });
-
+        const std::vector<int>& layerIndices = displayLayerIndices(frame);
         for (int layerIndex : layerIndices) {
             const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
             const float displayOpacity = displayOpacityForLayer(layer, displayMode);
@@ -600,16 +586,7 @@ void CanvasRenderer::warmFrameCache(const Frame& frame,
     }
 
     const std::string frameId = frameCacheId(frame, frameIndex);
-    std::vector<int> layerIndices;
-    layerIndices.reserve(frame.layers.size());
-    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
-        layerIndices.push_back(layerIndex);
-    }
-    std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
-        const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
-        const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
-        return displayLayerRank(typeA) < displayLayerRank(typeB);
-    });
+    const std::vector<int>& layerIndices = displayLayerIndices(frame);
 
     int warmedLayers = 0;
     for (int layerIndex : layerIndices) {
@@ -658,6 +635,25 @@ bool CanvasRenderer::frameCacheReady(const Frame& frame,
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex)
 {
     return layerBitmaps_.try_emplace(LayerCacheKey{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
+}
+
+const std::vector<int>& CanvasRenderer::displayLayerIndices(const Frame& frame)
+{
+    displayLayerIndicesScratch_.clear();
+    displayLayerIndicesScratch_.reserve(frame.layers.size());
+    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+        displayLayerIndicesScratch_.push_back(layerIndex);
+    }
+
+    // Project のレイヤー配列自体は変更せず、表示順だけを変える。
+    // Paintは面塗りなので、Drawing/ColoringのどちらでもNormal/ColorTraceより先に描く。
+    std::stable_sort(displayLayerIndicesScratch_.begin(), displayLayerIndicesScratch_.end(), [&frame](int a, int b) {
+        const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
+        const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
+        return displayLayerRank(typeA) < displayLayerRank(typeB);
+    });
+
+    return displayLayerIndicesScratch_;
 }
 
 bool CanvasRenderer::layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const
