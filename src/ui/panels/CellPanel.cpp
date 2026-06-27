@@ -610,16 +610,34 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
 
 void drawCellList(Project& project, CellPanelResult& result)
 {
-    ImGui::BeginChild("CellPanel_v18_list", ImVec2(0.0f, 220.0f), true,
+    ImGui::TextDisabled("Cells: %d", static_cast<int>(project.cells.size()));
+    ImGui::BeginChild("CellPanel_v18b_compact_list", ImVec2(0.0f, 150.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 1.0f));
 
     for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
         Cell& cell = project.cells[static_cast<std::size_t>(index)];
         ImGui::PushID(index);
 
         const bool selected = index == result.selectedCellIndex;
-        const std::string label = displayNameForCell(cell, index);
-        if (ImGui::Selectable(label.c_str(), selected)) {
+        const int opacityPercent = static_cast<int>(std::clamp(cell.opacity, 0.0f, 1.0f) * 100.0f + 0.5f);
+        const int frameCount = static_cast<int>(cell.frames.size());
+        const int firstLayers = firstFrameLayerCount(cell);
+
+        char suffix[160]{};
+        std::snprintf(suffix,
+                      sizeof(suffix),
+                      "  %s %3d%% z=%d F=%d L=%d",
+                      cell.visible ? "V" : "-",
+                      opacityPercent,
+                      cell.zOrder,
+                      frameCount,
+                      firstLayers);
+
+        std::string label = std::to_string(index + 1) + "  " + displayNameForCell(cell, index) + suffix;
+        if (ImGui::Selectable(label.c_str(), selected, 0, ImVec2(0.0f, 0.0f))) {
             if (!selected) {
                 result.selectedCellIndex = index;
                 result.selectionChanged = true;
@@ -630,19 +648,23 @@ void drawCellList(Project& project, CellPanelResult& result)
             }
         }
 
-        ImGui::TextDisabled("id=%s | z=%d | %s | opacity=%.2f",
-                            cell.id.c_str(),
-                            cell.zOrder,
-                            cell.visible ? "visible" : "hidden",
-                            std::clamp(cell.opacity, 0.0f, 1.0f));
-        ImGui::TextDisabled("frames=%d | firstFrameLayers=%d | totalLayers=%d",
-                            static_cast<int>(cell.frames.size()),
-                            firstFrameLayerCount(cell),
-                            layerCountForCell(cell));
-        ImGui::Separator();
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::TextUnformatted(displayNameForCell(cell, index).c_str());
+            ImGui::Separator();
+            ImGui::TextDisabled("id=%s", cell.id.c_str());
+            ImGui::TextDisabled("visible=%s | opacity=%d%% | z=%d", cell.visible ? "true" : "false", opacityPercent, cell.zOrder);
+            ImGui::TextDisabled("frames=%d | firstFrameLayers=%d | totalLayers=%d",
+                                frameCount,
+                                firstLayers,
+                                layerCountForCell(cell));
+            ImGui::EndTooltip();
+        }
+
         ImGui::PopID();
     }
 
+    ImGui::PopStyleVar(2);
     ImGui::EndChild();
 }
 
@@ -780,7 +802,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.8");
+    ImGui::TextUnformatted("CellPanel v1.8b");
     drawAddCellPopup(project, result);
     ImGui::Separator();
 
