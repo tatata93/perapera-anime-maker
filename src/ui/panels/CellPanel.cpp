@@ -1,4 +1,4 @@
-// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells.
+// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.8c compresses selected-cell controls.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -685,24 +685,55 @@ void drawSelectedCellControls(Project& project,
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, static_cast<int>(project.cells.size()) - 1);
     Cell& cell = project.cells[static_cast<std::size_t>(result.selectedCellIndex)];
 
-    ImGui::TextUnformatted("Selected Cell");
-    ImGui::TextDisabled("%s", displayNameForCell(cell, result.selectedCellIndex).c_str());
+    const std::string selectedName = displayNameForCell(cell, result.selectedCellIndex);
+    ImGui::TextDisabled("Selected: %s", selectedName.c_str());
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::TextUnformatted(selectedName.c_str());
+        ImGui::Separator();
+        ImGui::TextDisabled("id=%s", cell.id.c_str());
+        ImGui::TextDisabled("z=%d | frames=%d | layers=%d",
+                            cell.zOrder,
+                            static_cast<int>(cell.frames.size()),
+                            layerCountForCell(cell));
+        ImGui::EndTooltip();
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 2.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
 
     bool visible = cell.visible;
-    if (ImGui::Checkbox("Visible", &visible)) {
+    if (ImGui::Checkbox("V", &visible)) {
         cell.visible = visible;
         result.displayChanged = true;
     }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Visible");
+    }
 
+    ImGui::SameLine();
+    ImGui::TextUnformatted("Op");
+    ImGui::SameLine();
     float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
-    ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f, "%.2f")) {
+    const float opacityWidth = std::max(74.0f, ImGui::GetContentRegionAvail().x - 62.0f);
+    ImGui::SetNextItemWidth(opacityWidth);
+    if (ImGui::SliderFloat("##CellOpacityCompact", &opacity, 0.0f, 1.0f, "%.0f%%")) {
         cell.opacity = std::clamp(opacity, 0.0f, 1.0f);
         result.displayChanged = true;
     }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Opacity");
+    }
 
     const bool solo = gDisplayMode == CellDisplayMode::SoloSelected && gSoloCellIndex == result.selectedCellIndex;
-    if (ImGui::Button(solo ? "Solo: ON" : "Solo", ImVec2(-1.0f, 0.0f))) {
+    const int index = result.selectedCellIndex;
+    const int cellCount = static_cast<int>(project.cells.size());
+
+    const float fullWidth = ImGui::GetContentRegionAvail().x;
+    const float gap = ImGui::GetStyle().ItemSpacing.x;
+    const float third = std::max(46.0f, (fullWidth - gap * 2.0f) / 3.0f);
+
+    if (ImGui::Button(solo ? "Solo*" : "Solo", ImVec2(third, 0.0f))) {
         if (solo) {
             gSoloCellIndex = -1;
             gDisplayMode = CellDisplayMode::VisibleCells;
@@ -712,37 +743,44 @@ void drawSelectedCellControls(Project& project,
         }
         result.displayChanged = true;
     }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(solo ? "Cancel solo display" : "Show only this cell");
+    }
 
-    const int index = result.selectedCellIndex;
-    const int cellCount = static_cast<int>(project.cells.size());
-
+    ImGui::SameLine();
     const bool canMoveBack = index > 0;
-    const bool canMoveFront = index + 1 < cellCount;
     if (!canMoveBack) {
         ImGui::BeginDisabled();
     }
-    if (ImGui::Button("Back", ImVec2(86.0f, 0.0f))) {
+    if (ImGui::Button("Back", ImVec2(third, 0.0f))) {
         moveCell(project, index, index - 1, result);
     }
     if (!canMoveBack) {
         ImGui::EndDisabled();
     }
+
     ImGui::SameLine();
+    const bool canMoveFront = index + 1 < cellCount;
     if (!canMoveFront) {
         ImGui::BeginDisabled();
     }
-    if (ImGui::Button("Front", ImVec2(86.0f, 0.0f))) {
+    if (ImGui::Button("Front", ImVec2(third, 0.0f))) {
         moveCell(project, index, index + 1, result);
     }
     if (!canMoveFront) {
         ImGui::EndDisabled();
     }
 
-    if (ImGui::Button("Duplicate", ImVec2(-1.0f, 0.0f))) {
+    const float half = std::max(70.0f, (ImGui::GetContentRegionAvail().x - gap) / 2.0f);
+    if (ImGui::Button("Dup", ImVec2(half, 0.0f))) {
         duplicateCell(project, result.selectedCellIndex, result);
     }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Duplicate selected cell");
+    }
 
-    if (ImGui::Button("Edit Name/Category", ImVec2(-1.0f, 0.0f))) {
+    ImGui::SameLine();
+    if (ImGui::Button("Edit", ImVec2(half, 0.0f))) {
         beginEditCell(result.selectedCellIndex,
                       project.cells[static_cast<std::size_t>(result.selectedCellIndex)],
                       editingCellIndex,
@@ -751,6 +789,9 @@ void drawSelectedCellControls(Project& project,
                       editNameBufferSize,
                       editCategoryIndex);
         ImGui::OpenPopup("Edit Cell");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Edit name and category");
     }
 
     const bool canDelete = cellCount > 1;
@@ -765,8 +806,11 @@ void drawSelectedCellControls(Project& project,
     if (!canDelete) {
         ImGui::EndDisabled();
     }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(canDelete ? "Delete selected cell" : "The last cell cannot be deleted");
+    }
 
-    ImGui::TextDisabled("Tip: select a cell above, then use these controls.");
+    ImGui::PopStyleVar(2);
 }
 
 } // namespace
@@ -802,7 +846,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.8b");
+    ImGui::TextUnformatted("CellPanel v1.8c");
     drawAddCellPopup(project, result);
     ImGui::Separator();
 
