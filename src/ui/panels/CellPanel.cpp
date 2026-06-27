@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -27,6 +28,74 @@ constexpr std::array<CategoryOption, 6> kCategoryOptions{{
     {"CameraGuide", "camera_guide"},
     {"Other", "other"},
 }};
+
+
+std::string sanitizeIdComponent(const std::string& value, const std::string& fallback)
+{
+    std::string out;
+    out.reserve(value.size());
+    for (unsigned char ch : value) {
+        if (std::isalnum(ch)) {
+            out.push_back(static_cast<char>(std::tolower(ch)));
+        } else if (ch == '_' || ch == '-') {
+            out.push_back('_');
+        }
+    }
+    if (out.empty()) {
+        out = fallback;
+    }
+    return out;
+}
+
+std::string numberedId(const char* prefix, int number)
+{
+    char buffer[48]{};
+    std::snprintf(buffer, sizeof(buffer), "%s_%03d", prefix, std::max(1, number));
+    return std::string(buffer);
+}
+
+std::string expectedLayerIdForCellFrame(const Cell& cell, int cellIndex, int frameIndex, int layerIndex)
+{
+    const std::string fallbackCell = numberedId("cell", cellIndex + 1);
+    const std::string cellKey = sanitizeIdComponent(cell.id, fallbackCell);
+
+    char buffer[96]{};
+    std::snprintf(buffer,
+                  sizeof(buffer),
+                  "%s_f%03d_layer_%03d",
+                  cellKey.c_str(),
+                  std::max(1, frameIndex + 1),
+                  std::max(1, layerIndex + 1));
+    return std::string(buffer);
+}
+
+bool layerIdLooksCellScoped(const Layer& layer, const Cell& cell, int cellIndex)
+{
+    const std::string fallbackCell = numberedId("cell", cellIndex + 1);
+    const std::string cellKey = sanitizeIdComponent(cell.id, fallbackCell);
+    const std::string prefix = cellKey + "_f";
+    return layer.layerId.rfind(prefix, 0) == 0;
+}
+
+bool ensureCellScopedLayerIds(Project& project)
+{
+    bool changed = false;
+    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
+        Cell& cell = project.cells[static_cast<std::size_t>(cellIndex)];
+        for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
+            Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
+            for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+                Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+                if (!layerIdLooksCellScoped(layer, cell, cellIndex)) {
+                    layer.layerId = expectedLayerIdForCellFrame(cell, cellIndex, frameIndex, layerIndex);
+                    layer.touchRevision();
+                    changed = true;
+                }
+            }
+        }
+    }
+    return changed;
+}
 
 std::string displayNameForCell(const Cell& cell, int index)
 {
@@ -121,6 +190,14 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
         cell.frames.front().layers.push_back(Layer::createDefault(1));
     }
 
+    for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
+        Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
+        for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+            frame.layers[static_cast<std::size_t>(layerIndex)].layerId =
+                expectedLayerIdForCellFrame(cell, displayNumber - 1, frameIndex, layerIndex);
+        }
+    }
+
     return cell;
 }
 
@@ -190,7 +267,12 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     CellPanelResult result{};
     result.selectedCellIndex = activeCellIndex;
 
-    ImGui::TextUnformatted("CellPanel v1.1");
+    if (ensureCellScopedLayerIds(project)) {
+        result.displayChanged = true;
+        result.projectStructureChanged = true;
+    }
+
+    ImGui::TextUnformatted("CellPanel v1.1b");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
