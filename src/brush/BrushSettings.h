@@ -27,6 +27,12 @@ enum class BrushPreset {
     Airbrush,
 };
 
+enum class FloodFillWallSource {
+    ActiveCell,
+    VisibleCells,
+    SoloCell,
+};
+
 struct BrushSettings {
     ToolKind tool = ToolKind::Brush;
     BrushEngineKind engine = BrushEngineKind::Simple;
@@ -61,6 +67,7 @@ struct BrushSettings {
     int fillGapClosePx = 1;
     int fillInsetPx = 5;
     int fillLeakGuardPercent = 45;
+    FloodFillWallSource fillWallSource = FloodFillWallSource::VisibleCells;
 
     std::array<float, 4> color = {0.05f, 0.05f, 0.05f, 1.0f};
 };

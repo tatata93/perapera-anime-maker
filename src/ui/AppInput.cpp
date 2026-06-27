@@ -427,8 +427,7 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     settings.leakGuardPercent = brushSettings_.fillLeakGuardPercent;
 
     std::vector<const Frame*> wallFrames;
-    const ui::CellDisplayMode cellDisplayMode = ui::currentCellDisplayMode();
-    if (cellDisplayMode == ui::CellDisplayMode::VisibleCells) {
+    if (brushSettings_.fillWallSource == ui::FloodFillWallSource::VisibleCells) {
         wallFrames.reserve(project_.cells.size());
         for (const Cell& cell : project_.cells) {
             if (!cell.visible || cell.opacity <= 0.0f) {
@@ -436,7 +435,7 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
             }
             appendFrameIfValid(cell, activeFrameIndex_, wallFrames);
         }
-    } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected && !project_.cells.empty()) {
+    } else if (brushSettings_.fillWallSource == ui::FloodFillWallSource::SoloCell && !project_.cells.empty()) {
         const int soloIndex = ui::currentSoloCellIndex();
         const int safeSoloIndex = std::clamp(soloIndex >= 0 ? soloIndex : activeCellIndex_,
                                              0,
