@@ -85,6 +85,10 @@ private:
     float playbackSpeed_ = 1.0f;
     float playbackAccumulator_ = 0.0f;
     int previewWarmCursor_ = 0;
+    CanvasDisplayMode previewReadyDisplayMode_ = CanvasDisplayMode::Drawing;
+    std::vector<char> previewReadyFlags_;
+    int previewReadyCount_ = 0;
+    int previewReadyScanCursor_ = 0;
 
     std::vector<FrameSnapshot> undoStack_;
     std::vector<FrameSnapshot> redoStack_;

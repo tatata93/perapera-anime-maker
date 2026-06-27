@@ -320,14 +320,35 @@ void App::drawFingerPlaybackControls()
         const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
             ? CanvasDisplayMode::Coloring
             : CanvasDisplayMode::Drawing;
-        int readyFrames = 0;
-        for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
-            const Frame* frame = cell->frameOrNull(frameIndex);
-            if (frame != nullptr && canvasRenderer_.frameCacheReady(*frame, frameIndex, displayMode)) {
-                ++readyFrames;
-            }
+        if (static_cast<int>(previewReadyFlags_.size()) != frameCount ||
+            previewReadyDisplayMode_ != displayMode) {
+            previewReadyDisplayMode_ = displayMode;
+            previewReadyFlags_.assign(static_cast<std::size_t>(frameCount), 0);
+            previewReadyCount_ = 0;
+            previewReadyScanCursor_ = std::clamp(activeFrameIndex_, 0, frameCount - 1);
         }
-        ImGui::TextDisabled("%s %d/%d", u8c(u8"プレビュー準備"), readyFrames, frameCount);
+
+        constexpr int kPreviewReadyChecksPerDraw = 32;
+        const int checks = std::min(frameCount, kPreviewReadyChecksPerDraw);
+        for (int checked = 0; checked < checks; ++checked) {
+            const int frameIndex = previewReadyScanCursor_;
+            const Frame* frame = cell->frameOrNull(frameIndex);
+            const char ready = frame != nullptr && canvasRenderer_.frameCacheReady(*frame, frameIndex, displayMode)
+                ? 1
+                : 0;
+            char& previous = previewReadyFlags_[static_cast<std::size_t>(frameIndex)];
+            if (previous != ready) {
+                previewReadyCount_ += ready != 0 ? 1 : -1;
+                previous = ready;
+            }
+            previewReadyScanCursor_ = (previewReadyScanCursor_ + 1) % frameCount;
+        }
+        previewReadyCount_ = std::clamp(previewReadyCount_, 0, frameCount);
+        ImGui::TextDisabled("%s %d/%d", u8c(u8"プレビュー準備"), previewReadyCount_, frameCount);
+    } else {
+        previewReadyFlags_.clear();
+        previewReadyCount_ = 0;
+        previewReadyScanCursor_ = 0;
     }
     ImGui::TextDisabled(u8c(u8"Shift+←/→: 前後   Home/End: 先頭/末尾"));
     ImGui::PopID();

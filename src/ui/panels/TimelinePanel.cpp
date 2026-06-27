@@ -5,6 +5,7 @@
 #include "ui/panels/TimelinePanel.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 
 #include <imgui.h>
@@ -129,7 +130,23 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
                                      scrollMax));
     }
 
-    for (int index = 0; index < static_cast<int>(cell.frames.size()); ++index) {
+    const int frameCount = static_cast<int>(cell.frames.size());
+    const float visibleWidth = std::max(frameStep,
+                                        ImGui::GetWindowWidth() -
+                                            ImGui::GetStyle().WindowPadding.x * 2.0f -
+                                            ImGui::GetStyle().ScrollbarSize);
+    const float viewMinX = ImGui::GetScrollX();
+    const float viewMaxX = viewMinX + visibleWidth;
+    const int firstVisibleFrame = std::clamp(
+        static_cast<int>(std::floor((viewMinX - leftPadding - frameButtonWidth) / frameStep)) - 2,
+        0,
+        frameCount);
+    const int lastVisibleFrame = std::clamp(
+        static_cast<int>(std::ceil((viewMaxX - leftPadding) / frameStep)) + 3,
+        firstVisibleFrame,
+        frameCount);
+
+    for (int index = firstVisibleFrame; index < lastVisibleFrame; ++index) {
         ImGui::PushID(index);
         const float x = leftPadding + static_cast<float>(index) * frameStep;
         ImGui::SetCursorPos(ImVec2(x, topPadding));

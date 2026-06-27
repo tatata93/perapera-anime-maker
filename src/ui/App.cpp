@@ -368,6 +368,9 @@ void App::afterProjectChanged()
 {
     clampSelection();
     previewWarmCursor_ = activeFrameIndex_;
+    previewReadyFlags_.clear();
+    previewReadyCount_ = 0;
+    previewReadyScanCursor_ = activeFrameIndex_;
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
     canvasRenderer_.markAllDirty();
 }
