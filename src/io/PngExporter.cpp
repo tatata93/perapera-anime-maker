@@ -622,6 +622,16 @@ ExportTaskResult writePngTask(ImageRgba image, std::filesystem::path outputPath)
     return result;
 }
 
+const Frame* frameForCellAtExportIndex(const Cell& cell, int frameIndex)
+{
+    if (cell.frames.empty() || frameIndex < 0) {
+        return nullptr;
+    }
+
+    const int safeFrameIndex = std::clamp(frameIndex, 0, static_cast<int>(cell.frames.size()) - 1);
+    return &cell.frames[static_cast<std::size_t>(safeFrameIndex)];
+}
+
 bool waitForOldestExportTask(std::deque<std::future<ExportTaskResult>>& pendingTasks,
                              std::string* errorMessage)
 {
@@ -657,7 +667,7 @@ ImageRgba rasterizeCellsFrame(const std::vector<const Cell*>& cells,
         if (cell == nullptr || cell->opacity <= 0.0f) {
             continue;
         }
-        const Frame* frame = cell->frameOrNull(frameIndex);
+        const Frame* frame = frameForCellAtExportIndex(*cell, frameIndex);
         if (frame == nullptr) {
             continue;
         }
