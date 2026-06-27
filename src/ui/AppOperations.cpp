@@ -19,6 +19,30 @@ std::string frameNameForIndex(int zeroBasedIndex)
     return name.str();
 }
 
+std::string layerIdForNumber(int layerNumber)
+{
+    std::ostringstream id;
+    id << "layer_" << std::setw(3) << std::setfill('0') << layerNumber;
+    return id.str();
+}
+
+int nextAvailableLayerNumber(const Frame& frame)
+{
+    for (int layerNumber = 1;; ++layerNumber) {
+        const std::string candidate = layerIdForNumber(layerNumber);
+        bool used = false;
+        for (const Layer& layer : frame.layers) {
+            if (layer.layerId == candidate) {
+                used = true;
+                break;
+            }
+        }
+        if (!used) {
+            return layerNumber;
+        }
+    }
+}
+
 void renumberFrames(Cell& cell)
 {
     for (int index = 0; index < static_cast<int>(cell.frames.size()); ++index) {
@@ -37,10 +61,10 @@ void App::addLayer()
     }
 
     pushUndoSnapshot();
-    const int newNumber = static_cast<int>(frame->layers.size()) + 1;
+    const int newNumber = nextAvailableLayerNumber(*frame);
     frame->layers.push_back(Layer::createDefault(newNumber));
     activeLayerIndex_ = static_cast<int>(frame->layers.size()) - 1;
-    canvasRenderer_.markAllDirty();
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "layer added";
 }
 
@@ -56,7 +80,7 @@ void App::deleteActiveLayer()
     activeLayerIndex_ = std::clamp(activeLayerIndex_, 0, static_cast<int>(frame->layers.size()) - 1);
     frame->layers.erase(frame->layers.begin() + activeLayerIndex_);
     clampSelection();
-    canvasRenderer_.markAllDirty();
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "layer deleted";
 }
 
@@ -95,7 +119,7 @@ void App::addFrame()
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
     clampSelection();
-    canvasRenderer_.markAllDirty();
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "blank frame added and selected.";
 }
 
@@ -116,7 +140,7 @@ void App::duplicateFrame()
     activeFrameIndex_ = insertIndex;
     activeLayerIndex_ = 0;
     clampSelection();
-    canvasRenderer_.markAllDirty();
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "frame duplicated: count=" + std::to_string(cell->frames.size());
 }
 
@@ -139,7 +163,7 @@ void App::deleteActiveFrame()
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
     clampSelection();
-    canvasRenderer_.markAllDirty();
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "frame deleted: count=" + std::to_string(cell->frames.size());
 }
 

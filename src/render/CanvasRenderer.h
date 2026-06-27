@@ -56,6 +56,7 @@ public:
     // ストローク変更の通知。既存Textureは保持し、O(1) revision stampで必要なレイヤーだけ再構築する。
     void markDirty(int layerIndex);
     void markAllDirty();
+    void clearLayerCaches();
 
     // 旧Step互換入口。現在はProject内のストローク点列を正本にし、次回drawで再構築する。
     void bakeStroke(int layerIndex, const Stroke& stroke, float opacity);

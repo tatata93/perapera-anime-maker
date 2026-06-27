@@ -377,6 +377,18 @@ void CanvasRenderer::markAllDirty()
     onionRevisions_.clear();
 }
 
+void CanvasRenderer::clearLayerCaches()
+{
+    layerBitmaps_.clear();
+    layerRevisions_.clear();
+    layerCachedStrokeCounts_.clear();
+    layerRebuildStates_.clear();
+    layerLastUsed_.clear();
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
+    cacheUseClock_ = 0U;
+}
+
 void CanvasRenderer::bakeStroke(int layerIndex, const Stroke& stroke, float opacity)
 {
     bakeStrokeOnLayer(layerIndex, stroke, opacity);
