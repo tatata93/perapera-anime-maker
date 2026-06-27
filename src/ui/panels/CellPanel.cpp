@@ -1,4 +1,4 @@
-// This file's role: Cell management UI for selecting cells, adding/duplicating cells, editing names/categories, controlling multi-cell display, editing cell order, and editing cell metadata in a popup.
+// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -116,6 +116,14 @@ int layerCountForCell(const Cell& cell)
         total += static_cast<int>(frame.layers.size());
     }
     return total;
+}
+
+int firstFrameLayerCount(const Cell& cell)
+{
+    if (cell.frames.empty()) {
+        return 0;
+    }
+    return static_cast<int>(cell.frames.front().layers.size());
 }
 
 bool cellIdExists(const Project& project, const std::string& id)
@@ -261,7 +269,6 @@ bool duplicateCell(Project& project, int sourceIndex, CellPanelResult& result)
 
     project.cells.insert(project.cells.begin() + insertIndex, std::move(duplicate));
 
-    // Inserting the duplicate shifts later cells, so every cell's cache-facing layer id is normalized again.
     ensureCellScopedLayerIds(project);
     rebuildCellOrderAndZ(project);
 
@@ -315,11 +322,8 @@ bool deleteCell(Project& project, int deleteIndex, CellPanelResult& result, int&
     return true;
 }
 
-
 Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 {
-    // Important: a new cel must not inherit the currently active cell's frame/layer layout.
-    // Build a fresh Cell/Frame/Layer explicitly instead of using any existing cell as a template.
     Cell cell;
     const int displayNumber = static_cast<int>(project.cells.size()) + 1;
 
@@ -363,7 +367,7 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 
 void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult& result)
 {
-    ImGui::TextUnformatted("Display Mode");
+    ImGui::TextUnformatted("Display");
 
     int mode = 0;
     if (gDisplayMode == CellDisplayMode::VisibleCells) {
@@ -372,13 +376,13 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
         mode = 2;
     }
 
-    if (ImGui::RadioButton("Active Only", mode == 0)) {
+    if (ImGui::RadioButton("Active", mode == 0)) {
         gDisplayMode = CellDisplayMode::ActiveOnly;
         gSoloCellIndex = -1;
         result.displayChanged = true;
     }
     ImGui::SameLine();
-    if (ImGui::RadioButton("Visible Cells", mode == 1)) {
+    if (ImGui::RadioButton("Visible", mode == 1)) {
         gDisplayMode = CellDisplayMode::VisibleCells;
         gSoloCellIndex = -1;
         result.displayChanged = true;
@@ -386,7 +390,6 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
     ImGui::SameLine();
     if (ImGui::RadioButton("Solo", mode == 2)) {
         if (gDisplayMode == CellDisplayMode::SoloSelected) {
-            // Clicking the already-selected Solo mode cancels solo display.
             gDisplayMode = CellDisplayMode::VisibleCells;
             gSoloCellIndex = -1;
         } else {
@@ -399,8 +402,7 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
     }
 
     if (gDisplayMode == CellDisplayMode::SoloSelected) {
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Clear Solo")) {
+        if (ImGui::Button("Clear Solo", ImVec2(-1.0f, 0.0f))) {
             gDisplayMode = CellDisplayMode::VisibleCells;
             gSoloCellIndex = -1;
             result.displayChanged = true;
@@ -417,7 +419,6 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
         gSoloCellIndex = cellCount - 1;
     }
 }
-
 
 void copyStringToBuffer(char* buffer, std::size_t bufferSize, const std::string& value)
 {
@@ -441,28 +442,23 @@ void cancelEditCell(int& editingIndex, std::string& editingCellId)
     editingCellId.clear();
 }
 
-void drawEditCellSection(Cell& cell,
-                         int index,
-                         int& editingIndex,
-                         std::string& editingCellId,
-                         char* nameBuffer,
-                         std::size_t nameBufferSize,
-                         int& categoryIndex,
-                         CellPanelResult& result)
+void drawEditCellPopup(Project& project,
+                       int& editingIndex,
+                       std::string& editingCellId,
+                       char* nameBuffer,
+                       std::size_t nameBufferSize,
+                       int& categoryIndex,
+                       CellPanelResult& result)
 {
-    if (ImGui::SmallButton("Edit")) {
-        beginEditCell(index, cell, editingIndex, editingCellId, nameBuffer, nameBufferSize, categoryIndex);
-        ImGui::OpenPopup("Edit Cell");
-    }
-
-    const bool editingThisCell = editingIndex == index && editingCellId == cell.id;
-    if (!editingThisCell) {
+    if (editingIndex < 0 || editingIndex >= static_cast<int>(project.cells.size())) {
         return;
     }
 
-    // Keep the edit form out of the narrow right sidebar.  The previous inline
-    // child panel overflowed when the sidebar was narrow, so editing now happens
-    // in a small modal popup with fixed item widths.
+    Cell& cell = project.cells[static_cast<std::size_t>(editingIndex)];
+    if (cell.id != editingCellId) {
+        return;
+    }
+
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Edit Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted("Edit Cell");
@@ -509,41 +505,23 @@ void drawEditCellSection(Cell& cell,
     }
 }
 
-
-bool drawDeleteCellSection(Project& project,
-                           int index,
-                           int& editingIndex,
-                           std::string& editingCellId,
-                           CellPanelResult& result)
+bool drawDeleteCellPopup(Project& project,
+                         int& pendingDeleteIndex,
+                         std::string& pendingDeleteCellId,
+                         int& editingIndex,
+                         std::string& editingCellId,
+                         CellPanelResult& result)
 {
-    static int pendingDeleteIndex = -1;
-    static std::string pendingDeleteCellId;
-
-    const bool canDelete = static_cast<int>(project.cells.size()) > 1;
-    if (!canDelete) {
-        ImGui::BeginDisabled();
+    if (pendingDeleteIndex < 0 || pendingDeleteIndex >= static_cast<int>(project.cells.size())) {
+        return false;
     }
-    if (ImGui::SmallButton("Delete")) {
-        pendingDeleteIndex = index;
-        pendingDeleteCellId = project.cells[static_cast<std::size_t>(index)].id;
-        ImGui::OpenPopup("Delete Cell");
-    }
-    if (!canDelete) {
-        ImGui::EndDisabled();
-    }
-
-    const bool deletingThisCell = pendingDeleteIndex == index
-        && index >= 0
-        && index < static_cast<int>(project.cells.size())
-        && pendingDeleteCellId == project.cells[static_cast<std::size_t>(index)].id;
-
-    if (!deletingThisCell) {
+    if (pendingDeleteCellId != project.cells[static_cast<std::size_t>(pendingDeleteIndex)].id) {
         return false;
     }
 
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("Delete Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        const Cell& cell = project.cells[static_cast<std::size_t>(index)];
+        const Cell& cell = project.cells[static_cast<std::size_t>(pendingDeleteIndex)];
         ImGui::TextUnformatted("Delete this cell?");
         ImGui::Separator();
         ImGui::TextDisabled("id=%s", cell.id.c_str());
@@ -551,7 +529,7 @@ bool drawDeleteCellSection(Project& project,
 
         ImGui::Spacing();
         if (ImGui::Button("Delete", ImVec2(120.0f, 0.0f))) {
-            const bool deleted = deleteCell(project, index, result, editingIndex, editingCellId);
+            const bool deleted = deleteCell(project, pendingDeleteIndex, result, editingIndex, editingCellId);
             pendingDeleteIndex = -1;
             pendingDeleteCellId.clear();
             ImGui::CloseCurrentPopup();
@@ -567,69 +545,206 @@ bool drawDeleteCellSection(Project& project,
 
         ImGui::EndPopup();
     }
-
     return false;
 }
 
-void drawAddCellSection(Project& project, CellPanelResult& result)
+void drawAddCellPopup(Project& project, CellPanelResult& result)
 {
-    static bool addOpen = false;
     static char nameBuffer[128] = "";
     static int categoryIndex = 0;
 
     if (ImGui::Button("+ Add Cell", ImVec2(-1.0f, 0.0f))) {
-        addOpen = !addOpen;
-        if (nameBuffer[0] == '\0') {
-            const std::string defaultName = "Cell " + std::to_string(static_cast<int>(project.cells.size()) + 1);
-            std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", defaultName.c_str());
-        }
+        const std::string defaultName = "Cell " + std::to_string(static_cast<int>(project.cells.size()) + 1);
+        std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", defaultName.c_str());
+        categoryIndex = 0;
+        ImGui::OpenPopup("Add Cell");
     }
 
-    if (!addOpen) {
+    ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Add Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Add Cell");
+        ImGui::Separator();
+
+        ImGui::SetNextItemWidth(280.0f);
+        ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
+
+        categoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
+        const char* preview = kCategoryOptions[static_cast<std::size_t>(categoryIndex)].label;
+        ImGui::SetNextItemWidth(280.0f);
+        if (ImGui::BeginCombo("Category", preview)) {
+            for (int i = 0; i < static_cast<int>(kCategoryOptions.size()); ++i) {
+                const bool selected = i == categoryIndex;
+                if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(i)].label, selected)) {
+                    categoryIndex = i;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Create", ImVec2(120.0f, 0.0f))) {
+            Cell cell = makeNewCell(project, nameBuffer, categoryIndex);
+            const std::string newCellId = cell.id;
+            project.cells.push_back(std::move(cell));
+            syncCellOrder(project, newCellId);
+            rebuildCellOrderAndZ(project);
+
+            result.selectedCellIndex = static_cast<int>(project.cells.size()) - 1;
+            result.selectionChanged = true;
+            result.displayChanged = true;
+            result.projectStructureChanged = true;
+            gSoloCellIndex = result.selectedCellIndex;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void drawCellList(Project& project, CellPanelResult& result)
+{
+    ImGui::BeginChild("CellPanel_v18_list", ImVec2(0.0f, 220.0f), true,
+                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+    for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
+        Cell& cell = project.cells[static_cast<std::size_t>(index)];
+        ImGui::PushID(index);
+
+        const bool selected = index == result.selectedCellIndex;
+        const std::string label = displayNameForCell(cell, index);
+        if (ImGui::Selectable(label.c_str(), selected)) {
+            if (!selected) {
+                result.selectedCellIndex = index;
+                result.selectionChanged = true;
+                if (gDisplayMode == CellDisplayMode::SoloSelected) {
+                    gSoloCellIndex = index;
+                    result.displayChanged = true;
+                }
+            }
+        }
+
+        ImGui::TextDisabled("id=%s | z=%d | %s | opacity=%.2f",
+                            cell.id.c_str(),
+                            cell.zOrder,
+                            cell.visible ? "visible" : "hidden",
+                            std::clamp(cell.opacity, 0.0f, 1.0f));
+        ImGui::TextDisabled("frames=%d | firstFrameLayers=%d | totalLayers=%d",
+                            static_cast<int>(cell.frames.size()),
+                            firstFrameLayerCount(cell),
+                            layerCountForCell(cell));
+        ImGui::Separator();
+        ImGui::PopID();
+    }
+
+    ImGui::EndChild();
+}
+
+void drawSelectedCellControls(Project& project,
+                              CellPanelResult& result,
+                              int& editingCellIndex,
+                              std::string& editingCellId,
+                              char* editNameBuffer,
+                              std::size_t editNameBufferSize,
+                              int& editCategoryIndex,
+                              int& pendingDeleteIndex,
+                              std::string& pendingDeleteCellId)
+{
+    if (project.cells.empty()) {
         return;
     }
 
-    ImGui::BeginChild("CellPanel_v14_add", ImVec2(0.0f, 112.0f), true);
-    ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
+    result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, static_cast<int>(project.cells.size()) - 1);
+    Cell& cell = project.cells[static_cast<std::size_t>(result.selectedCellIndex)];
 
-    const char* preview = kCategoryOptions[static_cast<std::size_t>(std::clamp(
-        categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1))].label;
-    if (ImGui::BeginCombo("Category", preview)) {
-        for (int i = 0; i < static_cast<int>(kCategoryOptions.size()); ++i) {
-            const bool selected = i == categoryIndex;
-            if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(i)].label, selected)) {
-                categoryIndex = i;
-            }
-            if (selected) {
-                ImGui::SetItemDefaultFocus();
-            }
-        }
-        ImGui::EndCombo();
-    }
+    ImGui::TextUnformatted("Selected Cell");
+    ImGui::TextDisabled("%s", displayNameForCell(cell, result.selectedCellIndex).c_str());
 
-    if (ImGui::Button("Create", ImVec2(110.0f, 0.0f))) {
-        Cell cell = makeNewCell(project, nameBuffer, categoryIndex);
-        const std::string newCellId = cell.id;
-        project.cells.push_back(std::move(cell));
-        syncCellOrder(project, newCellId);
-        rebuildCellOrderAndZ(project);
-
-        result.selectedCellIndex = static_cast<int>(project.cells.size()) - 1;
-        result.selectionChanged = true;
+    bool visible = cell.visible;
+    if (ImGui::Checkbox("Visible", &visible)) {
+        cell.visible = visible;
         result.displayChanged = true;
-        result.projectStructureChanged = true;
-        gSoloCellIndex = result.selectedCellIndex;
-
-        nameBuffer[0] = '\0';
-        categoryIndex = categoryIndexFromValue(project.cells.back().category);
-        addOpen = false;
     }
 
+    float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f, "%.2f")) {
+        cell.opacity = std::clamp(opacity, 0.0f, 1.0f);
+        result.displayChanged = true;
+    }
+
+    const bool solo = gDisplayMode == CellDisplayMode::SoloSelected && gSoloCellIndex == result.selectedCellIndex;
+    if (ImGui::Button(solo ? "Solo: ON" : "Solo", ImVec2(-1.0f, 0.0f))) {
+        if (solo) {
+            gSoloCellIndex = -1;
+            gDisplayMode = CellDisplayMode::VisibleCells;
+        } else {
+            gSoloCellIndex = result.selectedCellIndex;
+            gDisplayMode = CellDisplayMode::SoloSelected;
+        }
+        result.displayChanged = true;
+    }
+
+    const int index = result.selectedCellIndex;
+    const int cellCount = static_cast<int>(project.cells.size());
+
+    const bool canMoveBack = index > 0;
+    const bool canMoveFront = index + 1 < cellCount;
+    if (!canMoveBack) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Back", ImVec2(86.0f, 0.0f))) {
+        moveCell(project, index, index - 1, result);
+    }
+    if (!canMoveBack) {
+        ImGui::EndDisabled();
+    }
     ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(110.0f, 0.0f))) {
-        addOpen = false;
+    if (!canMoveFront) {
+        ImGui::BeginDisabled();
     }
-    ImGui::EndChild();
+    if (ImGui::Button("Front", ImVec2(86.0f, 0.0f))) {
+        moveCell(project, index, index + 1, result);
+    }
+    if (!canMoveFront) {
+        ImGui::EndDisabled();
+    }
+
+    if (ImGui::Button("Duplicate", ImVec2(-1.0f, 0.0f))) {
+        duplicateCell(project, result.selectedCellIndex, result);
+    }
+
+    if (ImGui::Button("Edit Name/Category", ImVec2(-1.0f, 0.0f))) {
+        beginEditCell(result.selectedCellIndex,
+                      project.cells[static_cast<std::size_t>(result.selectedCellIndex)],
+                      editingCellIndex,
+                      editingCellId,
+                      editNameBuffer,
+                      editNameBufferSize,
+                      editCategoryIndex);
+        ImGui::OpenPopup("Edit Cell");
+    }
+
+    const bool canDelete = cellCount > 1;
+    if (!canDelete) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Delete", ImVec2(-1.0f, 0.0f))) {
+        pendingDeleteIndex = result.selectedCellIndex;
+        pendingDeleteCellId = project.cells[static_cast<std::size_t>(result.selectedCellIndex)].id;
+        ImGui::OpenPopup("Delete Cell");
+    }
+    if (!canDelete) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::TextDisabled("Tip: select a cell above, then use these controls.");
 }
 
 } // namespace
@@ -653,6 +768,8 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     static std::string editingCellId;
     static char editNameBuffer[128] = "";
     static int editCategoryIndex = 0;
+    static int pendingDeleteIndex = -1;
+    static std::string pendingDeleteCellId;
 
     if (ensureCellScopedLayerIds(project)) {
         result.displayChanged = true;
@@ -663,14 +780,13 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.6");
-    drawAddCellSection(project, result);
+    ImGui::TextUnformatted("CellPanel v1.8");
+    drawAddCellPopup(project, result);
     ImGui::Separator();
 
     drawDisplayModeControls(result.selectedCellIndex,
                             static_cast<int>(project.cells.size()),
                             result);
-    ImGui::TextDisabled("Back/Front order. Edit opens a popup. Duplicate copies. Delete confirms.");
     ImGui::Separator();
 
     if (project.cells.empty()) {
@@ -682,114 +798,43 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     const int maxIndex = static_cast<int>(project.cells.size()) - 1;
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
-    ImGui::BeginChild("CellPanel_v16_list", ImVec2(0.0f, 260.0f), true,
-                      ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    drawCellList(project, result);
+    ImGui::Separator();
 
-    for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
-        Cell& cell = project.cells[static_cast<std::size_t>(index)];
-        ImGui::PushID(index);
+    drawSelectedCellControls(project,
+                             result,
+                             editingCellIndex,
+                             editingCellId,
+                             editNameBuffer,
+                             sizeof(editNameBuffer),
+                             editCategoryIndex,
+                             pendingDeleteIndex,
+                             pendingDeleteCellId);
 
-        const bool selected = index == result.selectedCellIndex;
-        const std::string label = displayNameForCell(cell, index);
-        if (ImGui::Selectable(label.c_str(), selected)) {
-            if (!selected) {
-                result.selectedCellIndex = index;
-                result.selectionChanged = true;
-                if (gDisplayMode == CellDisplayMode::SoloSelected) {
-                    gSoloCellIndex = index;
-                    result.displayChanged = true;
-                }
-            }
-        }
+    drawEditCellPopup(project,
+                      editingCellIndex,
+                      editingCellId,
+                      editNameBuffer,
+                      sizeof(editNameBuffer),
+                      editCategoryIndex,
+                      result);
 
-        bool visible = cell.visible;
-        if (ImGui::Checkbox("Visible", &visible)) {
-            cell.visible = visible;
-            result.displayChanged = true;
-        }
-
-        ImGui::SameLine();
-        const bool solo = gDisplayMode == CellDisplayMode::SoloSelected && gSoloCellIndex == index;
-        if (ImGui::SmallButton(solo ? "Solo: ON" : "Solo")) {
-            if (solo) {
-                // Pressing Solo on the soloed cell cancels solo and returns to normal visible-cell display.
-                gSoloCellIndex = -1;
-                gDisplayMode = CellDisplayMode::VisibleCells;
-            } else {
-                gSoloCellIndex = index;
-                gDisplayMode = CellDisplayMode::SoloSelected;
-            }
-            result.displayChanged = true;
-        }
-
-        const bool canMoveBack = index > 0;
-        const bool canMoveFront = index + 1 < static_cast<int>(project.cells.size());
-        if (!canMoveBack) {
-            ImGui::BeginDisabled();
-        }
-        if (ImGui::SmallButton("Back")) {
-            moveCell(project, index, index - 1, result);
-            ImGui::PopID();
-            break;
-        }
-        if (!canMoveBack) {
-            ImGui::EndDisabled();
-        }
-        ImGui::SameLine();
-        if (!canMoveFront) {
-            ImGui::BeginDisabled();
-        }
-        if (ImGui::SmallButton("Front")) {
-            moveCell(project, index, index + 1, result);
-            ImGui::PopID();
-            break;
-        }
-        if (!canMoveFront) {
-            ImGui::EndDisabled();
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Duplicate")) {
-            duplicateCell(project, index, result);
-            ImGui::PopID();
-            break;
-        }
-        ImGui::SameLine();
-        if (drawDeleteCellSection(project, index, editingCellIndex, editingCellId, result)) {
-            ImGui::PopID();
-            break;
-        }
-        drawEditCellSection(cell,
-                            index,
+    if (drawDeleteCellPopup(project,
+                            pendingDeleteIndex,
+                            pendingDeleteCellId,
                             editingCellIndex,
                             editingCellId,
-                            editNameBuffer,
-                            sizeof(editNameBuffer),
-                            editCategoryIndex,
-                            result);
-
-        float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
-        ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f, "%.2f")) {
-            cell.opacity = std::clamp(opacity, 0.0f, 1.0f);
-            result.displayChanged = true;
+                            result)) {
+        // A delete can change the selected index and the number of cells. Clamp once more for safety.
+        if (!project.cells.empty()) {
+            result.selectedCellIndex = std::clamp(result.selectedCellIndex,
+                                                  0,
+                                                  static_cast<int>(project.cells.size()) - 1);
+        } else {
+            result.selectedCellIndex = 0;
         }
-
-        const int currentFrameIndex = cell.frames.empty() ? -1 : std::clamp(0, 0, static_cast<int>(cell.frames.size()) - 1);
-        const int currentFrameLayers = currentFrameIndex >= 0
-            ? static_cast<int>(cell.frames[static_cast<std::size_t>(currentFrameIndex)].layers.size())
-            : 0;
-        ImGui::TextDisabled("id=%s | z=%d | frames=%d | firstFrameLayers=%d | totalLayers=%d",
-                            cell.id.c_str(),
-                            cell.zOrder,
-                            static_cast<int>(cell.frames.size()),
-                            currentFrameLayers,
-                            layerCountForCell(cell));
-
-        ImGui::Separator();
-        ImGui::PopID();
     }
 
-    ImGui::EndChild();
     return result;
 }
 
