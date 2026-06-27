@@ -630,3 +630,9 @@ src/io/ProjectIO.cpp
 - Added a minimal cell selection list to the drawing right sidebar.
 - Selection changes `activeCellIndex_`, clamps the active frame/layer selection, and conservatively invalidates the canvas renderer.
 - No drawing data under `my_anime_project` is included.
+
+## CellPanel v1d
+- Added formal CellPanel files under src/ui/panels.
+- Connected CellPanel to the drawing right sidebar.
+- The panel supports cell selection, visibility toggle, and opacity editing.
+- This package avoids UTF-8 reads of existing files and uses byte-safe edits.

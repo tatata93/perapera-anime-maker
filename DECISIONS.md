@@ -242,3 +242,7 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - Implement the first cell management UI as a selection-only list in the existing drawing right sidebar.
 - Do not add cell creation/deletion in this step.
 - Use a PowerShell-only applicator because Python is not available in the user environment.
+
+## CellPanel v1d
+- Cell management UI is kept independent from playback/cache speed work.
+- Scene/Cut migration, cell deletion, and timesheet work are deferred.
