@@ -249,3 +249,7 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 
 ## CellPanel v1.2b
 - Keep edit target limited to the active cell while allowing visible cells to be composited for reference.
+
+## CellPanel v1.2c
+- Reuse CanvasRenderer draw-call opacity as the cell/frame composite opacity for cached layer textures.
+- Do not rebake layer bitmaps for cell opacity changes; apply opacity at DrawList image tint time for fast UI feedback.

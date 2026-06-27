@@ -640,3 +640,7 @@ src/io/ProjectIO.cpp
 ## CellPanel v1.2b
 - Added robust multi-cell overlay display connection.
 - The script replaces the active canvasRenderer draw call by locating it inside drawCanvasArea instead of matching one fixed line.
+
+## CellPanel v1.2c
+- Fixed CellPanel opacity display: CanvasRenderer now applies the draw-call opacity to cached bitmap image alpha, not only to the live stroke preview.
+- This keeps 0% hidden behavior and makes intermediate opacity values visible during multi-cell overlay display.

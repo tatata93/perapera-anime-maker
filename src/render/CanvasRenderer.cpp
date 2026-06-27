@@ -539,7 +539,8 @@ void CanvasRenderer::draw(const Frame& frame,
         const std::vector<int>& layerIndices = displayLayerIndices(frame);
         for (int layerIndex : layerIndices) {
             const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
-            const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+            const float displayOpacity =
+                displayOpacityForLayer(layer, displayMode) * std::clamp(currentStrokeOpacity, 0.0f, 1.0f);
             if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
                 continue;
             }
