@@ -129,19 +129,43 @@ void App::warmPlaybackFrameCache()
         return;
     }
 
-    const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
-    int direction = playbackDirection_ == 0 ? 1 : playbackDirection_;
-    int cursor = activeFrameIndex_;
-
-    const int lookAheadFrames = isPlayingFrames_ ? 6 : 2;
-    const int warmLayerBudget = isPlayingFrames_ ? 3 : 1;
-    const int warmStrokeBudgetPerLayer = isPlayingFrames_ ? 8 : 1;
-
     const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
         ? CanvasDisplayMode::Coloring
         : CanvasDisplayMode::Drawing;
 
-    for (int step = 0; step < lookAheadFrames; ++step) {
+    const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
+
+    if (!isPlayingFrames_) {
+        const int frameCount = static_cast<int>(cell->frames.size());
+        previewWarmCursor_ = std::clamp(previewWarmCursor_, 0, std::max(0, frameCount - 1));
+
+        constexpr int kIdleFramesPerDraw = 2;
+        constexpr int kIdleLayerBudget = 3;
+        constexpr int kIdleStrokeBudgetPerLayer = 16;
+        for (int warmed = 0; warmed < kIdleFramesPerDraw; ++warmed) {
+            const int frameIndex = previewWarmCursor_;
+            const Frame* frame = cell->frameOrNull(frameIndex);
+            if (frame != nullptr) {
+                canvasRenderer_.warmFrameCache(*frame,
+                                               frameIndex,
+                                               displayMode,
+                                               kIdleLayerBudget,
+                                               kIdleStrokeBudgetPerLayer);
+            }
+            previewWarmCursor_ = (previewWarmCursor_ + 1) % frameCount;
+        }
+        return;
+    }
+
+    int direction = playbackDirection_ == 0 ? 1 : playbackDirection_;
+    int cursor = activeFrameIndex_;
+    previewWarmCursor_ = activeFrameIndex_;
+
+    constexpr int kPlaybackLookAheadFrames = 8;
+    constexpr int kPlaybackLayerBudget = 4;
+    constexpr int kPlaybackStrokeBudgetPerLayer = 24;
+
+    for (int step = 0; step < kPlaybackLookAheadFrames; ++step) {
         int nextIndex = cursor + direction;
         if (nextIndex < 0 || nextIndex > lastIndex) {
             if (playbackPingPong_) {
@@ -162,8 +186,8 @@ void App::warmPlaybackFrameCache()
             canvasRenderer_.warmFrameCache(*frame,
                                            nextIndex,
                                            displayMode,
-                                           warmLayerBudget,
-                                           warmStrokeBudgetPerLayer);
+                                           kPlaybackLayerBudget,
+                                           kPlaybackStrokeBudgetPerLayer);
         }
         cursor = nextIndex;
     }

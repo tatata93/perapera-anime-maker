@@ -84,6 +84,7 @@ private:
     int playbackDirection_ = 1;
     float playbackSpeed_ = 1.0f;
     float playbackAccumulator_ = 0.0f;
+    int previewWarmCursor_ = 0;
 
     std::vector<FrameSnapshot> undoStack_;
     std::vector<FrameSnapshot> redoStack_;

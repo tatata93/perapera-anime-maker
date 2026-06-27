@@ -367,6 +367,7 @@ void App::redo()
 void App::afterProjectChanged()
 {
     clampSelection();
+    previewWarmCursor_ = activeFrameIndex_;
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
     canvasRenderer_.markAllDirty();
 }
