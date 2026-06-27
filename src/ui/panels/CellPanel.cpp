@@ -1,4 +1,4 @@
-// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.8c compresses selected-cell controls.
+// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.8d fixes opacity percent editing while keeping compact selected-cell controls.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -67,6 +67,34 @@ std::string expectedLayerIdForCellFrame(const Cell& cell, int cellIndex, int fra
                   std::max(1, frameIndex + 1),
                   std::max(1, layerIndex + 1));
     return std::string(buffer);
+}
+
+bool layerIdLooksCellScoped(const Layer& layer, const Cell& cell, int cellIndex)
+{
+    const std::string fallbackCell = numberedId("cell", cellIndex + 1);
+    const std::string cellKey = sanitizeIdComponent(cell.id, fallbackCell);
+    const std::string prefix = cellKey + "_f";
+    return layer.layerId.rfind(prefix, 0) == 0;
+}
+
+bool ensureCellScopedLayerIds(Project& project)
+{
+    bool changed = false;
+    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
+        Cell& cell = project.cells[static_cast<std::size_t>(cellIndex)];
+        for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
+            Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
+            for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+                Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+                if (!layerIdLooksCellScoped(layer, cell, cellIndex)) {
+                    layer.layerId = expectedLayerIdForCellFrame(cell, cellIndex, frameIndex, layerIndex);
+                    layer.touchRevision();
+                    changed = true;
+                }
+            }
+        }
+    }
+    return changed;
 }
 
 std::string displayNameForCell(const Cell& cell, int index)
@@ -241,6 +269,7 @@ bool duplicateCell(Project& project, int sourceIndex, CellPanelResult& result)
 
     project.cells.insert(project.cells.begin() + insertIndex, std::move(duplicate));
 
+    ensureCellScopedLayerIds(project);
     rebuildCellOrderAndZ(project);
 
     if (gSoloCellIndex >= insertIndex) {
@@ -462,6 +491,7 @@ void drawEditCellPopup(Project& project,
             cell.name = nextName.empty() ? cell.id : nextName;
             cell.category = kCategoryOptions[static_cast<std::size_t>(safeCategoryIndex)].value;
             result.displayChanged = true;
+            result.projectStructureChanged = true;
             cancelEditCell(editingIndex, editingCellId);
             ImGui::CloseCurrentPopup();
         }
@@ -684,15 +714,17 @@ void drawSelectedCellControls(Project& project,
     ImGui::SameLine();
     ImGui::TextUnformatted("Op");
     ImGui::SameLine();
-    float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
+    int opacityPercent = static_cast<int>(std::clamp(cell.opacity, 0.0f, 1.0f) * 100.0f + 0.5f);
     const float opacityWidth = std::max(74.0f, ImGui::GetContentRegionAvail().x - 62.0f);
     ImGui::SetNextItemWidth(opacityWidth);
-    if (ImGui::SliderFloat("##CellOpacityCompact", &opacity, 0.0f, 1.0f, "%.0f%%")) {
-        cell.opacity = std::clamp(opacity, 0.0f, 1.0f);
+    if (ImGui::SliderInt("##CellOpacityPercentCompact", &opacityPercent, 0, 100, "%d%%")) {
+        opacityPercent = std::clamp(opacityPercent, 0, 100);
+        cell.opacity = static_cast<float>(opacityPercent) / 100.0f;
         result.displayChanged = true;
+        result.projectStructureChanged = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Opacity");
+        ImGui::SetTooltip("Opacity percent. Stored as 0.00-1.00 float.");
     }
 
     const bool solo = gDisplayMode == CellDisplayMode::SoloSelected && gSoloCellIndex == result.selectedCellIndex;
@@ -807,12 +839,16 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     static int pendingDeleteIndex = -1;
     static std::string pendingDeleteCellId;
 
+    if (ensureCellScopedLayerIds(project)) {
+        result.displayChanged = true;
+        result.projectStructureChanged = true;
+    }
     if (rebuildCellOrderAndZ(project)) {
         result.displayChanged = true;
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.8c");
+    ImGui::TextUnformatted("CellPanel v1.8d");
     drawAddCellPopup(project, result);
     ImGui::Separator();
 

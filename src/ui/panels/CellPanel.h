@@ -1,5 +1,5 @@
 #pragma once
-// This file's role: draw the drawing-mode Cell panel and expose compact cell display mode state. v1.8c uses single-line cell rows and compact selected-cell controls.
+// This file's role: draw the drawing-mode Cell panel and expose compact cell display mode state. v1.8d uses single-line cell rows and compact selected-cell controls with percent-based opacity editing.
 
 #include "core/Project.h"
 
