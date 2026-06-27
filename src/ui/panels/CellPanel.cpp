@@ -222,22 +222,45 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
 
     if (ImGui::RadioButton("Active Only", mode == 0)) {
         gDisplayMode = CellDisplayMode::ActiveOnly;
+        gSoloCellIndex = -1;
         result.displayChanged = true;
     }
     ImGui::SameLine();
     if (ImGui::RadioButton("Visible Cells", mode == 1)) {
         gDisplayMode = CellDisplayMode::VisibleCells;
+        gSoloCellIndex = -1;
         result.displayChanged = true;
     }
     ImGui::SameLine();
     if (ImGui::RadioButton("Solo", mode == 2)) {
-        gDisplayMode = CellDisplayMode::SoloSelected;
-        gSoloCellIndex = std::clamp(gSoloCellIndex >= 0 ? gSoloCellIndex : activeCellIndex, 0, std::max(0, cellCount - 1));
+        if (gDisplayMode == CellDisplayMode::SoloSelected) {
+            // Clicking the already-selected Solo mode cancels solo display.
+            gDisplayMode = CellDisplayMode::VisibleCells;
+            gSoloCellIndex = -1;
+        } else {
+            gDisplayMode = CellDisplayMode::SoloSelected;
+            gSoloCellIndex = std::clamp(gSoloCellIndex >= 0 ? gSoloCellIndex : activeCellIndex,
+                                        0,
+                                        std::max(0, cellCount - 1));
+        }
         result.displayChanged = true;
+    }
+
+    if (gDisplayMode == CellDisplayMode::SoloSelected) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear Solo")) {
+            gDisplayMode = CellDisplayMode::VisibleCells;
+            gSoloCellIndex = -1;
+            result.displayChanged = true;
+        }
     }
 
     if (cellCount <= 0) {
         gSoloCellIndex = -1;
+        if (gDisplayMode == CellDisplayMode::SoloSelected) {
+            gDisplayMode = CellDisplayMode::VisibleCells;
+            result.displayChanged = true;
+        }
     } else if (gSoloCellIndex >= cellCount) {
         gSoloCellIndex = cellCount - 1;
     }
@@ -325,7 +348,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.2d");
+    ImGui::TextUnformatted("CellPanel v1.2e");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
@@ -370,10 +393,16 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         }
 
         ImGui::SameLine();
-        const bool solo = gSoloCellIndex == index;
-        if (ImGui::SmallButton(solo ? "Solo*" : "Solo")) {
-            gSoloCellIndex = index;
-            gDisplayMode = CellDisplayMode::SoloSelected;
+        const bool solo = gDisplayMode == CellDisplayMode::SoloSelected && gSoloCellIndex == index;
+        if (ImGui::SmallButton(solo ? "Solo: ON" : "Solo")) {
+            if (solo) {
+                // Pressing Solo on the soloed cell cancels solo and returns to normal visible-cell display.
+                gSoloCellIndex = -1;
+                gDisplayMode = CellDisplayMode::VisibleCells;
+            } else {
+                gSoloCellIndex = index;
+                gDisplayMode = CellDisplayMode::SoloSelected;
+            }
             result.displayChanged = true;
         }
 
