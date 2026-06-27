@@ -52,6 +52,36 @@ std::filesystem::path appStatePath(const std::filesystem::path& projectFolder)
     return projectFolder / "app_state.json";
 }
 
+bool writeTextFileIfChanged(const std::filesystem::path& path,
+                            const std::string& text,
+                            std::string* error)
+{
+    std::ifstream existing(path, std::ios::binary);
+    if (existing) {
+        std::ostringstream buffer;
+        buffer << existing.rdbuf();
+        if (buffer.str() == text) {
+            return true;
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        if (error != nullptr) {
+            *error = "failed to write file: " + path.string();
+        }
+        return false;
+    }
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (!file) {
+        if (error != nullptr) {
+            *error = "failed to write file: " + path.string();
+        }
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 std::filesystem::path stableBasePath()
@@ -297,15 +327,14 @@ bool writeAppState(const std::filesystem::path& projectFolder,
 
     std::error_code errorCode;
     std::filesystem::create_directories(projectFolder, errorCode);
-    std::ofstream file(appStatePath(projectFolder), std::ios::binary | std::ios::trunc);
-    if (!file) {
+    if (errorCode) {
         if (error != nullptr) {
             *error = "failed to write app_state.json: " + appStatePath(projectFolder).string();
         }
         return false;
     }
-    file << state.dump(4) << '\n';
-    return true;
+    const std::string text = state.dump(4) + '\n';
+    return writeTextFileIfChanged(appStatePath(projectFolder), text, error);
 }
 
 SavedSelection readAppState(const std::filesystem::path& projectFolder)
