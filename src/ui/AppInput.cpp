@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <imgui.h>
 
 #include "fill/FloodFill.h"
+#include "ui/panels/CellPanel.h"
 
 namespace perapera {
 namespace {
@@ -31,6 +33,20 @@ bool isPointInside(ImVec2 point, ImVec2 min, ImVec2 size)
 {
     return point.x >= min.x && point.y >= min.y &&
            point.x <= min.x + size.x && point.y <= min.y + size.y;
+}
+
+void appendFrameIfValid(const Cell& cell, int frameIndex, std::vector<const Frame*>& frames)
+{
+    if (cell.frames.empty()) {
+        return;
+    }
+
+    const int safeFrameIndex = std::clamp(frameIndex, 0, static_cast<int>(cell.frames.size()) - 1);
+    const Frame* frame = cell.frameOrNull(safeFrameIndex);
+    if (frame == nullptr || std::find(frames.begin(), frames.end(), frame) != frames.end()) {
+        return;
+    }
+    frames.push_back(frame);
 }
 
 } // namespace
@@ -410,8 +426,32 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     settings.insetPx = brushSettings_.fillInsetPx;
     settings.leakGuardPercent = brushSettings_.fillLeakGuardPercent;
 
+    std::vector<const Frame*> wallFrames;
+    const ui::CellDisplayMode cellDisplayMode = ui::currentCellDisplayMode();
+    if (cellDisplayMode == ui::CellDisplayMode::VisibleCells) {
+        wallFrames.reserve(project_.cells.size());
+        for (const Cell& cell : project_.cells) {
+            if (!cell.visible || cell.opacity <= 0.0f) {
+                continue;
+            }
+            appendFrameIfValid(cell, activeFrameIndex_, wallFrames);
+        }
+    } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected && !project_.cells.empty()) {
+        const int soloIndex = ui::currentSoloCellIndex();
+        const int safeSoloIndex = std::clamp(soloIndex >= 0 ? soloIndex : activeCellIndex_,
+                                             0,
+                                             static_cast<int>(project_.cells.size()) - 1);
+        appendFrameIfValid(project_.cells[static_cast<std::size_t>(safeSoloIndex)],
+                           activeFrameIndex_,
+                           wallFrames);
+    }
+    if (std::find(wallFrames.begin(), wallFrames.end(), frame) == wallFrames.end()) {
+        wallFrames.push_back(frame);
+    }
+
     const fill::FloodFillResult result = fill::makeFloodFillStrokes(*frame,
                                                                     activeLayerIndex_,
+                                                                    wallFrames,
                                                                     project_.canvas.width,
                                                                     project_.canvas.height,
                                                                     static_cast<int>(std::lround(canvas.x)),
@@ -430,7 +470,7 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     }
     targetLayer->strokes.insert(targetLayer->strokes.end(), result.strokes.begin(), result.strokes.end());
     targetLayer->touchRevision();
-    canvasRenderer_.markDirty(activeLayerIndex_);
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "flood fill: " + std::to_string(result.filledPixelCount) +
                    " px / " + std::to_string(result.strokes.size()) + " fills";
 }
