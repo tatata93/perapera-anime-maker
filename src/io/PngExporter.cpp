@@ -18,11 +18,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -41,6 +44,11 @@ struct PaintColorLookup {
     bool hasPaint = false;
     std::vector<std::uint8_t> distance;
     std::vector<std::uint8_t> colors;
+};
+
+struct ExportTaskResult {
+    bool ok = false;
+    std::string errorMessage;
 };
 
 std::uint8_t toByte(float value)
@@ -580,6 +588,29 @@ std::filesystem::path sequencePath(const std::filesystem::path& folder, int inde
     return folder / name.str();
 }
 
+ExportTaskResult writePngTask(ImageRgba image, std::filesystem::path outputPath)
+{
+    ExportTaskResult result;
+    result.ok = writePng(image, outputPath, &result.errorMessage);
+    return result;
+}
+
+bool waitForOldestExportTask(std::deque<std::future<ExportTaskResult>>& pendingTasks,
+                             std::string* errorMessage)
+{
+    if (pendingTasks.empty()) {
+        return true;
+    }
+
+    ExportTaskResult result = pendingTasks.front().get();
+    pendingTasks.pop_front();
+    if (!result.ok) {
+        setError(errorMessage, result.errorMessage);
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 const char* exportModeToString(ExportMode mode)
@@ -634,9 +665,21 @@ bool PngExporter::exportFrameSequence(const Cell& cell,
         return false;
     }
 
+    const unsigned int hardwareThreads = std::max(1U, std::thread::hardware_concurrency());
+    const std::size_t maxPendingWrites = static_cast<std::size_t>(std::clamp(hardwareThreads / 2U, 1U, 3U));
+    std::deque<std::future<ExportTaskResult>> pendingWrites;
+
     for (std::size_t index = 0; index < cell.frames.size(); ++index) {
         const std::filesystem::path outputPath = sequencePath(outputFolder, static_cast<int>(index) + 1);
-        if (!exportFrame(cell.frames[index], outputPath, width, height, mode, errorMessage)) {
+        ImageRgba image = rasterizeFrame(cell.frames[index], width, height, mode);
+        pendingWrites.push_back(std::async(std::launch::async, writePngTask, std::move(image), outputPath));
+        if (pendingWrites.size() >= maxPendingWrites && !waitForOldestExportTask(pendingWrites, errorMessage)) {
+            return false;
+        }
+    }
+
+    while (!pendingWrites.empty()) {
+        if (!waitForOldestExportTask(pendingWrites, errorMessage)) {
             return false;
         }
     }

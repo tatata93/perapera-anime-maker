@@ -606,3 +606,20 @@ src/io/ProjectIO.cpp
 
 ### Follow-up
 - Re-test PNG sequence and MP4 export on the 35-frame project. If it is still too slow, profile whether rasterizing MyPaint strokes or writing uncompressed PNG files is now dominant.
+
+## 2026-06-27 Phase 1.5 Step 21h: Pipeline PNG sequence writing
+
+### Summary
+- Changed `PngExporter::exportFrameSequence()` so frame rasterization stays sequential, but PNG encoding/writing runs asynchronously in a small bounded pipeline.
+- Limited pending PNG writes to at most 1-3 tasks based on hardware threads to avoid holding too many full-frame images in memory.
+- Kept `exportFrame()` behavior unchanged for single-frame export.
+
+### Changed files
+- `src/io/PngExporter.cpp`
+
+### Verification
+- `cmake --build .\build --config Debug --target perapera_anime_maker` succeeded.
+- `cmake --build .\build --config Release --target perapera_anime_maker` succeeded.
+
+### Follow-up
+- Re-test PNG sequence and MP4 export. If the write pipeline helps but export remains slow, the next likely bottleneck is MyPaint stroke rasterization during export.

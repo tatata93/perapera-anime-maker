@@ -229,3 +229,9 @@ Impact: CanvasRenderer keeps one reusable layer-order scratch vector, and PngExp
 Date: 2026-06-27
 Rationale: A 35-frame project taking minutes to export indicates the bottleneck is not preview cache warm-up but export-only CPU work. PNG writing previously used bitwise CRC over large uncompressed IDAT chunks, and Composite ColorTrace replacement scanned nearby Paint pixels for each trace pixel. Both costs scale badly with canvas size and frame count.
 Impact: PNG checksum work is now table/chunk based, and Composite ColorTrace uses a per-frame Paint lookup map. The exported file format and export mode choices are unchanged.
+
+## 2026-06-27 Phase 1.5 Step 21h decision: Pipeline export writes without parallelizing MyPaint rasterization
+
+Date: 2026-06-27
+Rationale: The active project contains MyPaint strokes, so rendering multiple frames through libmypaint in parallel could risk hidden shared-state problems. PNG encoding and file writing are independent per frame and can overlap with sequential rasterization safely.
+Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. Memory use is capped by limiting pending writes, and single-frame export behavior is unchanged.
