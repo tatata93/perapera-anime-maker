@@ -235,3 +235,10 @@ Impact: PNG checksum work is now table/chunk based, and Composite ColorTrace use
 Date: 2026-06-27
 Rationale: The active project contains MyPaint strokes, so rendering multiple frames through libmypaint in parallel could risk hidden shared-state problems. PNG encoding and file writing are independent per frame and can overlap with sequential rasterization safely.
 Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. Memory use is capped by limiting pending writes, and single-frame export behavior is unchanged.
+
+
+## Decision: Minimal cell selection UI
+
+- Implement the first cell management UI as a selection-only list in the existing drawing right sidebar.
+- Do not add cell creation/deletion in this step.
+- Use a PowerShell-only applicator because Python is not available in the user environment.

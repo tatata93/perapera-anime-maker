@@ -623,3 +623,10 @@ src/io/ProjectIO.cpp
 
 ### Follow-up
 - Re-test PNG sequence and MP4 export. If the write pipeline helps but export remains slow, the next likely bottleneck is MyPaint stroke rasterization during export.
+
+
+## Phase: Cell list UI v3
+
+- Added a minimal cell selection list to the drawing right sidebar.
+- Selection changes `activeCellIndex_`, clamps the active frame/layer selection, and conservatively invalidates the canvas renderer.
+- No drawing data under `my_anime_project` is included.

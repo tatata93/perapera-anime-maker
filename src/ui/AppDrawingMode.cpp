@@ -397,15 +397,58 @@ void App::drawLeftSidebar()
 }
 void App::drawRightSidebar()
 {
+    ImGui::TextUnformatted(u8c(u8"\u30bb\u30eb\u4e00\u89a7"));
+
+    if (project_.cells.empty()) {
+        ImGui::TextDisabled("No cells.");
+    } else {
+        for (int i = 0; i < static_cast<int>(project_.cells.size()); ++i) {
+            Cell& listedCell = project_.cells[static_cast<std::size_t>(i)];
+
+            ImGui::PushID(listedCell.id.c_str());
+
+            std::string label = listedCell.name.empty() ? listedCell.id : listedCell.name;
+            if (!listedCell.category.empty()) {
+                label += " [" + listedCell.category + "]";
+            }
+
+            const bool selected = i == activeCellIndex_;
+            if (ImGui::Selectable(label.c_str(), selected)) {
+                if (!selected) {
+                    activeCellIndex_ = i;
+                    clampSelection();
+
+                    // Cell switching changes the visible frame/layer set. Keep this conservative
+                    // so cache keys from a different cell cannot show stale content.
+                    canvasRenderer_.markAllDirty();
+
+                    const std::string cellLabel = listedCell.name.empty() ? listedCell.id : listedCell.name;
+                    lastMessage_ = "active cell: " + cellLabel;
+                }
+            }
+
+            const char* visibleText = listedCell.visible ? "visible" : "hidden";
+            ImGui::TextDisabled("id=%s | %s | opacity=%.2f | frames=%d",
+                listedCell.id.c_str(),
+                visibleText,
+                listedCell.opacity,
+                static_cast<int>(listedCell.frames.size()));
+
+            ImGui::PopID();
+        }
+    }
+
+    ImGui::Separator();
+
     Frame* frame = activeFrame();
     Cell* cell = activeCell();
+
     if (frame == nullptr || cell == nullptr) {
-        ImGui::TextUnformatted(u8c(u8"アクティブなセルまたはフレームがありません。"));
+        ImGui::TextUnformatted(u8c(u8"\u30a2\u30af\u30c6\u30a3\u30d6\u306a\u30bb\u30eb\u307e\u305f\u306f\u30d5\u30ec\u30fc\u30e0\u304c\u3042\u308a\u307e\u305b\u3093\u3002"));
         return;
     }
-    ImGui::TextDisabled(currentMode_ == AppMode::Coloring
-        ? "Phase 1.5 Step 17 coloring mode"
-        : "Phase 1.5 Step 13 libmypaint dab connection");
+
+    ImGui::TextDisabled(currentMode_ == AppMode::Coloring ? "Phase 1.5 Step 17 coloring mode" : "Phase 1.5 Step 13 libmypaint dab connection");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
         addLayer();
@@ -414,7 +457,9 @@ void App::drawRightSidebar()
     } else if (layerAction == ui::LayerPanelAction::ClearLayer) {
         clearActiveLayer();
     }
+
     ImGui::Separator();
+
     const ui::FramePanelAction frameAction = ui::drawFramePanel(*cell, activeFrameIndex_);
     if (frameAction == ui::FramePanelAction::AddFrame) {
         addFrame();
@@ -423,7 +468,9 @@ void App::drawRightSidebar()
     } else if (frameAction == ui::FramePanelAction::DeleteFrame) {
         deleteActiveFrame();
     }
+
     ImGui::Separator();
+
     const ui::ExportPanelAction exportAction = ui::drawExportPanel(exportState_, lastMessage_.c_str());
     if (exportAction == ui::ExportPanelAction::SaveProject) {
         saveProject();
@@ -439,6 +486,7 @@ void App::drawRightSidebar()
         exportMp4();
     }
 }
+
 void App::drawTimelineArea()
 {
     Cell* cell = activeCell();
