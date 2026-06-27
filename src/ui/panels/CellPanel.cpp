@@ -166,7 +166,9 @@ void syncCellOrder(Project& project, const std::string& cellId)
 
 Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 {
-    Cell cell = Cell::createDefault();
+    // Important: a new cel must not inherit the currently active cell's frame/layer layout.
+    // Build a fresh Cell/Frame/Layer explicitly instead of using any existing cell as a template.
+    Cell cell;
     const int displayNumber = static_cast<int>(project.cells.size()) + 1;
 
     cell.id = makeUniqueCellId(project);
@@ -182,21 +184,27 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
     cell.zOrder = static_cast<int>(project.cells.size());
     cell.visible = true;
     cell.opacity = 1.0f;
+    cell.placement = CellPlacement{};
+    cell.motionKeys.clear();
+    cell.frames.clear();
 
-    if (cell.frames.empty()) {
-        cell.frames.push_back(Frame::createDefault(1));
-    }
-    if (cell.frames.front().layers.empty()) {
-        cell.frames.front().layers.push_back(Layer::createDefault(1));
-    }
+    Frame frame;
+    frame.name = "F001";
+    frame.durationFrames = 1;
+    frame.layers.clear();
 
-    for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
-        Frame& frame = cell.frames[static_cast<std::size_t>(frameIndex)];
-        for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
-            frame.layers[static_cast<std::size_t>(layerIndex)].layerId =
-                expectedLayerIdForCellFrame(cell, displayNumber - 1, frameIndex, layerIndex);
-        }
-    }
+    Layer layer = Layer::createDefault(1);
+    layer.layerId = expectedLayerIdForCellFrame(cell, displayNumber - 1, 0, 0);
+    layer.name = "Line";
+    layer.visible = true;
+    layer.opacity = 1.0f;
+    layer.blendMode = "normal";
+    layer.type = LayerType::Normal;
+    layer.strokes.clear();
+    layer.revisionCounter = 0U;
+
+    frame.layers.push_back(std::move(layer));
+    cell.frames.push_back(std::move(frame));
 
     return cell;
 }
@@ -253,7 +261,7 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
         return;
     }
 
-    ImGui::BeginChild("CellPanel_v12_add", ImVec2(0.0f, 112.0f), true);
+    ImGui::BeginChild("CellPanel_v12d_add", ImVec2(0.0f, 112.0f), true);
     ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
 
     const char* preview = kCategoryOptions[static_cast<std::size_t>(std::clamp(
@@ -317,7 +325,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.2");
+    ImGui::TextUnformatted("CellPanel v1.2d");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
@@ -335,7 +343,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     const int maxIndex = static_cast<int>(project.cells.size()) - 1;
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
-    ImGui::BeginChild("CellPanel_v12_list", ImVec2(0.0f, 240.0f), true,
+    ImGui::BeginChild("CellPanel_v12d_list", ImVec2(0.0f, 240.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
@@ -376,10 +384,15 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
             result.displayChanged = true;
         }
 
-        ImGui::TextDisabled("id=%s | z=%d | frames=%d | layers=%d",
+        const int currentFrameIndex = cell.frames.empty() ? -1 : std::clamp(0, 0, static_cast<int>(cell.frames.size()) - 1);
+        const int currentFrameLayers = currentFrameIndex >= 0
+            ? static_cast<int>(cell.frames[static_cast<std::size_t>(currentFrameIndex)].layers.size())
+            : 0;
+        ImGui::TextDisabled("id=%s | z=%d | frames=%d | firstFrameLayers=%d | totalLayers=%d",
                             cell.id.c_str(),
                             cell.zOrder,
                             static_cast<int>(cell.frames.size()),
+                            currentFrameLayers,
                             layerCountForCell(cell));
 
         ImGui::Separator();

@@ -644,3 +644,7 @@ src/io/ProjectIO.cpp
 ## CellPanel v1.2c
 - Fixed CellPanel opacity display: CanvasRenderer now applies the draw-call opacity to cached bitmap image alpha, not only to the live stroke preview.
 - This keeps 0% hidden behavior and makes intermediate opacity values visible during multi-cell overlay display.
+
+## CellPanel v1.2d
+- Fixed new-cell layer isolation: newly created cells now start from a fresh blank Frame/Layer instead of inheriting any active cell layer layout.
+- Reset activeFrameIndex_ and activeLayerIndex_ to 0 when changing active cells, then clamp selection.
