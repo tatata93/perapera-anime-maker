@@ -46,14 +46,16 @@ std::string numberedName(const char* prefix, int number)
     return stream.str();
 }
 
-void writeUint32(std::ofstream& file, std::uint32_t value)
+void appendUint32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
 {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    const auto* raw = reinterpret_cast<const std::uint8_t*>(&value);
+    bytes.insert(bytes.end(), raw, raw + sizeof(value));
 }
 
-void writeFloat32(std::ofstream& file, float value)
+void appendFloat32(std::vector<std::uint8_t>& bytes, float value)
 {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    const auto* raw = reinterpret_cast<const std::uint8_t*>(&value);
+    bytes.insert(bytes.end(), raw, raw + sizeof(value));
 }
 
 bool readUint32(std::ifstream& file, std::uint32_t& value)
@@ -70,14 +72,53 @@ bool readFloat32(std::ifstream& file, float& value)
 
 bool writeJsonFile(const fs::path& path, const json& value, std::string* errorMessage)
 {
-    std::ofstream file(path);
+    const std::string text = value.dump(4) + '\n';
+
+    std::ifstream existing(path, std::ios::binary);
+    if (existing) {
+        std::ostringstream buffer;
+        buffer << existing.rdbuf();
+        if (buffer.str() == text) {
+            return true;
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
     if (!file) {
         setError(errorMessage, "failed to open for write: " + path.string());
         return false;
     }
-    file << std::setw(4) << value << '\n';
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
     if (!file) {
         setError(errorMessage, "failed to write json: " + path.string());
+        return false;
+    }
+    return true;
+}
+
+bool writeBinaryFileIfChanged(const fs::path& path, const std::vector<std::uint8_t>& bytes, std::string* errorMessage)
+{
+    std::error_code errorCode;
+    const auto existingSize = fs::file_size(path, errorCode);
+    if (!errorCode && existingSize == bytes.size()) {
+        std::ifstream existing(path, std::ios::binary);
+        if (existing) {
+            std::vector<std::uint8_t> existingBytes(bytes.size());
+            existing.read(reinterpret_cast<char*>(existingBytes.data()), static_cast<std::streamsize>(existingBytes.size()));
+            if (existing && existingBytes == bytes) {
+                return true;
+            }
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        setError(errorMessage, "failed to open binary for write: " + path.string());
+        return false;
+    }
+    file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (!file) {
+        setError(errorMessage, "failed to write binary: " + path.string());
         return false;
     }
     return true;
@@ -397,14 +438,10 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
         return true;
     }
 
-    std::ofstream file(path, std::ios::binary);
-    if (!file) {
-        setError(errorMessage, "failed to open fill binary for write: " + path.string());
-        return false;
-    }
-
-    writeUint32(file, kFillBinMagicV2);
-    writeUint32(file, fillCount);
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(8U);
+    appendUint32(bytes, kFillBinMagicV2);
+    appendUint32(bytes, fillCount);
     for (const Stroke& stroke : layer.strokes) {
         if (!fillStrokeHasPaint(stroke)) {
             continue;
@@ -414,22 +451,18 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
             continue;
         }
 
-        writeUint32(file, static_cast<std::uint32_t>(storedStroke.bitmapX));
-        writeUint32(file, static_cast<std::uint32_t>(storedStroke.bitmapY));
-        writeUint32(file, static_cast<std::uint32_t>(storedStroke.bitmapWidth));
-        writeUint32(file, static_cast<std::uint32_t>(storedStroke.bitmapHeight));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapX));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapY));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapWidth));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapHeight));
         for (float component : storedStroke.color) {
-            writeFloat32(file, component);
+            appendFloat32(bytes, component);
         }
-        writeFloat32(file, storedStroke.opacity);
-        file.write(reinterpret_cast<const char*>(storedStroke.bitmap.data()), static_cast<std::streamsize>(storedStroke.bitmap.size()));
-        if (!file) {
-            setError(errorMessage, "failed to write fill binary: " + path.string());
-            return false;
-        }
+        appendFloat32(bytes, storedStroke.opacity);
+        bytes.insert(bytes.end(), storedStroke.bitmap.begin(), storedStroke.bitmap.end());
     }
 
-    return true;
+    return writeBinaryFileIfChanged(path, bytes, errorMessage);
 }
 
 std::optional<Stroke> strokeFromJson(const json& value, const std::vector<Stroke>& fillStrokes)
