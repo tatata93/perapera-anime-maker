@@ -163,6 +163,33 @@ void blendLayerBitmap(ImageRgba& image, const CanvasBitmap& bitmap, float layerO
     }
 }
 
+void blendImage(ImageRgba& image, const ImageRgba& source, float opacity)
+{
+    if (source.width != image.width || source.height != image.height || source.pixels.empty()) {
+        return;
+    }
+
+    const float safeOpacity = std::clamp(opacity, 0.0f, 1.0f);
+    if (safeOpacity <= 0.0f) {
+        return;
+    }
+
+    const std::array<std::uint8_t, 256U> opacityTable = buildOpacityTable(safeOpacity);
+    for (std::size_t offset = 0; offset + 3U < source.pixels.size(); offset += 4U) {
+        const std::uint8_t sourceA = source.pixels[offset + 3U];
+        if (sourceA == 0U) {
+            continue;
+        }
+        const std::uint8_t blendedA = opacityTable[sourceA];
+        blendPixelAtOffset(image,
+                           offset,
+                           source.pixels[offset + 0U],
+                           source.pixels[offset + 1U],
+                           source.pixels[offset + 2U],
+                           blendedA);
+    }
+}
+
 bool sampleNearestPaintColor(const ImageRgba& paintReference,
                              int centerX,
                              int centerY,
@@ -360,14 +387,14 @@ struct RenderedLayer {
     CanvasBitmap bitmap;
 };
 
-ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode mode)
+ImageRgba rasterizeFrame(const Frame& frame, int width, int height, ExportMode mode, bool includeBackground = true)
 {
     ImageRgba image;
     image.width = std::max(1, width);
     image.height = std::max(1, height);
     image.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
 
-    if (usesWhiteBackground(mode)) {
+    if (includeBackground && usesWhiteBackground(mode)) {
         fillBackground(image, 255U, 255U, 255U, 255U);
     }
 
@@ -611,6 +638,48 @@ bool waitForOldestExportTask(std::deque<std::future<ExportTaskResult>>& pendingT
     return true;
 }
 
+ImageRgba rasterizeCellsFrame(const std::vector<const Cell*>& cells,
+                              int frameIndex,
+                              int width,
+                              int height,
+                              ExportMode mode)
+{
+    ImageRgba image;
+    image.width = std::max(1, width);
+    image.height = std::max(1, height);
+    image.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+
+    if (usesWhiteBackground(mode)) {
+        fillBackground(image, 255U, 255U, 255U, 255U);
+    }
+
+    for (const Cell* cell : cells) {
+        if (cell == nullptr || cell->opacity <= 0.0f) {
+            continue;
+        }
+        const Frame* frame = cell->frameOrNull(frameIndex);
+        if (frame == nullptr) {
+            continue;
+        }
+        ImageRgba cellImage = rasterizeFrame(*frame, width, height, mode, false);
+        blendImage(image, cellImage, cell->opacity);
+    }
+
+    return image;
+}
+
+int maxFrameCount(const std::vector<const Cell*>& cells)
+{
+    int frameCount = 0;
+    for (const Cell* cell : cells) {
+        if (cell == nullptr) {
+            continue;
+        }
+        frameCount = std::max(frameCount, static_cast<int>(cell->frames.size()));
+    }
+    return frameCount;
+}
+
 } // namespace
 
 const char* exportModeToString(ExportMode mode)
@@ -660,7 +729,44 @@ bool PngExporter::exportFrameSequence(const Cell& cell,
                                       ExportMode mode,
                                       std::string* errorMessage)
 {
-    if (cell.frames.empty()) {
+    const std::vector<const Cell*> cells{&cell};
+    return exportCellsFrameSequence(cells, outputFolder, width, height, mode, errorMessage);
+}
+
+bool PngExporter::exportCellsFrame(const std::vector<const Cell*>& cells,
+                                   int frameIndex,
+                                   const std::filesystem::path& outputPath,
+                                   int width,
+                                   int height,
+                                   ExportMode mode,
+                                   std::string* errorMessage)
+{
+    if (cells.empty()) {
+        setError(errorMessage, "no cells to export");
+        return false;
+    }
+    if (frameIndex < 0) {
+        setError(errorMessage, "invalid frame index");
+        return false;
+    }
+
+    return writePng(rasterizeCellsFrame(cells, frameIndex, width, height, mode), outputPath, errorMessage);
+}
+
+bool PngExporter::exportCellsFrameSequence(const std::vector<const Cell*>& cells,
+                                           const std::filesystem::path& outputFolder,
+                                           int width,
+                                           int height,
+                                           ExportMode mode,
+                                           std::string* errorMessage)
+{
+    if (cells.empty()) {
+        setError(errorMessage, "no cells to export");
+        return false;
+    }
+
+    const int frameCount = maxFrameCount(cells);
+    if (frameCount <= 0) {
         setError(errorMessage, "cell has no frames");
         return false;
     }
@@ -669,9 +775,9 @@ bool PngExporter::exportFrameSequence(const Cell& cell,
     const std::size_t maxPendingWrites = static_cast<std::size_t>(std::clamp(hardwareThreads / 2U, 1U, 3U));
     std::deque<std::future<ExportTaskResult>> pendingWrites;
 
-    for (std::size_t index = 0; index < cell.frames.size(); ++index) {
-        const std::filesystem::path outputPath = sequencePath(outputFolder, static_cast<int>(index) + 1);
-        ImageRgba image = rasterizeFrame(cell.frames[index], width, height, mode);
+    for (int index = 0; index < frameCount; ++index) {
+        const std::filesystem::path outputPath = sequencePath(outputFolder, index + 1);
+        ImageRgba image = rasterizeCellsFrame(cells, index, width, height, mode);
         pendingWrites.push_back(std::async(std::launch::async, writePngTask, std::move(image), outputPath));
         if (pendingWrites.size() >= maxPendingWrites && !waitForOldestExportTask(pendingWrites, errorMessage)) {
             return false;

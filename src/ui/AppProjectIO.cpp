@@ -4,17 +4,74 @@
 
 #include "ui/App.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "io/FfmpegRunner.h"
 #include "io/PngExporter.h"
 #include "io/ProjectIO.h"
 #include "ui/AppProjectIOSupport.h"
+#include "ui/panels/CellPanel.h"
 
 namespace perapera {
+namespace {
+
+void appendCellIfValid(const Project& project, int cellIndex, std::vector<const Cell*>& cells)
+{
+    if (cellIndex < 0 || cellIndex >= static_cast<int>(project.cells.size())) {
+        return;
+    }
+    cells.push_back(&project.cells[static_cast<std::size_t>(cellIndex)]);
+}
+
+std::vector<const Cell*> exportCellsForCurrentDisplay(const Project& project, int activeCellIndex)
+{
+    std::vector<const Cell*> cells;
+    if (project.cells.empty()) {
+        return cells;
+    }
+
+    const ui::CellDisplayMode displayMode = ui::currentCellDisplayMode();
+    if (displayMode == ui::CellDisplayMode::ActiveOnly) {
+        appendCellIfValid(project, activeCellIndex, cells);
+        return cells;
+    }
+
+    if (displayMode == ui::CellDisplayMode::SoloSelected) {
+        const int soloIndex = ui::currentSoloCellIndex();
+        const int safeIndex = std::clamp(soloIndex >= 0 ? soloIndex : activeCellIndex,
+                                         0,
+                                         static_cast<int>(project.cells.size()) - 1);
+        appendCellIfValid(project, safeIndex, cells);
+        return cells;
+    }
+
+    cells.reserve(project.cells.size());
+    for (const Cell& cell : project.cells) {
+        if (cell.visible && cell.opacity > 0.0f) {
+            cells.push_back(&cell);
+        }
+    }
+    return cells;
+}
+
+std::string exportCellScopeText(const std::vector<const Cell*>& cells)
+{
+    const ui::CellDisplayMode displayMode = ui::currentCellDisplayMode();
+    if (displayMode == ui::CellDisplayMode::ActiveOnly) {
+        return "active cell";
+    }
+    if (displayMode == ui::CellDisplayMode::SoloSelected) {
+        return "solo cell";
+    }
+    return "visible cells=" + std::to_string(cells.size());
+}
+
+} // namespace
 
 void App::saveProject()
 {
@@ -158,17 +215,18 @@ void App::saveLoadRoundTripCheck()
 
 void App::exportActivePng()
 {
-    const Frame* frame = activeFrame();
-    if (frame == nullptr) {
-        lastMessage_ = "export failed: no active frame";
+    const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
+    if (cells.empty()) {
+        lastMessage_ = "export failed: no export cells";
         return;
     }
 
     const std::filesystem::path output = appio::absolutePath(exportState_.exportFolder) / "active_frame.png";
     std::string error;
-    if (PngExporter::exportFrame(*frame, output, project_.canvas.width, project_.canvas.height,
-                                 exportState_.exportMode, &error)) {
-        lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) + "]: " + output.string();
+    if (PngExporter::exportCellsFrame(cells, activeFrameIndex_, output, project_.canvas.width, project_.canvas.height,
+                                      exportState_.exportMode, &error)) {
+        lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) + ", " +
+            exportCellScopeText(cells) + "]: " + output.string();
     } else {
         lastMessage_ = "PNG export failed: " + error;
     }
@@ -176,18 +234,18 @@ void App::exportActivePng()
 
 void App::exportPngSequence()
 {
-    const Cell* cell = activeCell();
-    if (cell == nullptr) {
-        lastMessage_ = "export failed: no active cell";
+    const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
+    if (cells.empty()) {
+        lastMessage_ = "export failed: no export cells";
         return;
     }
 
     const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
     std::string error;
-    if (PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height,
-                                         exportState_.exportMode, &error)) {
+    if (PngExporter::exportCellsFrameSequence(cells, pngFolder, project_.canvas.width, project_.canvas.height,
+                                              exportState_.exportMode, &error)) {
         lastMessage_ = "PNG sequence exported [" + std::string(exportModeToString(exportState_.exportMode)) + "]: " +
-            pngFolder.string();
+            pngFolder.string() + " | " + exportCellScopeText(cells);
     } else {
         lastMessage_ = "PNG sequence failed: " + error;
     }
@@ -195,9 +253,9 @@ void App::exportPngSequence()
 
 void App::exportMp4()
 {
-    const Cell* cell = activeCell();
-    if (cell == nullptr) {
-        lastMessage_ = "MP4 failed: no active cell";
+    const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
+    if (cells.empty()) {
+        lastMessage_ = "MP4 failed: no export cells";
         return;
     }
 
@@ -207,11 +265,13 @@ void App::exportMp4()
     appio::resetMp4PreflightLog(logPath, exportState_.ffmpegPath, pngFolder, mp4Output, project_.output.fps);
     appio::appendTextLog(logPath, "Step20: exporting PNG sequence before FFmpeg.\nmode=");
     appio::appendTextLog(logPath, exportModeToString(exportState_.exportMode));
+    appio::appendTextLog(logPath, "\nscope=");
+    appio::appendTextLog(logPath, exportCellScopeText(cells));
     appio::appendTextLog(logPath, "\n");
 
     std::string error;
-    if (!PngExporter::exportFrameSequence(*cell, pngFolder, project_.canvas.width, project_.canvas.height,
-                                          exportState_.exportMode, &error)) {
+    if (!PngExporter::exportCellsFrameSequence(cells, pngFolder, project_.canvas.width, project_.canvas.height,
+                                               exportState_.exportMode, &error)) {
         appio::appendTextLog(logPath, "ERROR: PNG sequence export failed before FFmpeg.\n");
         appio::appendTextLog(logPath, "Reason: " + error + "\n");
         lastMessage_ = "MP4 failed before ffmpeg: " + error + " log: " + logPath.string();
