@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,7 @@ namespace {
 constexpr float kMinZoom = 0.05f;
 constexpr float kMaxZoom = 32.0f;
 constexpr float kCanvasBorderThickness = 1.0f;
+constexpr std::size_t kMaxCachedLayerBitmaps = 128U;
 
 float clamp01(float value)
 {
@@ -304,8 +306,10 @@ void CanvasRenderer::setRenderer(SDL_Renderer* renderer)
     layerRevisions_.clear();
     layerCachedStrokeCounts_.clear();
     layerRebuildStates_.clear();
+    layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    cacheUseClock_ = 0U;
 }
 
 void CanvasRenderer::setCanvasSize(int width, int height)
@@ -324,8 +328,10 @@ void CanvasRenderer::setCanvasSize(int width, int height)
     layerRevisions_.clear();
     layerCachedStrokeCounts_.clear();
     layerRebuildStates_.clear();
+    layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    cacheUseClock_ = 0U;
 }
 
 void CanvasRenderer::markDirty(int layerIndex)
@@ -343,6 +349,7 @@ void CanvasRenderer::markDirty(int layerIndex)
         layerRevisions_.erase(key);
         layerCachedStrokeCounts_.erase(key);
         layerRebuildStates_.erase(key);
+        layerLastUsed_.erase(key);
     }
 
     // 変更された通常フレームがオニオンスキン参照にも使われる可能性があるため、
@@ -547,6 +554,7 @@ void CanvasRenderer::draw(const Frame& frame,
 
     (void)activeLayerIndex;
     drawList->PopClipRect();
+    pruneLayerCache(activeFrameCacheId_);
 }
 
 void CanvasRenderer::drawOnionSkin(const Frame& frame,
@@ -607,6 +615,7 @@ void CanvasRenderer::warmFrameCache(const Frame& frame,
             break;
         }
     }
+    pruneLayerCache(frameId);
 }
 
 bool CanvasRenderer::frameCacheReady(const Frame& frame,
@@ -634,7 +643,9 @@ bool CanvasRenderer::frameCacheReady(const Frame& frame,
 
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex)
 {
-    return layerBitmaps_.try_emplace(LayerCacheKey{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
+    const LayerCacheKey key{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)};
+    layerLastUsed_[key] = ++cacheUseClock_;
+    return layerBitmaps_.try_emplace(key).first->second;
 }
 
 const std::vector<int>& CanvasRenderer::displayLayerIndices(const Frame& frame)
@@ -849,6 +860,48 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
         }
     }
     onionRevisions_[key] = revision;
+}
+
+void CanvasRenderer::pruneLayerCache(const std::string& protectedFrameId)
+{
+    for (auto usedIt = layerLastUsed_.begin(); usedIt != layerLastUsed_.end();) {
+        if (layerBitmaps_.find(usedIt->first) == layerBitmaps_.end()) {
+            usedIt = layerLastUsed_.erase(usedIt);
+        } else {
+            ++usedIt;
+        }
+    }
+
+    while (layerBitmaps_.size() > kMaxCachedLayerBitmaps) {
+        bool foundVictim = false;
+        LayerCacheKey victim;
+        std::uint64_t oldestUse = std::numeric_limits<std::uint64_t>::max();
+
+        for (const auto& entry : layerBitmaps_) {
+            const LayerCacheKey& key = entry.first;
+            if (key.frameId == protectedFrameId) {
+                continue;
+            }
+
+            const auto usedIt = layerLastUsed_.find(key);
+            const std::uint64_t lastUsed = usedIt == layerLastUsed_.end() ? 0U : usedIt->second;
+            if (!foundVictim || lastUsed < oldestUse) {
+                foundVictim = true;
+                oldestUse = lastUsed;
+                victim = key;
+            }
+        }
+
+        if (!foundVictim) {
+            break;
+        }
+
+        layerBitmaps_.erase(victim);
+        layerRevisions_.erase(victim);
+        layerCachedStrokeCounts_.erase(victim);
+        layerRebuildStates_.erase(victim);
+        layerLastUsed_.erase(victim);
+    }
 }
 
 void CanvasRenderer::drawBitmap(CanvasBitmap& bitmap,

@@ -162,9 +162,11 @@ private:
     std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerRevisions_;
     std::unordered_map<LayerCacheKey, std::size_t, LayerCacheKeyHash> layerCachedStrokeCounts_;
     std::unordered_map<LayerCacheKey, LayerRebuildState, LayerCacheKeyHash> layerRebuildStates_;
+    std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerLastUsed_;
     std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
     std::vector<int> displayLayerIndicesScratch_;
+    std::uint64_t cacheUseClock_ = 0U;
 
     CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
     const std::vector<int>& displayLayerIndices(const Frame& frame);
@@ -173,6 +175,7 @@ private:
     bool appendMissingStrokesIfPossible(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
     bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision, int strokeBudgetPerDraw);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
+    void pruneLayerCache(const std::string& protectedFrameId);
 
     std::uint64_t frameRevisionHash(const Frame& frame) const;
 
