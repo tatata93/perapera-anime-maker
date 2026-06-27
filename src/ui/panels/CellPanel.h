@@ -1,5 +1,5 @@
 #pragma once
-// This file's role: draw the drawing-mode Cell panel and expose cell display mode state.
+// This file's role: draw the drawing-mode Cell panel, cell order controls, and expose cell display mode state.
 
 #include "core/Project.h"
 

@@ -1,4 +1,4 @@
-// This file's role: Cell management UI for selecting cells, adding cells, and controlling multi-cell display.
+// This file's role: Cell management UI for selecting cells, adding cells, controlling multi-cell display, and editing cell order.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -164,6 +164,62 @@ void syncCellOrder(Project& project, const std::string& cellId)
     }
 }
 
+bool rebuildCellOrderAndZ(Project& project)
+{
+    bool changed = false;
+
+    if (project.cellOrder.size() != project.cells.size()) {
+        changed = true;
+    }
+
+    project.cellOrder.clear();
+    project.cellOrder.reserve(project.cells.size());
+
+    for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
+        Cell& cell = project.cells[static_cast<std::size_t>(index)];
+        if (cell.zOrder != index) {
+            cell.zOrder = index;
+            changed = true;
+        }
+        if (!cell.id.empty()) {
+            project.cellOrder.push_back(cell.id);
+        }
+    }
+
+    return changed;
+}
+
+bool moveCell(Project& project, int fromIndex, int toIndex, CellPanelResult& result)
+{
+    const int cellCount = static_cast<int>(project.cells.size());
+    if (cellCount <= 1) {
+        return false;
+    }
+
+    fromIndex = std::clamp(fromIndex, 0, cellCount - 1);
+    toIndex = std::clamp(toIndex, 0, cellCount - 1);
+    if (fromIndex == toIndex) {
+        return false;
+    }
+
+    std::swap(project.cells[static_cast<std::size_t>(fromIndex)],
+              project.cells[static_cast<std::size_t>(toIndex)]);
+
+    if (gSoloCellIndex == fromIndex) {
+        gSoloCellIndex = toIndex;
+    } else if (gSoloCellIndex == toIndex) {
+        gSoloCellIndex = fromIndex;
+    }
+
+    rebuildCellOrderAndZ(project);
+
+    result.selectedCellIndex = toIndex;
+    result.selectionChanged = true;
+    result.displayChanged = true;
+    result.projectStructureChanged = true;
+    return true;
+}
+
 Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 {
     // Important: a new cel must not inherit the currently active cell's frame/layer layout.
@@ -284,7 +340,7 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
         return;
     }
 
-    ImGui::BeginChild("CellPanel_v12d_add", ImVec2(0.0f, 112.0f), true);
+    ImGui::BeginChild("CellPanel_v13_add", ImVec2(0.0f, 112.0f), true);
     ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
 
     const char* preview = kCategoryOptions[static_cast<std::size_t>(std::clamp(
@@ -307,6 +363,7 @@ void drawAddCellSection(Project& project, CellPanelResult& result)
         const std::string newCellId = cell.id;
         project.cells.push_back(std::move(cell));
         syncCellOrder(project, newCellId);
+        rebuildCellOrderAndZ(project);
 
         result.selectedCellIndex = static_cast<int>(project.cells.size()) - 1;
         result.selectionChanged = true;
@@ -347,14 +404,19 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.displayChanged = true;
         result.projectStructureChanged = true;
     }
+    if (rebuildCellOrderAndZ(project)) {
+        result.displayChanged = true;
+        result.projectStructureChanged = true;
+    }
 
-    ImGui::TextUnformatted("CellPanel v1.2e");
+    ImGui::TextUnformatted("CellPanel v1.3");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
     drawDisplayModeControls(result.selectedCellIndex,
                             static_cast<int>(project.cells.size()),
                             result);
+    ImGui::TextDisabled("Order: Back draws earlier, Front draws later/on top.");
     ImGui::Separator();
 
     if (project.cells.empty()) {
@@ -366,7 +428,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     const int maxIndex = static_cast<int>(project.cells.size()) - 1;
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
-    ImGui::BeginChild("CellPanel_v12d_list", ImVec2(0.0f, 240.0f), true,
+    ImGui::BeginChild("CellPanel_v13_list", ImVec2(0.0f, 240.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
@@ -404,6 +466,32 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
                 gDisplayMode = CellDisplayMode::SoloSelected;
             }
             result.displayChanged = true;
+        }
+
+        const bool canMoveBack = index > 0;
+        const bool canMoveFront = index + 1 < static_cast<int>(project.cells.size());
+        if (!canMoveBack) {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::SmallButton("Back")) {
+            moveCell(project, index, index - 1, result);
+            ImGui::PopID();
+            break;
+        }
+        if (!canMoveBack) {
+            ImGui::EndDisabled();
+        }
+        ImGui::SameLine();
+        if (!canMoveFront) {
+            ImGui::BeginDisabled();
+        }
+        if (ImGui::SmallButton("Front")) {
+            moveCell(project, index, index + 1, result);
+            ImGui::PopID();
+            break;
+        }
+        if (!canMoveFront) {
+            ImGui::EndDisabled();
         }
 
         float opacity = std::clamp(cell.opacity, 0.0f, 1.0f);
