@@ -632,6 +632,29 @@ void CanvasRenderer::warmFrameCache(const Frame& frame,
     }
 }
 
+bool CanvasRenderer::frameCacheReady(const Frame& frame,
+                                     int frameIndex,
+                                     CanvasDisplayMode displayMode) const
+{
+    if (renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0) {
+        return false;
+    }
+
+    const std::string frameId = frameCacheId(frame, frameIndex);
+    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+        const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+        const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+        if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
+            continue;
+        }
+        if (layerNeedsBitmapWork(frameId, frame, layerIndex, layer)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex)
 {
     return layerBitmaps_.try_emplace(LayerCacheKey{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;

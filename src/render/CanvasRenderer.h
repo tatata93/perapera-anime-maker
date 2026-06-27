@@ -113,6 +113,9 @@ public:
                         CanvasDisplayMode displayMode,
                         int layerBudget,
                         int strokeBudgetPerLayer);
+    bool frameCacheReady(const Frame& frame,
+                         int frameIndex,
+                         CanvasDisplayMode displayMode) const;
 
 private:
     struct LayerCacheKey {

@@ -551,3 +551,22 @@ src/io/ProjectIO.cpp
 
 ### 次にやること
 - まだ重い場合は、起動後に明示的なウォームアップ進捗をUI表示するか、CanvasBitmapのFillStroke合成ループをさらに高速化する。
+
+## 2026-06-27 Phase 1.5 Step 21e: Preview readiness UI and faster FillStroke compositing
+
+### Summary
+- Added a small preview readiness counter to the finger playback controls so cache warm-up progress is visible as `preview ready n/m` in the UI.
+- Added `CanvasRenderer::frameCacheReady()` so the UI can query readiness without scanning strokes or forcing a rebuild.
+- Reworked `CanvasBitmap::bakeStroke()` for FillStroke masks to iterate only the clipped mask rectangle and blend by direct pixel offset.
+
+### Changed files
+- `src/render/CanvasBitmap.cpp`
+- `src/render/CanvasRenderer.h`
+- `src/render/CanvasRenderer.cpp`
+- `src/ui/AppInput.cpp`
+
+### Verification
+- `cmake --build .\build --config Debug --target perapera_anime_maker` succeeded.
+
+### Follow-up
+- On the real project, confirm that the new preview readiness count rises after launch and that first playback loops feel lighter once it reaches the frame count.

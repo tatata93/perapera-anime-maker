@@ -211,3 +211,9 @@ A later App-side cleanup should remove redundant `canvasRenderer_.markAllDirty()
 日付: 2026-06-27
 理由: 重いのはプロジェクト読み込みそのものではなく、読み込み後に各フレームを初めて表示するためのラスタライズ/テクスチャ化である。ディスク上にプレビューファイルを作ると無効化・削除・保存形式管理が増えるため、まずは起動中だけのメモリ上CanvasRendererキャッシュを全フレームへ巡回的に温める方が安全で局所的。
 影響: 停止中でも描画中でなければ次フレーム群を少しずつ先読みする。プロジェクト保存形式は変更しない。SDL_Textureの作成/uploadは従来どおりメインスレッドで行う。
+
+## 2026-06-27 Phase 1.5 Step 21e decision: Keep preview warm-up observable and optimize FillStroke compositing in memory
+
+Date: 2026-06-27
+Rationale: More complex layer structures will make cache warm-up and per-pixel FillStroke compositing more visible. Writing disk preview files during app execution would add invalidation and cleanup complexity, while the existing in-memory CanvasRenderer cache already matches the current editing session. The lower-risk path is to expose cache readiness in the UI and reduce the hot FillStroke blend loop cost.
+Impact: The app now reports visible-frame preview cache readiness without touching stroke payloads, and FillStroke baking avoids per-pixel coordinate clipping and the generic blendPixel call. Project file format is unchanged.

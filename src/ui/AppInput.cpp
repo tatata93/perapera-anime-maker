@@ -316,6 +316,19 @@ void App::drawFingerPlaybackControls()
     ImGui::Checkbox(u8c(u8"再生中は補助非表示"), &playbackSkipAssistOverlays_);
     ImGui::SameLine();
     ImGui::Text("%d/%d", frameCount > 0 ? activeFrameIndex_ + 1 : 0, frameCount);
+    if (cell != nullptr && frameCount > 0) {
+        const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
+            ? CanvasDisplayMode::Coloring
+            : CanvasDisplayMode::Drawing;
+        int readyFrames = 0;
+        for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+            const Frame* frame = cell->frameOrNull(frameIndex);
+            if (frame != nullptr && canvasRenderer_.frameCacheReady(*frame, frameIndex, displayMode)) {
+                ++readyFrames;
+            }
+        }
+        ImGui::TextDisabled("%s %d/%d", u8c(u8"プレビュー準備"), readyFrames, frameCount);
+    }
     ImGui::TextDisabled(u8c(u8"Shift+←/→: 前後   Home/End: 先頭/末尾"));
     ImGui::PopID();
 }
