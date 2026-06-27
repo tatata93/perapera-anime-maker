@@ -279,6 +279,43 @@ bool duplicateCell(Project& project, int sourceIndex, CellPanelResult& result)
     return true;
 }
 
+bool deleteCell(Project& project, int deleteIndex, CellPanelResult& result, int& editingIndex, std::string& editingCellId)
+{
+    const int cellCount = static_cast<int>(project.cells.size());
+    if (cellCount <= 1) {
+        return false;
+    }
+
+    deleteIndex = std::clamp(deleteIndex, 0, cellCount - 1);
+    project.cells.erase(project.cells.begin() + deleteIndex);
+
+    if (editingIndex == deleteIndex) {
+        editingIndex = -1;
+        editingCellId.clear();
+    } else if (editingIndex > deleteIndex) {
+        --editingIndex;
+    }
+
+    if (gSoloCellIndex == deleteIndex) {
+        gSoloCellIndex = -1;
+        if (gDisplayMode == CellDisplayMode::SoloSelected) {
+            gDisplayMode = CellDisplayMode::VisibleCells;
+        }
+    } else if (gSoloCellIndex > deleteIndex) {
+        --gSoloCellIndex;
+    }
+
+    rebuildCellOrderAndZ(project);
+
+    const int nextCount = static_cast<int>(project.cells.size());
+    result.selectedCellIndex = std::clamp(deleteIndex, 0, std::max(0, nextCount - 1));
+    result.selectionChanged = true;
+    result.displayChanged = true;
+    result.projectStructureChanged = true;
+    return true;
+}
+
+
 Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 {
     // Important: a new cel must not inherit the currently active cell's frame/layer layout.
@@ -472,6 +509,68 @@ void drawEditCellSection(Cell& cell,
     }
 }
 
+
+bool drawDeleteCellSection(Project& project,
+                           int index,
+                           int& editingIndex,
+                           std::string& editingCellId,
+                           CellPanelResult& result)
+{
+    static int pendingDeleteIndex = -1;
+    static std::string pendingDeleteCellId;
+
+    const bool canDelete = static_cast<int>(project.cells.size()) > 1;
+    if (!canDelete) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::SmallButton("Delete")) {
+        pendingDeleteIndex = index;
+        pendingDeleteCellId = project.cells[static_cast<std::size_t>(index)].id;
+        ImGui::OpenPopup("Delete Cell");
+    }
+    if (!canDelete) {
+        ImGui::EndDisabled();
+    }
+
+    const bool deletingThisCell = pendingDeleteIndex == index
+        && index >= 0
+        && index < static_cast<int>(project.cells.size())
+        && pendingDeleteCellId == project.cells[static_cast<std::size_t>(index)].id;
+
+    if (!deletingThisCell) {
+        return false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Delete Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        const Cell& cell = project.cells[static_cast<std::size_t>(index)];
+        ImGui::TextUnformatted("Delete this cell?");
+        ImGui::Separator();
+        ImGui::TextDisabled("id=%s", cell.id.c_str());
+        ImGui::TextWrapped("This removes the cell's frames, layers, and strokes from the project.");
+
+        ImGui::Spacing();
+        if (ImGui::Button("Delete", ImVec2(120.0f, 0.0f))) {
+            const bool deleted = deleteCell(project, index, result, editingIndex, editingCellId);
+            pendingDeleteIndex = -1;
+            pendingDeleteCellId.clear();
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return deleted;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            pendingDeleteIndex = -1;
+            pendingDeleteCellId.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    return false;
+}
+
 void drawAddCellSection(Project& project, CellPanelResult& result)
 {
     static bool addOpen = false;
@@ -564,14 +663,14 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.5b");
+    ImGui::TextUnformatted("CellPanel v1.6");
     drawAddCellSection(project, result);
     ImGui::Separator();
 
     drawDisplayModeControls(result.selectedCellIndex,
                             static_cast<int>(project.cells.size()),
                             result);
-    ImGui::TextDisabled("Back/Front order. Edit opens a popup. Duplicate copies a cell.");
+    ImGui::TextDisabled("Back/Front order. Edit opens a popup. Duplicate copies. Delete confirms.");
     ImGui::Separator();
 
     if (project.cells.empty()) {
@@ -583,7 +682,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     const int maxIndex = static_cast<int>(project.cells.size()) - 1;
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
-    ImGui::BeginChild("CellPanel_v15_list", ImVec2(0.0f, 260.0f), true,
+    ImGui::BeginChild("CellPanel_v16_list", ImVec2(0.0f, 260.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
@@ -651,6 +750,11 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         ImGui::SameLine();
         if (ImGui::SmallButton("Duplicate")) {
             duplicateCell(project, index, result);
+            ImGui::PopID();
+            break;
+        }
+        ImGui::SameLine();
+        if (drawDeleteCellSection(project, index, editingCellIndex, editingCellId, result)) {
             ImGui::PopID();
             break;
         }
