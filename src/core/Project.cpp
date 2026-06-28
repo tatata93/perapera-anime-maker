@@ -2,6 +2,7 @@
 // Project の初期値生成とセル検索を実装する。
 
 #include "core/Project.h"
+#include "core/TimesheetResolver.h" // Timesheet Step C: resolver header compile fence.
 
 namespace perapera {
 
@@ -22,9 +23,8 @@ Project Project::createDefault()
 
     // Timesheet Step A:
     // 初期状態では全タイムラインフレームで、既定セルのF001をHold表示する。
-    // 保存/読み込み、再生反映、UI編集は後続Stepで実装する。
+    // Step Cでは、このTimesheetを読み取って表示対象フレームを解決する関数を追加した。
     project.timesheet = Timesheet::createDefault(project.cells, project.timeline.totalFrames);
-
     return project;
 }
 

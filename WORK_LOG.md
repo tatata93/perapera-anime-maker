@@ -648,3 +648,34 @@ src/io/ProjectIO.cpp
 ## CellPanel v1.2d
 - Fixed new-cell layer isolation: newly created cells now start from a fresh blank Frame/Layer instead of inheriting any active cell layer layout.
 - Reset activeFrameIndex_ and activeLayerIndex_ to 0 when changing active cells, then clamp selection.
+
+## Timesheet Step C - Display/playback resolver foundation
+
+- 作業者: ChatGPT / Codex handoff package
+- 目的: Phase 2-pre の仮Timesheetから、指定タイムラインフレームで各セルのどの作画フレームを表示するかを読み取れるようにする。
+- 変更内容:
+  - `src/core/TimesheetResolver.h` を追加した。
+  - `TimesheetResolver::resolveFrame()` を追加した。
+  - `TimesheetResolver::resolveCell()` / `resolveCellById()` を追加した。
+  - `timelineFrame` を安全にクランプする `clampTimelineFrame()` を追加した。
+  - `drawingFrameIndex` をセルの実フレーム数へ安全にクランプする `clampDrawingFrameIndex()` を追加した。
+  - `cell.visible` / `cell.opacity` と `TimesheetExposureKind::Null` を見て `renderable` を判定するようにした。
+  - `zOrder` 昇順で描画順へ並べ替える読み取り処理を追加した。
+  - `src/core/Project.cpp` に `TimesheetResolver.h` をincludeし、ヘッダーが通常ビルド経路でコンパイル検査されるようにした。
+- 実装方針:
+  - 今回は読み取り専用の解決層だけを追加する。
+  - 既存の描画、再生、PNG/MP4出力の挙動はまだ変えない。
+  - `Project.cells` / `Project.cellOrder` / `Cell.zOrder` を尊重し、Scene/Cut未移行の現在の構造を壊さない。
+  - Timesheetに露出が無い場合は、後方互換としてF001 Hold相当へフォールバックする。
+- まだやっていないこと:
+  - タイムシートUI。
+  - 実際のキャンバス描画へのTimesheet反映。
+  - 再生処理へのTimesheet反映。
+  - PNG/MP4出力へのTimesheet反映。
+  - セル配置UI。
+  - Scene/Cut階層への移行。
+- 次の推奨作業:
+  - Timesheet Step D: 簡易タイムシートUIを追加し、現在フレーム・選択セルに対して `drawingFrameIndex` と `kind` を編集できるようにする。
+- 推奨理由:
+  - タイムシートは“いつ何を表示するか”を決める制作基盤である。解決関数が入ったので、次はUIから露出を編集できる状態にするのが自然。
+  - 実描画反映を先に入れると、編集UIが無く動作確認しづらい。先に簡易UIを置くと、Step Eで描画・再生反映を検証しやすい。

@@ -257,3 +257,22 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 ## CellPanel v1.2d
 - Treat each cell as owning its own independent frames and layers.
 - New cells are initialized as a blank cel with one frame and one layer. Layer count inheritance from the previously active cell is intentionally avoided.
+
+## Decision - Timesheet Step C resolver before UI/render integration
+
+- 決定: Timesheet Step Cでは、実描画や再生に直接つなぐ前に `src/core/TimesheetResolver.h` の読み取り専用レイヤーを追加する。
+- 理由:
+  - タイムシートは「いつ何を表示するか」を決める中核データなので、UI・描画・書き出しが同じ解決規則を使う必要がある。
+  - 各所で個別に `project.timesheet.exposureOrNull()` を読むと、Null露出、範囲外フレーム、削除済みセル、zOrderの扱いが分散して不具合原因になる。
+  - まず共通の resolver を置くことで、次の簡易UI・表示反映・書き出し反映の実装を小さくできる。
+- 決定: 今回は既存のキャンバス表示・再生・PNG/MP4出力の挙動を変えない。
+- 理由:
+  - Step Bで保存/読み込みが入った直後なので、次に実動作を大きく変えると不具合の切り分けが難しくなる。
+  - resolver単体なら、既存機能への副作用を最小にしてビルド検査できる。
+- 決定: 描画順は `Cell.zOrder` 昇順を基本とし、同じzOrderなら既存の `Project.cellOrder` / `Project.cells` 順を維持する。
+- 理由:
+  - CellPanelで既にzOrder/front/backを導入しているため、タイムシート側の表示解決も同じ概念を使うべきである。
+- 今後の検討指針:
+  - 作業順は、今後作るものの性質を優先して選ぶ。
+  - Timesheetは“タイミングの基盤”なので、セル配置UIより先に編集・表示反映を完成させる。
+  - CellPlacementは“表示対象が決まった後の撮影台操作”なので、Timesheetによる表示フレーム解決が実用化してから入れる。
