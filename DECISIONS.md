@@ -276,3 +276,25 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
   - 作業順は、今後作るものの性質を優先して選ぶ。
   - Timesheetは“タイミングの基盤”なので、セル配置UIより先に編集・表示反映を完成させる。
   - CellPlacementは“表示対象が決まった後の撮影台操作”なので、Timesheetによる表示フレーム解決が実用化してから入れる。
+
+## 2026-06-29 - Decision: add mini timesheet editor before cell placement
+
+Actor: ChatGPT/Codex handoff package
+
+Decision:
+- Add a minimal timing editor before CellPlacement UI.
+- Place it in the existing CellPanel rather than introducing a full vertical timesheet window.
+
+Reason:
+- The software first needs a usable way to decide "which cell drawing frame is exposed on which timeline frame".
+- A full Scene/Cut/Timesheet migration is still too large and would touch storage, UI, playback, and export at once.
+- The current project structure already has Project.timesheet, so a compact editor can safely exercise the provisional timesheet model.
+
+Scope boundary:
+- Step D edits timesheet data only.
+- Step E should be the first step that changes actual canvas display/playback according to TimesheetResolver.
+- CellPlacement UI remains later, because position/scale/rotation should come after timing is actually respected by playback.
+
+Recommendation rule for future work:
+- When choosing the next task, prioritize what the software needs structurally for its final purpose.
+- For animation production, timing/exposure control takes priority over cosmetic cell movement, because placement without exposure timing does not define animation playback.

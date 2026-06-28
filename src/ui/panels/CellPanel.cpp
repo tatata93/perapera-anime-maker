@@ -1,4 +1,4 @@
-// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.8d fixes opacity percent editing while keeping compact selected-cell controls.
+// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.9d adds a mini timesheet editor for the selected cell while keeping compact selected-cell controls.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -197,6 +197,185 @@ bool rebuildCellOrderAndZ(Project& project)
     return changed;
 }
 
+const Cell* cellByIdInProject(const Project& project, const std::string& cellId)
+{
+    const auto found = std::find_if(project.cells.begin(), project.cells.end(), [&](const Cell& cell) {
+        return cell.id == cellId;
+    });
+    return found == project.cells.end() ? nullptr : &(*found);
+}
+
+Cell* cellByIdInProject(Project& project, const std::string& cellId)
+{
+    auto found = std::find_if(project.cells.begin(), project.cells.end(), [&](Cell& cell) {
+        return cell.id == cellId;
+    });
+    return found == project.cells.end() ? nullptr : &(*found);
+}
+
+bool removeTimesheetCell(Project& project, const std::string& cellId)
+{
+    if (cellId.empty()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (TimesheetFrame& frame : project.timesheet.frames) {
+        const auto oldSize = frame.cellExposures.size();
+        frame.cellExposures.erase(std::remove_if(frame.cellExposures.begin(),
+                                                 frame.cellExposures.end(),
+                                                 [&](const TimesheetCellExposure& exposure) {
+                                                     return exposure.cellId == cellId;
+                                                 }),
+                                  frame.cellExposures.end());
+        changed = changed || frame.cellExposures.size() != oldSize;
+    }
+    return changed;
+}
+
+int safeTimelineFrameCount(const Project& project)
+{
+    return std::max(1, project.timeline.totalFrames);
+}
+
+int frameCountForCell(const Cell& cell)
+{
+    return std::max(1, static_cast<int>(cell.frames.size()));
+}
+
+bool normalizeTimesheetForProject(Project& project)
+{
+    bool changed = false;
+
+    const int requestedFrameCount = safeTimelineFrameCount(project);
+    if (project.timesheet.totalFrames != requestedFrameCount ||
+        static_cast<int>(project.timesheet.frames.size()) != requestedFrameCount) {
+        project.timesheet.ensureFrameCount(requestedFrameCount);
+        changed = true;
+    }
+
+    for (TimesheetFrame& frame : project.timesheet.frames) {
+        for (auto it = frame.cellExposures.begin(); it != frame.cellExposures.end();) {
+            if (cellByIdInProject(project, it->cellId) == nullptr) {
+                it = frame.cellExposures.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    for (const Cell& cell : project.cells) {
+        if (cell.id.empty()) {
+            continue;
+        }
+        for (TimesheetFrame& frame : project.timesheet.frames) {
+            if (frame.exposureForCell(cell.id) == nullptr) {
+                TimesheetCellExposure exposure;
+                exposure.cellId = cell.id;
+                exposure.drawingFrameIndex = 0;
+                exposure.kind = TimesheetExposureKind::Hold;
+                frame.cellExposures.push_back(std::move(exposure));
+                changed = true;
+            }
+        }
+    }
+
+    for (TimesheetFrame& frame : project.timesheet.frames) {
+        frame.timelineFrame = std::clamp(frame.timelineFrame, 0, requestedFrameCount - 1);
+        for (TimesheetCellExposure& exposure : frame.cellExposures) {
+            const Cell* cell = cellByIdInProject(project, exposure.cellId);
+            if (cell == nullptr) {
+                continue;
+            }
+            const int maxDrawingFrame = frameCountForCell(*cell) - 1;
+            const int clamped = std::clamp(exposure.drawingFrameIndex, 0, maxDrawingFrame);
+            if (exposure.drawingFrameIndex != clamped) {
+                exposure.drawingFrameIndex = clamped;
+                changed = true;
+            }
+        }
+    }
+
+    return changed;
+}
+
+TimesheetCellExposure* ensureTimesheetExposure(Project& project, int timelineFrame, const std::string& cellId)
+{
+    project.timesheet.ensureFrameCount(safeTimelineFrameCount(project));
+    project.timesheet.ensureCell(cellId, 0);
+
+    TimesheetFrame* frame = project.timesheet.frameOrNull(timelineFrame);
+    if (frame == nullptr) {
+        return nullptr;
+    }
+
+    TimesheetCellExposure* exposure = frame->exposureForCell(cellId);
+    if (exposure != nullptr) {
+        return exposure;
+    }
+
+    TimesheetCellExposure newExposure;
+    newExposure.cellId = cellId;
+    newExposure.drawingFrameIndex = 0;
+    newExposure.kind = TimesheetExposureKind::Hold;
+    frame->cellExposures.push_back(std::move(newExposure));
+    return frame->exposureForCell(cellId);
+}
+
+void markTimesheetChanged(CellPanelResult& result)
+{
+    result.timesheetChanged = true;
+    result.displayChanged = true;
+    result.projectStructureChanged = true;
+}
+
+const char* exposureKindLabel(TimesheetExposureKind kind)
+{
+    switch (kind) {
+    case TimesheetExposureKind::Null:
+        return "Null";
+    case TimesheetExposureKind::Hold:
+        return "Hold";
+    case TimesheetExposureKind::Key:
+        return "Key";
+    case TimesheetExposureKind::Inbetween:
+        return "Inbetween";
+    }
+    return "Hold";
+}
+
+void fillSelectedCellExposures(Project& project,
+                               const Cell& cell,
+                               int startTimelineFrame,
+                               int startDrawingFrameIndex,
+                               int stepFrames,
+                               TimesheetExposureKind kind)
+{
+    if (cell.id.empty()) {
+        return;
+    }
+
+    const int totalFrames = safeTimelineFrameCount(project);
+    const int drawingFrameCount = frameCountForCell(cell);
+    startTimelineFrame = std::clamp(startTimelineFrame, 0, totalFrames - 1);
+    startDrawingFrameIndex = std::clamp(startDrawingFrameIndex, 0, drawingFrameCount - 1);
+    stepFrames = std::max(1, stepFrames);
+
+    for (int timelineFrame = startTimelineFrame; timelineFrame < totalFrames; ++timelineFrame) {
+        TimesheetCellExposure* exposure = ensureTimesheetExposure(project, timelineFrame, cell.id);
+        if (exposure == nullptr) {
+            continue;
+        }
+        const int offset = timelineFrame - startTimelineFrame;
+        const int drawingFrameIndex = std::clamp(startDrawingFrameIndex + (offset / stepFrames),
+                                                 0,
+                                                 drawingFrameCount - 1);
+        exposure->drawingFrameIndex = drawingFrameIndex;
+        exposure->kind = kind;
+    }
+}
+
 bool moveCell(Project& project, int fromIndex, int toIndex, CellPanelResult& result)
 {
     const int cellCount = static_cast<int>(project.cells.size());
@@ -267,7 +446,11 @@ bool duplicateCell(Project& project, int sourceIndex, CellPanelResult& result)
 
     reassignLayerIdsForCell(duplicate, insertIndex);
 
+    const std::string duplicateCellId = duplicate.id;
     project.cells.insert(project.cells.begin() + insertIndex, std::move(duplicate));
+
+    project.timesheet.ensureFrameCount(safeTimelineFrameCount(project));
+    project.timesheet.ensureCell(duplicateCellId, 0);
 
     ensureCellScopedLayerIds(project);
     rebuildCellOrderAndZ(project);
@@ -294,7 +477,9 @@ bool deleteCell(Project& project, int deleteIndex, CellPanelResult& result, int&
     }
 
     deleteIndex = std::clamp(deleteIndex, 0, cellCount - 1);
+    const std::string deletedCellId = project.cells[static_cast<std::size_t>(deleteIndex)].id;
     project.cells.erase(project.cells.begin() + deleteIndex);
+    removeTimesheetCell(project, deletedCellId);
 
     if (editingIndex == deleteIndex) {
         editingIndex = -1;
@@ -589,6 +774,8 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
             Cell cell = makeNewCell(project, nameBuffer, categoryIndex);
             const std::string newCellId = cell.id;
             project.cells.push_back(std::move(cell));
+            project.timesheet.ensureFrameCount(safeTimelineFrameCount(project));
+            project.timesheet.ensureCell(newCellId, 0);
             syncCellOrder(project, newCellId);
             rebuildCellOrderAndZ(project);
 
@@ -666,6 +853,152 @@ void drawCellList(Project& project, CellPanelResult& result)
 
     ImGui::PopStyleVar(2);
     ImGui::EndChild();
+}
+
+
+void drawMiniTimesheetControls(Project& project, CellPanelResult& result)
+{
+    if (project.cells.empty()) {
+        return;
+    }
+
+    static int editTimelineFrame = 0;
+
+    if (normalizeTimesheetForProject(project)) {
+        markTimesheetChanged(result);
+    }
+
+    const int totalFrames = safeTimelineFrameCount(project);
+    editTimelineFrame = std::clamp(editTimelineFrame, 0, totalFrames - 1);
+    result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, static_cast<int>(project.cells.size()) - 1);
+
+    Cell& cell = project.cells[static_cast<std::size_t>(result.selectedCellIndex)];
+    if (cell.id.empty()) {
+        return;
+    }
+
+    TimesheetCellExposure* exposure = ensureTimesheetExposure(project, editTimelineFrame, cell.id);
+    if (exposure == nullptr) {
+        ImGui::TextDisabled("Timesheet exposure unavailable.");
+        return;
+    }
+
+    const int drawingFrameCount = frameCountForCell(cell);
+    exposure->drawingFrameIndex = std::clamp(exposure->drawingFrameIndex, 0, drawingFrameCount - 1);
+
+    ImGui::TextUnformatted("Mini Timesheet v1");
+    ImGui::TextDisabled("This edits timing only. Canvas playback hookup is next step.");
+
+    int timelineFrameOneBased = editTimelineFrame + 1;
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderInt("T", &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
+        timelineFrameOneBased = std::clamp(timelineFrameOneBased, 1, totalFrames);
+        editTimelineFrame = timelineFrameOneBased - 1;
+        exposure = ensureTimesheetExposure(project, editTimelineFrame, cell.id);
+        if (exposure == nullptr) {
+            return;
+        }
+        exposure->drawingFrameIndex = std::clamp(exposure->drawingFrameIndex, 0, drawingFrameCount - 1);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Timeline frame to edit. This is independent from the bottom timeline until Step E.");
+    }
+
+    int drawingFrameOneBased = exposure->drawingFrameIndex + 1;
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderInt("Drawing", &drawingFrameOneBased, 1, drawingFrameCount, "F%03d")) {
+        drawingFrameOneBased = std::clamp(drawingFrameOneBased, 1, drawingFrameCount);
+        exposure->drawingFrameIndex = drawingFrameOneBased - 1;
+        if (exposure->kind == TimesheetExposureKind::Null) {
+            exposure->kind = TimesheetExposureKind::Hold;
+        }
+        markTimesheetChanged(result);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Drawing frame displayed by the selected cell at this timeline frame.");
+    }
+
+    int kindIndex = 1;
+    if (exposure->kind == TimesheetExposureKind::Null) {
+        kindIndex = 0;
+    } else if (exposure->kind == TimesheetExposureKind::Key) {
+        kindIndex = 2;
+    } else if (exposure->kind == TimesheetExposureKind::Inbetween) {
+        kindIndex = 3;
+    }
+
+    constexpr const char* kKindLabels[] = {"Null", "Hold", "Key", "Inbetween"};
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::Combo("Kind", &kindIndex, kKindLabels, 4)) {
+        kindIndex = std::clamp(kindIndex, 0, 3);
+        switch (kindIndex) {
+        case 0:
+            exposure->kind = TimesheetExposureKind::Null;
+            break;
+        case 2:
+            exposure->kind = TimesheetExposureKind::Key;
+            break;
+        case 3:
+            exposure->kind = TimesheetExposureKind::Inbetween;
+            break;
+        default:
+            exposure->kind = TimesheetExposureKind::Hold;
+            break;
+        }
+        markTimesheetChanged(result);
+    }
+
+    const float fullWidth = ImGui::GetContentRegionAvail().x;
+    const float gap = ImGui::GetStyle().ItemSpacing.x;
+    const float half = std::max(70.0f, (fullWidth - gap) / 2.0f);
+
+    if (ImGui::Button("Null", ImVec2(half, 0.0f))) {
+        exposure->kind = TimesheetExposureKind::Null;
+        markTimesheetChanged(result);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Hold", ImVec2(half, 0.0f))) {
+        exposure->kind = TimesheetExposureKind::Hold;
+        markTimesheetChanged(result);
+    }
+
+    if (ImGui::Button("1s to end", ImVec2(half, 0.0f))) {
+        fillSelectedCellExposures(project,
+                                  cell,
+                                  editTimelineFrame,
+                                  exposure->drawingFrameIndex,
+                                  1,
+                                  TimesheetExposureKind::Hold);
+        markTimesheetChanged(result);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Expose selected cell on ones from this timeline frame to the end.");
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("2s to end", ImVec2(half, 0.0f))) {
+        fillSelectedCellExposures(project,
+                                  cell,
+                                  editTimelineFrame,
+                                  exposure->drawingFrameIndex,
+                                  2,
+                                  TimesheetExposureKind::Hold);
+        markTimesheetChanged(result);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Expose selected cell on twos from this timeline frame to the end.");
+    }
+
+    const char* visibleFrameLabel = exposure->kind == TimesheetExposureKind::Null ? "none" : "F";
+    if (exposure->kind == TimesheetExposureKind::Null) {
+        ImGui::TextDisabled("T%03d: %s -> Null", editTimelineFrame + 1, cell.id.c_str());
+    } else {
+        ImGui::TextDisabled("T%03d: %s -> F%03d (%s)",
+                            editTimelineFrame + 1,
+                            cell.id.c_str(),
+                            exposure->drawingFrameIndex + 1,
+                            exposureKindLabel(exposure->kind));
+    }
+    (void)visibleFrameLabel;
 }
 
 void drawSelectedCellControls(Project& project,
@@ -848,7 +1181,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.8d");
+    ImGui::TextUnformatted("CellPanel v1.9d Timesheet");
     drawAddCellPopup(project, result);
     ImGui::Separator();
 
@@ -867,6 +1200,9 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, maxIndex);
 
     drawCellList(project, result);
+    ImGui::Separator();
+
+    drawMiniTimesheetControls(project, result);
     ImGui::Separator();
 
     drawSelectedCellControls(project,

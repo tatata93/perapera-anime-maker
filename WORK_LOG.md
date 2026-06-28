@@ -679,3 +679,34 @@ src/io/ProjectIO.cpp
 - 推奨理由:
   - タイムシートは“いつ何を表示するか”を決める制作基盤である。解決関数が入ったので、次はUIから露出を編集できる状態にするのが自然。
   - 実描画反映を先に入れると、編集UIが無く動作確認しづらい。先に簡易UIを置くと、Step Eで描画・再生反映を検証しやすい。
+
+## 2026-06-29 - Timesheet Step D: mini editor in CellPanel
+
+Actor: ChatGPT/Codex handoff package
+
+What changed:
+- Added a compact Mini Timesheet editor inside the drawing-mode CellPanel.
+- The editor can choose a timeline frame, choose the selected cell's drawing frame, and switch exposure kind between Null / Hold / Key / Inbetween.
+- Added quick fill actions for selected cell exposure timing: 1s to end and 2s to end.
+- Kept this as timing-data editing only; canvas playback/display is intentionally not wired yet.
+- Normalizes the provisional Project.timesheet from the CellPanel so current cells get exposures and deleted cells are removed.
+- When adding, duplicating, or deleting cells, the provisional timesheet is kept in sync.
+
+Not changed:
+- No canvas drawing change.
+- No playback/output change.
+- No Scene/Cut migration.
+- No CellPlacement UI.
+- No full vertical exposure sheet UI.
+
+Verification notes:
+- Build Debug/Release.
+- Open drawing mode and confirm CellPanel shows "CellPanel v1.9d Timesheet" and "Mini Timesheet v1".
+- Add multiple cells and confirm Mini Timesheet still edits the selected cell.
+- Set T001/F001 Hold, switch to Null, then back to Hold/Key/Inbetween.
+- Use 1s to end / 2s to end, save the project, and verify timesheet.json changes after saving.
+- Reopen the project and confirm it does not crash.
+
+Next recommended work:
+- Timesheet Step E should connect the resolver to canvas display/playback so the UI's timing edits actually affect visible cell frames.
+- Do not start CellPlacement UI before Step E, because the software still needs to prove that timing data controls playback.
