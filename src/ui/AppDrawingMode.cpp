@@ -402,6 +402,23 @@ void App::drawLeftSidebar()
 }
 void App::drawRightSidebar()
 {
+    enum class DeferredPanelAction {
+        None,
+        AddLayer,
+        DeleteLayer,
+        ClearLayer,
+        AddFrame,
+        DuplicateFrame,
+        DeleteFrame,
+        SaveProject,
+        LoadProject,
+        VerifyProjectRoundTrip,
+        ExportActivePng,
+        ExportPngSequence,
+        ExportMp4,
+    };
+    DeferredPanelAction deferredAction = DeferredPanelAction::None;
+
     const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_, activeTimelineFrameIndex_);
     const auto resetPreviewReadiness = [&]() {
         previewWarmCursor_ = activeFrameIndex_;
@@ -458,35 +475,76 @@ void App::drawRightSidebar()
     ImGui::TextDisabled(currentMode_ == AppMode::Coloring ? "Phase 2-pre CellPanel v1 coloring mode" : "Phase 2-pre CellPanel v1 drawing mode");
     const ui::LayerPanelAction layerAction = ui::drawLayerPanel(*frame, activeLayerIndex_);
     if (layerAction == ui::LayerPanelAction::AddLayer) {
-        addLayer();
+        deferredAction = DeferredPanelAction::AddLayer;
     } else if (layerAction == ui::LayerPanelAction::DeleteLayer) {
-        deleteActiveLayer();
+        deferredAction = DeferredPanelAction::DeleteLayer;
     } else if (layerAction == ui::LayerPanelAction::ClearLayer) {
-        clearActiveLayer();
+        deferredAction = DeferredPanelAction::ClearLayer;
     }
     ImGui::Separator();
     const ui::FramePanelAction frameAction = ui::drawFramePanel(*cell, activeFrameIndex_);
     if (frameAction == ui::FramePanelAction::AddFrame) {
-        addFrame();
+        deferredAction = DeferredPanelAction::AddFrame;
     } else if (frameAction == ui::FramePanelAction::DuplicateFrame) {
-        duplicateFrame();
+        deferredAction = DeferredPanelAction::DuplicateFrame;
     } else if (frameAction == ui::FramePanelAction::DeleteFrame) {
-        deleteActiveFrame();
+        deferredAction = DeferredPanelAction::DeleteFrame;
     }
     ImGui::Separator();
     const ui::ExportPanelAction exportAction = ui::drawExportPanel(exportState_, lastMessage_.c_str());
     if (exportAction == ui::ExportPanelAction::SaveProject) {
-        saveProject();
+        deferredAction = DeferredPanelAction::SaveProject;
     } else if (exportAction == ui::ExportPanelAction::LoadProject) {
-        loadProject();
+        deferredAction = DeferredPanelAction::LoadProject;
     } else if (exportAction == ui::ExportPanelAction::VerifyProjectRoundTrip) {
-        saveLoadRoundTripCheck();
+        deferredAction = DeferredPanelAction::VerifyProjectRoundTrip;
     } else if (exportAction == ui::ExportPanelAction::ExportActivePng) {
-        exportActivePng();
+        deferredAction = DeferredPanelAction::ExportActivePng;
     } else if (exportAction == ui::ExportPanelAction::ExportPngSequence) {
-        exportPngSequence();
+        deferredAction = DeferredPanelAction::ExportPngSequence;
     } else if (exportAction == ui::ExportPanelAction::ExportMp4) {
+        deferredAction = DeferredPanelAction::ExportMp4;
+    }
+
+    switch (deferredAction) {
+    case DeferredPanelAction::AddLayer:
+        addLayer();
+        break;
+    case DeferredPanelAction::DeleteLayer:
+        deleteActiveLayer();
+        break;
+    case DeferredPanelAction::ClearLayer:
+        clearActiveLayer();
+        break;
+    case DeferredPanelAction::AddFrame:
+        addFrame();
+        break;
+    case DeferredPanelAction::DuplicateFrame:
+        duplicateFrame();
+        break;
+    case DeferredPanelAction::DeleteFrame:
+        deleteActiveFrame();
+        break;
+    case DeferredPanelAction::SaveProject:
+        saveProject();
+        break;
+    case DeferredPanelAction::LoadProject:
+        loadProject();
+        break;
+    case DeferredPanelAction::VerifyProjectRoundTrip:
+        saveLoadRoundTripCheck();
+        break;
+    case DeferredPanelAction::ExportActivePng:
+        exportActivePng();
+        break;
+    case DeferredPanelAction::ExportPngSequence:
+        exportPngSequence();
+        break;
+    case DeferredPanelAction::ExportMp4:
         exportMp4();
+        break;
+    case DeferredPanelAction::None:
+        break;
     }
 }
 
@@ -508,6 +566,7 @@ void App::drawTimelineArea()
         syncActiveTimesheetExposureToDrawingFrame();
         canvasRenderer_.markAllDirty();
     }
+    ImGui::EndChild();
     if (timelineAction == ui::TimelinePanelAction::AddFrame) {
         addFrame();
     } else if (timelineAction == ui::TimelinePanelAction::DuplicateFrame) {
@@ -515,7 +574,6 @@ void App::drawTimelineArea()
     } else if (timelineAction == ui::TimelinePanelAction::DeleteFrame) {
         deleteActiveFrame();
     }
-    ImGui::EndChild();
 }
 void App::drawCanvasArea(float rightWidth)
 {
