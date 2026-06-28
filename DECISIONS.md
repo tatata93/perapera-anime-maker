@@ -316,3 +316,15 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - `cut.json` にはタイムシート列の表示名や各マス内容を混ぜない。
 - `loadCut()` 時、`timesheet.json` の `totalFrames` は `cut.json` の `totalFrames` に合わせて正規化する。
 - タイムシートウィンドウの外部ドラッグ対応はまだ有効化しない。UI実装段階でSDL3 + ImGui multi-viewportsの安定性を確認してから判断する。
+
+## 2026-06-29 Timesheet Rebuild Step 3 decisions
+
+- 正式タイムシートUIは `CellPanel` に戻さず、独立した `TimesheetPanel` として作る。
+- Step 3では編集可能なUIにせず、表示専用スケルトンに留める。
+- `TimesheetPanel` は `Project` を直接変更しない。
+- `TimesheetPanel` は表示データ `TimesheetPanelViewModel` とUI状態 `TimesheetPanelState` を分ける。
+- タイムシート表は縦型UIを基本とする。
+- 縦軸はタイムラインT、横軸はセル列とする。
+- セリフ、カメラ、撮影、素材メモ欄は最初から列として確保する。
+- 大ウィンドウ外へのドラッグは、Dear ImGui multi-viewports の安定性確認後に対応する。
+- Step 3時点ではmulti-viewportsを有効化しない。

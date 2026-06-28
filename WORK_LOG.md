@@ -904,3 +904,57 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - `cut.json` は `kind=perapera.cut.v1`、`formatVersion=1`、`timesheetFile=timesheet.json` を持つ。
 - タイムシート本体は `TimesheetIO` が `timesheet.json` へ保存する。
 - `perapera_cut_io_selftest` は日本語カット名、セル列順、タイムシート解決結果、JSON安定性を検証する。
+
+## 2026-06-29 Timesheet Rebuild Step 3: TimesheetPanel display-only skeleton
+
+### 今回やったこと
+- 正式タイムシートUIの土台として `src/ui/panels/TimesheetPanel.h` を追加した。
+- 正式タイムシートUIの表示専用実装として `src/ui/panels/TimesheetPanel.cpp` を追加した。
+- `TimesheetPanelViewModel` / `TimesheetPanelState` / `TimesheetPanelResult` を追加し、UI表示状態と表示データを分けた。
+- 縦軸T、横軸セル列、セリフ、カメラ、撮影、素材メモ列を持つ縦型タイムシート表のスケルトンを追加した。
+- T選択ボタンとテーブル行選択だけを追加した。
+- `docs/timesheet_step3_panel_skeleton_note.md` を追加し、外部ドラッグ可能ウィンドウの方針を明記した。
+- `CMakeLists.txt` に `src/ui/panels/TimesheetPanel.cpp` を追加した。
+
+### 今回やらなかったこと
+- `Project` / `Cut` / `Timesheet` への接続は行っていない。
+- タイムシート編集は行っていない。
+- `cut.json` / `timesheet.json` 保存読み込みへの接続は行っていない。
+- キャンバス表示、再生、PNG、MP4出力への反映は行っていない。
+- Dear ImGui multi-viewports の有効化は行っていない。
+
+### 触ったファイル
+- `CMakeLists.txt`
+- `src/ui/panels/TimesheetPanel.h`
+- `src/ui/panels/TimesheetPanel.cpp`
+- `docs/timesheet_step3_panel_skeleton_note.md`
+
+### 触っていない重要ファイル
+- `src/ui/panels/CellPanel.cpp`
+- `src/ui/panels/CellPanel.h`
+- `src/ui/App.cpp`
+- `src/ui/App.h`
+- `src/ui/AppDrawingMode.cpp`
+- `src/core/Project.*`
+- `src/io/ProjectIO.*`
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- `run_timesheet_crash_log.txt`
+
+### 既知の未解決問題
+- Step 3の `TimesheetPanel` は部品追加のみで、アプリ画面にはまだ接続していない。
+- 大ウィンドウ外へのドラッグには Dear ImGui multi-viewports の検証が必要。
+- SDL3 + SDL_Renderer3 + ImGui での multi-viewports 安定性は未確認。
+
+### 次に推奨する作業
+- Step 3.5: `Project` のセル一覧から `TimesheetPanelViewModel` を作り、作画モードから表示だけ接続する。
+
+### なぜその作業を推奨するか
+- いきなり編集や保存へ進むと、前回と同じくUI・保存・表示反映が混ざって壊れやすくなるため。
+- まず表示だけ接続すれば、独立パネルとしての配置や操作感を安全に確認できるため。
+
+### Codex/AI handoff note
+- Step 3は表示専用部品の追加に留めた。
+- `CellPanel` にはタイムシートUIを戻していない。
+- Step 3.5では既存Appの現在ソースを確認してから、`TimesheetPanel` を作画モードに表示接続すること。
