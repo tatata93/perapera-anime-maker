@@ -359,3 +359,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - 表示記号は、数字、原+数字、中+数字、｜、×、—、□ を使う。
 - セリフ、カメラ、撮影、素材メモ欄の編集は後続Stepに回す。
 - 次は、一時UI入力を正式 `Timesheet` coreモデルへ同期する境界を作る。
+
+## 2026-06-29 Timesheet Rebuild Step 4.5 decisions
+
+- `TimesheetPanelState::entries` は保存形式ではなく、UI一時編集状態として扱う。
+- UI一時編集状態と正式 `Timesheet` の間に `TimesheetPanelBridge` を置く。
+- UI側のTは0始まり、正式Timesheet側のTは1始まりとして変換する。
+- `Empty` は紙タイムシート上の未記入であり、正式Timesheetにはエントリとして保存しない。
+- まだキャンバス表示、再生、PNG/MP4出力には反映しない。

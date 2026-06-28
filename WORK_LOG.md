@@ -1129,3 +1129,60 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - Step 4はUIだけの最小編集である。
 - `TimesheetPanelState::entries` は保存データではない。
 - 後続Stepではこの一時入力を `perapera::Timesheet` へ同期する関数を明示的に作ること。
+
+## 2026-06-29 Timesheet Rebuild Step 4.5: Panel/Core bridge
+
+### 今回やったこと
+
+- `TimesheetPanelState::entries` から正式 `Timesheet` を構築する変換境界を追加した。
+- 正式 `Timesheet` から `TimesheetPanelState::entries` へ戻す読み戻し関数を追加した。
+- `Empty` を未記入として保存対象から除外する方針を実装した。
+- UI側Tを0始まり、core側Tを1始まりとして変換することを明文化・実装した。
+- `perapera_timesheet_panel_bridge_selftest` を追加し、UI一時入力とcore Timesheetの往復を検証できるようにした。
+
+### 今回やらなかったこと
+
+- `Project` / `Cut` への正式Timesheet接続。
+- `timesheet.json` への実保存接続。
+- タイムシート入力のキャンバス表示反映。
+- 再生、PNG連番、MP4出力への反映。
+- セリフ、カメラ、撮影、素材メモ欄の編集。
+
+### 触ったファイル
+
+- `CMakeLists.txt`
+- `src/ui/panels/TimesheetPanelBridge.h`
+- `src/ui/panels/TimesheetPanelBridge.cpp`
+- `tools/timesheet_panel_bridge_selftest.cpp`
+- `docs/timesheet_step4_5_panel_bridge_note.md`
+
+### 触っていない重要ファイル
+
+- `src/ui/panels/CellPanel.cpp`
+- `src/ui/AppDrawingMode.cpp`
+- `src/app/main.cpp`
+- `docs/final_spec_v6.md`
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+
+### 既知の未解決問題
+
+- タイムシート入力はまだ保存されない。
+- タイムシート入力はまだキャンバス表示、再生、出力へ反映されない。
+- 追加欄はまだ表示のみで編集不可。
+
+### 次に推奨する作業
+
+- Step 5として、App内に正式Timesheetの一時保持領域を作り、Panel/Core bridgeを使ってUI入力を同期する。
+
+### なぜその作業を推奨するか
+
+- UI入力と正式データの変換境界を先に挟んだため、次はApp内で一時保持できる状態にすると保存接続へ安全に進める。
+- いきなりキャンバス表示へ反映すると、作画F選択とタイムラインT選択が混ざる危険があるため。
+
+### Codex/AI handoff note
+
+- Step 4.5 is intentionally not connected to ProjectIO or rendering.
+- Use `buildTimesheetFromPanelState()` only as a boundary conversion.
+- Keep drawing frame and timeline frame separated in later steps.

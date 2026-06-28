@@ -175,6 +175,7 @@ add_executable(perapera_anime_maker
     src/ui/panels/BrushPanel.cpp
     src/ui/panels/CellPanel.cpp
     src/ui/panels/TimesheetPanel.cpp
+    src/ui/panels/TimesheetPanelBridge.cpp
     src/ui/panels/ColorPanel.cpp
     src/ui/panels/LayerPanel.cpp
     src/ui/panels/FramePanel.cpp
@@ -252,6 +253,16 @@ target_include_directories(perapera_cut_io_selftest PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+add_executable(perapera_timesheet_panel_bridge_selftest
+    tools/timesheet_panel_bridge_selftest.cpp
+    src/core/Timesheet.cpp
+    src/ui/panels/TimesheetPanelBridge.cpp
+)
+
+target_include_directories(perapera_timesheet_panel_bridge_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 target_link_libraries(perapera_cut_io_selftest PRIVATE
     nlohmann_json::nlohmann_json
 )
@@ -261,11 +272,13 @@ if (MSVC)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_cut_io_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_cut_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # WindowsでSDL3.dllをexe横にコピーする。
