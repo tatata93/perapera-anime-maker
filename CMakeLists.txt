@@ -143,6 +143,8 @@ add_executable(perapera_anime_maker
     src/core/Frame.cpp
     src/core/Cell.cpp
     src/core/Project.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetResolver.cpp
 
     src/io/ProjectIO.cpp
     src/io/PngExporter.cpp

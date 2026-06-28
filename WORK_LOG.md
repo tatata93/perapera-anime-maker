@@ -703,3 +703,57 @@ UI、保存、描画反映を先に作ると、前回と同様に責務が混ざ
 ### Codex/AI handoff note
 
 The provisional timesheet implementation was rolled back to the pre-timesheet commit. Do not revive the previous Project-level dense timesheet or the CellPanel embedded/detached timesheet UI. Use `docs/timesheet_spec_v1.md` as the planning baseline. Implement the new timesheet from core models first, then IO, then UI, then display/export integration.
+# WORK_LOG 追記案
+
+## 2026-06-29 Timesheet Rebuild Step 1: core model scaffold
+
+### 今回やったこと
+
+- 正式タイムシート実装のStep 1として、UIや保存処理へ接続しないcore側の最小モデルを追加した。
+- `src/core/Timesheet.h` / `src/core/Timesheet.cpp` を追加し、Cut単位で使う正式タイムシートv1のデータ構造を定義した。
+- `src/core/TimesheetResolver.h` / `src/core/TimesheetResolver.cpp` を追加し、タイムラインTとセル列から表示対象の作画F番号を解決する純粋なcore処理を追加した。
+- `src/core/Cut.h` を追加し、将来の `cut.json` 接続前提となる最小Cutモデルを追加した。
+- `docs/timesheet_window_policy_v1.md` を追加し、タイムシートウィンドウを本体大ウィンドウ外へドラッグ可能にする要望と、ImGui multi-viewports対応確認の方針を記録した。
+- `CMakeLists.txt` に `src/core/Timesheet.cpp` と `src/core/TimesheetResolver.cpp` を追加し、coreモデルが通常ビルドでコンパイルされるようにした。
+
+### 今回やらなかったこと
+
+- 既存Projectへ正式Timesheetを接続していない。
+- 既存作画モード、CellPanel、TimelinePanel、保存読み込み、PNG/MP4出力へ接続していない。
+- タイムシートUIはまだ作っていない。
+- ImGui multi-viewportsはまだ有効化していない。
+- 既存の未追跡ファイル `AGENTS_for_perapera_anime.md`、`README_timesheet_step_c.md`、`README_timesheet_step_d.md`、既存docs群、`run_timesheet_crash_log.txt` は触っていない。
+
+### 触ったファイル
+
+- `CMakeLists.txt`
+- `src/core/Timesheet.h`
+- `src/core/Timesheet.cpp`
+- `src/core/TimesheetResolver.h`
+- `src/core/TimesheetResolver.cpp`
+- `src/core/Cut.h`
+- `docs/timesheet_window_policy_v1.md`
+
+### 既知の未解決問題
+
+- 正式TimesheetはまだProject/Cut保存形式に接続されていない。
+- UIがないため、ユーザー操作でタイムシートを編集することはまだできない。
+- キャンバス表示、再生、PNG連番、MP4にはまだ反映されない。
+- 外部ドラッグ可能なタイムシートウィンドウは、SDL3 + SDL_Renderer3バックエンドのmulti-viewports対応可否を確認してから実装する。
+
+### 次に推奨する作業
+
+- Step 2として `io` 側に `cut.json` / `timesheet` の保存読み込みを追加する前に、core resolverの小さな動作確認コードまたは単体確認用の開発用ログを用意する。
+- その後、TimesheetPanelは表示だけから開始し、編集・キャンバス反映・出力反映を段階的につなぐ。
+
+### なぜその作業を推奨するか
+
+- 前回はUI、保存、表示反映、出力を同時に接続して壊れたため、今回はcoreの意味を先に固定し、既存作画機能へ影響しない状態で進めるため。
+
+### Codex/AI handoff note
+
+- Step 1のcoreモデルは既存アプリ状態へまだ接続していないため、実行時挙動は変えない。
+- `TimesheetEntry::timelineFrame` と `Timesheet::totalFrames` は1始まりのタイムラインTとして扱う。
+- `drawingFrameNumber` もUI上の作画F番号として1始まりで扱う。既存 `Cell.frames` のvector indexへ接続する時は `drawingFrameNumber - 1` に変換すること。
+- `Hold` は「前状態維持」であり、直前が `Null` なら非表示を維持する。
+- `Key` / `Inbetween` は表示上はDrawing指定と同様に作画Fを表示し、制作管理属性として区別する。

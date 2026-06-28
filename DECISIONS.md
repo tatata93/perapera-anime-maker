@@ -271,3 +271,18 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - TimesheetResolverはcore側に置く。
 - 実装順は core -> io -> UI -> 表示反映 -> 再生/出力反映 とする。
 - MVPでは複雑な撮影効果、カメラキーフレーム、絵コンテ/レイアウト完全接続は行わない。
+# DECISIONS 追記案
+
+## 2026-06-29 Timesheet Rebuild Step 1 decisions
+
+- 正式タイムシートはProject直下の仮データではなく、Cut単位のデータとして設計する。
+- Step 1では既存Projectへ接続せず、`core` 側のモデルと解決処理だけを追加する。
+- タイムラインTは1始まりで扱う。
+- 作画F番号もUI上は1始まりで扱い、既存 `Cell.frames` へ接続するときだけ0始まりindexへ変換する。
+- タイムシート保存データは、全フレーム全セルの密な配列ではなく、記入されたマスを中心にした疎データを基本にする。
+- `Hold` は「前状態維持」とする。前状態が非表示なら非表示のまま。
+- `Null` は空セルとして扱い、以降の `Hold` でも非表示を保持する。
+- `Key` と `Inbetween` は表示解決上は作画F指定だが、制作管理属性として区別する。
+- タイムシートウィンドウは将来的に独立 `TimesheetPanel` とし、CellPanelには戻さない。
+- タイムシートウィンドウをソフト本体の大ウィンドウ外へドラッグできる機能は、Dear ImGui multi-viewportsとSDL3 + SDL_Renderer3バックエンドの安定性を確認したうえで実装する。
+- 外部ドラッグ機能は便利機能であり、データモデル、保存、表示解決、再生、出力より優先しない。
