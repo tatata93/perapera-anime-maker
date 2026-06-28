@@ -19,6 +19,12 @@ Project Project::createDefault()
     Cell defaultCell = Cell::createDefault();
     project.cellOrder.push_back(defaultCell.id);
     project.cells.push_back(defaultCell);
+
+    // Timesheet Step A:
+    // 初期状態では全タイムラインフレームで、既定セルのF001をHold表示する。
+    // 保存/読み込み、再生反映、UI編集は後続Stepで実装する。
+    project.timesheet = Timesheet::createDefault(project.cells, project.timeline.totalFrames);
+
     return project;
 }
 

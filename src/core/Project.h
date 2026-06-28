@@ -3,11 +3,13 @@
 // このファイルの役割:
 // 作品全体の状態を表すルートデータ構造を定義する。
 // Project はセル集合、キャンバス設定、出力設定、カメラ、音声設定を持つ。
+// Phase 2-pre Timesheet Step A: Scene/Cut移行前の仮TimesheetをProject直下に追加する。
 
 #include <string>
 #include <vector>
 
 #include "core/Cell.h"
+#include "core/Timesheet.h"
 #include "core/WorkCanvas.h"
 
 namespace perapera {
@@ -39,13 +41,18 @@ struct Project {
     WorkCanvas canvas;
     OutputSettings output;
     TimelineSettings timeline;
+
+    // 仮Timesheet。
+    // 最終的には Scene/Cut 移行後に Cut 側へ移す想定だが、
+    // 現段階では既存の Project::cells 構造を壊さずセルごとの露出タイミングの土台を置く。
+    Timesheet timesheet;
+
     CameraSettings camera;
     AudioSettings audio;
     std::vector<Cell> cells;
     std::vector<std::string> cellOrder;
 
     static Project createDefault();
-
     Cell* cellById(const std::string& cellId);
     const Cell* cellById(const std::string& cellId) const;
 };
