@@ -298,3 +298,19 @@ Scope boundary:
 Recommendation rule for future work:
 - When choosing the next task, prioritize what the software needs structurally for its final purpose.
 - For animation production, timing/exposure control takes priority over cosmetic cell movement, because placement without exposure timing does not define animation playback.
+
+## 2026-06-29 - Decision: Timesheet editor should be detached from CellPanel
+
+Decision:
+- The provisional Timesheet editor should be displayed as a separate ImGui window instead of being embedded in the right-side CellPanel.
+
+Reason:
+- The right-side CellPanel is already responsible for compact cell management. Embedding timing controls there made editing cramped and difficult.
+- A detached Timesheet window matches the nature of the feature better: timing/exposure editing needs horizontal/vertical space and should not compete with cell management controls.
+- Keeping CellPanel compact also makes the next step easier: Timesheet Step E can focus on connecting timing data to canvas/playback without changing the cell-management UI again.
+
+Current limitation:
+- The Timesheet window edits `project.timesheet`, but canvas display and playback still do not use the Timesheet resolver yet.
+
+Recommendation:
+- Prioritize Timesheet Step E next, because the user needs the timing data to control what is actually displayed before moving on to cell placement controls.

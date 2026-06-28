@@ -710,3 +710,28 @@ Verification notes:
 Next recommended work:
 - Timesheet Step E should connect the resolver to canvas display/playback so the UI's timing edits actually affect visible cell frames.
 - Do not start CellPlacement UI before Step E, because the software still needs to prove that timing data controls playback.
+
+## 2026-06-29 - Timesheet Step D2: detached timesheet window
+
+AI/Codex handoff note:
+- Moved the provisional Timesheet editor out of the compact drawing-mode CellPanel into a detached ImGui window named `Timesheet`.
+- Kept the CellPanel focused on cell management: add, duplicate, delete, rename/category, visibility, opacity, display mode, solo, and order controls.
+- Added a small `Open Timesheet Window` button in CellPanel so the user can reopen the Timesheet window if it is closed.
+- Kept the existing provisional Timesheet data helpers, normalization, exposure editing, one-frame/two-frame exposure fill, and cell add/delete synchronization behavior.
+- Added a larger detached Timesheet editor area with current timeline frame, selected/edit cell selector, current exposure controls, and an overview table for all cells at the selected timeline frame.
+- This step still does not connect Timesheet to canvas playback/rendering. That remains the recommended next step because the user needs timing edits to affect the actual drawing view and playback.
+
+Changed files:
+- `src/ui/panels/CellPanel.h`
+- `src/ui/panels/CellPanel.cpp`
+
+Not changed in this step:
+- `src/core/Timesheet.h`
+- `src/core/TimesheetResolver.h`
+- `src/io/TimesheetIO.h`
+- `src/ui/AppDrawingMode.cpp`
+- ProjectIO save/load behavior
+- Canvas/playback/output timing behavior
+
+Recommended next work:
+- Timesheet Step E: connect `TimesheetResolver` to drawing-mode canvas display and playback, while preserving Active / Visible / Solo display modes.

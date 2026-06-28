@@ -1,5 +1,5 @@
 #pragma once
-// This file's role: draw the drawing-mode Cell panel and expose compact cell display mode state. v1.9d adds a mini timesheet editor inside the drawing-mode Cell panel while keeping compact cell controls.
+// This file's role: draw the drawing-mode Cell panel and expose compact cell display mode state. v1.9e keeps compact cell controls and moves the timesheet editor into a detached ImGui window.
 
 #include "core/Project.h"
 

@@ -1,4 +1,4 @@
-// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.9d adds a mini timesheet editor for the selected cell while keeping compact selected-cell controls.
+// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.9e moves the timesheet editor into a detached ImGui window so the right Cell panel stays compact.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -29,6 +29,7 @@ constexpr std::array<CategoryOption, 6> kCategoryOptions{{
 
 CellDisplayMode gDisplayMode = CellDisplayMode::VisibleCells;
 int gSoloCellIndex = -1;
+bool gTimesheetWindowOpen = true;
 
 std::string sanitizeIdComponent(const std::string& value, const std::string& fallback)
 {
@@ -856,13 +857,17 @@ void drawCellList(Project& project, CellPanelResult& result)
 }
 
 
-void drawMiniTimesheetControls(Project& project, CellPanelResult& result)
+void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPanelResult& result)
 {
+    if (!gTimesheetWindowOpen) {
+        return;
+    }
     if (project.cells.empty()) {
         return;
     }
 
     static int editTimelineFrame = 0;
+    static int editCellIndex = -1;
 
     if (normalizeTimesheetForProject(project)) {
         markTimesheetChanged(result);
@@ -870,52 +875,83 @@ void drawMiniTimesheetControls(Project& project, CellPanelResult& result)
 
     const int totalFrames = safeTimelineFrameCount(project);
     editTimelineFrame = std::clamp(editTimelineFrame, 0, totalFrames - 1);
-    result.selectedCellIndex = std::clamp(result.selectedCellIndex, 0, static_cast<int>(project.cells.size()) - 1);
 
-    Cell& cell = project.cells[static_cast<std::size_t>(result.selectedCellIndex)];
-    if (cell.id.empty()) {
+    const int maxCellIndex = static_cast<int>(project.cells.size()) - 1;
+    if (editCellIndex < 0 || editCellIndex > maxCellIndex) {
+        editCellIndex = std::clamp(activeCellIndex, 0, maxCellIndex);
+    }
+    editCellIndex = std::clamp(editCellIndex, 0, maxCellIndex);
+
+    ImGui::SetNextWindowSize(ImVec2(620.0f, 560.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Timesheet", &gTimesheetWindowOpen)) {
+        ImGui::End();
         return;
     }
 
-    TimesheetCellExposure* exposure = ensureTimesheetExposure(project, editTimelineFrame, cell.id);
-    if (exposure == nullptr) {
-        ImGui::TextDisabled("Timesheet exposure unavailable.");
-        return;
-    }
-
-    const int drawingFrameCount = frameCountForCell(cell);
-    exposure->drawingFrameIndex = std::clamp(exposure->drawingFrameIndex, 0, drawingFrameCount - 1);
-
-    ImGui::TextUnformatted("Mini Timesheet v1");
-    ImGui::TextDisabled("This edits timing only. Canvas playback hookup is next step.");
+    ImGui::TextUnformatted("Timesheet v1 - detached window");
+    ImGui::TextDisabled("Edits timing data only. Canvas/playback hookup is the next step.");
+    ImGui::Separator();
 
     int timelineFrameOneBased = editTimelineFrame + 1;
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderInt("T", &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
+    if (ImGui::SliderInt("Timeline frame", &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
         timelineFrameOneBased = std::clamp(timelineFrameOneBased, 1, totalFrames);
         editTimelineFrame = timelineFrameOneBased - 1;
-        exposure = ensureTimesheetExposure(project, editTimelineFrame, cell.id);
-        if (exposure == nullptr) {
-            return;
+    }
+
+    const int activeClamped = std::clamp(activeCellIndex, 0, maxCellIndex);
+    if (ImGui::Button("Use active cell")) {
+        editCellIndex = activeClamped;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("Active: %s", displayNameForCell(project.cells[static_cast<std::size_t>(activeClamped)], activeClamped).c_str());
+
+    Cell& cell = project.cells[static_cast<std::size_t>(editCellIndex)];
+    const std::string selectedCellLabel = displayNameForCell(cell, editCellIndex);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("Cell", selectedCellLabel.c_str())) {
+        for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
+            const bool selected = index == editCellIndex;
+            const std::string label = displayNameForCell(project.cells[static_cast<std::size_t>(index)], index);
+            if (ImGui::Selectable(label.c_str(), selected)) {
+                editCellIndex = index;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
         }
-        exposure->drawingFrameIndex = std::clamp(exposure->drawingFrameIndex, 0, drawingFrameCount - 1);
+        ImGui::EndCombo();
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Timeline frame to edit. This is independent from the bottom timeline until Step E.");
+
+    Cell& editCell = project.cells[static_cast<std::size_t>(editCellIndex)];
+    if (editCell.id.empty()) {
+        ImGui::TextDisabled("Selected cell has no id.");
+        ImGui::End();
+        return;
     }
+
+    TimesheetCellExposure* exposure = ensureTimesheetExposure(project, editTimelineFrame, editCell.id);
+    if (exposure == nullptr) {
+        ImGui::TextDisabled("Timesheet exposure unavailable.");
+        ImGui::End();
+        return;
+    }
+
+    const int drawingFrameCount = frameCountForCell(editCell);
+    exposure->drawingFrameIndex = std::clamp(exposure->drawingFrameIndex, 0, drawingFrameCount - 1);
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Current exposure");
 
     int drawingFrameOneBased = exposure->drawingFrameIndex + 1;
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderInt("Drawing", &drawingFrameOneBased, 1, drawingFrameCount, "F%03d")) {
+    if (ImGui::SliderInt("Drawing frame", &drawingFrameOneBased, 1, drawingFrameCount, "F%03d")) {
         drawingFrameOneBased = std::clamp(drawingFrameOneBased, 1, drawingFrameCount);
         exposure->drawingFrameIndex = drawingFrameOneBased - 1;
         if (exposure->kind == TimesheetExposureKind::Null) {
             exposure->kind = TimesheetExposureKind::Hold;
         }
         markTimesheetChanged(result);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Drawing frame displayed by the selected cell at this timeline frame.");
     }
 
     int kindIndex = 1;
@@ -950,55 +986,102 @@ void drawMiniTimesheetControls(Project& project, CellPanelResult& result)
 
     const float fullWidth = ImGui::GetContentRegionAvail().x;
     const float gap = ImGui::GetStyle().ItemSpacing.x;
-    const float half = std::max(70.0f, (fullWidth - gap) / 2.0f);
+    const float quarter = std::max(86.0f, (fullWidth - gap * 3.0f) / 4.0f);
 
-    if (ImGui::Button("Null", ImVec2(half, 0.0f))) {
+    if (ImGui::Button("Null", ImVec2(quarter, 0.0f))) {
         exposure->kind = TimesheetExposureKind::Null;
         markTimesheetChanged(result);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Hold", ImVec2(half, 0.0f))) {
+    if (ImGui::Button("Hold", ImVec2(quarter, 0.0f))) {
         exposure->kind = TimesheetExposureKind::Hold;
         markTimesheetChanged(result);
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Key", ImVec2(quarter, 0.0f))) {
+        exposure->kind = TimesheetExposureKind::Key;
+        markTimesheetChanged(result);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Inbetween", ImVec2(quarter, 0.0f))) {
+        exposure->kind = TimesheetExposureKind::Inbetween;
+        markTimesheetChanged(result);
+    }
 
-    if (ImGui::Button("1s to end", ImVec2(half, 0.0f))) {
+    const float half = std::max(120.0f, (fullWidth - gap) / 2.0f);
+    if (ImGui::Button("Expose on ones to end", ImVec2(half, 0.0f))) {
         fillSelectedCellExposures(project,
-                                  cell,
+                                  editCell,
                                   editTimelineFrame,
                                   exposure->drawingFrameIndex,
                                   1,
                                   TimesheetExposureKind::Hold);
         markTimesheetChanged(result);
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Expose selected cell on ones from this timeline frame to the end.");
-    }
     ImGui::SameLine();
-    if (ImGui::Button("2s to end", ImVec2(half, 0.0f))) {
+    if (ImGui::Button("Expose on twos to end", ImVec2(half, 0.0f))) {
         fillSelectedCellExposures(project,
-                                  cell,
+                                  editCell,
                                   editTimelineFrame,
                                   exposure->drawingFrameIndex,
                                   2,
                                   TimesheetExposureKind::Hold);
         markTimesheetChanged(result);
     }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Expose selected cell on twos from this timeline frame to the end.");
-    }
 
-    const char* visibleFrameLabel = exposure->kind == TimesheetExposureKind::Null ? "none" : "F";
     if (exposure->kind == TimesheetExposureKind::Null) {
-        ImGui::TextDisabled("T%03d: %s -> Null", editTimelineFrame + 1, cell.id.c_str());
+        ImGui::TextDisabled("T%03d: %s -> Null", editTimelineFrame + 1, editCell.id.c_str());
     } else {
         ImGui::TextDisabled("T%03d: %s -> F%03d (%s)",
                             editTimelineFrame + 1,
-                            cell.id.c_str(),
+                            editCell.id.c_str(),
                             exposure->drawingFrameIndex + 1,
                             exposureKindLabel(exposure->kind));
     }
-    (void)visibleFrameLabel;
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("All cells at this timeline frame");
+    if (ImGui::BeginTable("TimesheetFrameOverview",
+                          4,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
+                          ImVec2(0.0f, 190.0f))) {
+        ImGui::TableSetupColumn("Cell");
+        ImGui::TableSetupColumn("Kind");
+        ImGui::TableSetupColumn("Drawing");
+        ImGui::TableSetupColumn("Opacity");
+        ImGui::TableHeadersRow();
+
+        for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
+            Cell& rowCell = project.cells[static_cast<std::size_t>(index)];
+            TimesheetCellExposure* rowExposure = rowCell.id.empty() ? nullptr : ensureTimesheetExposure(project, editTimelineFrame, rowCell.id);
+            if (rowExposure == nullptr) {
+                continue;
+            }
+            rowExposure->drawingFrameIndex = std::clamp(rowExposure->drawingFrameIndex, 0, frameCountForCell(rowCell) - 1);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::PushID(index);
+            const bool selected = index == editCellIndex;
+            if (ImGui::Selectable(displayNameForCell(rowCell, index).c_str(), selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                editCellIndex = index;
+            }
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextUnformatted(exposureKindLabel(rowExposure->kind));
+            ImGui::TableSetColumnIndex(2);
+            if (rowExposure->kind == TimesheetExposureKind::Null) {
+                ImGui::TextDisabled("-");
+            } else {
+                ImGui::Text("F%03d", rowExposure->drawingFrameIndex + 1);
+            }
+            ImGui::TableSetColumnIndex(3);
+            ImGui::Text("%d%%", static_cast<int>(std::clamp(rowCell.opacity, 0.0f, 1.0f) * 100.0f + 0.5f));
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::End();
 }
 
 void drawSelectedCellControls(Project& project,
@@ -1181,7 +1264,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.9d Timesheet");
+    ImGui::TextUnformatted("CellPanel v1.9e");
     drawAddCellPopup(project, result);
     ImGui::Separator();
 
@@ -1202,7 +1285,10 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     drawCellList(project, result);
     ImGui::Separator();
 
-    drawMiniTimesheetControls(project, result);
+    ImGui::TextDisabled("Timesheet is now a separate window.");
+    if (ImGui::SmallButton("Open Timesheet Window")) {
+        gTimesheetWindowOpen = true;
+    }
     ImGui::Separator();
 
     drawSelectedCellControls(project,
@@ -1238,6 +1324,8 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
             result.selectedCellIndex = 0;
         }
     }
+
+    drawDetachedTimesheetWindow(project, result.selectedCellIndex, result);
 
     return result;
 }
