@@ -489,6 +489,7 @@ void App::drawDrawingMode()
         ImGui::SameLine();
         ImGui::Checkbox(u8c(u8"ピンポン##TimesheetPlaybackPingPong"), &timesheetPlaybackPingPong_);
         ImGui::TextDisabled(u8c(u8"タイムシート再生はTだけを進めます。作画F編集対象は変更しません。"));
+        ImGui::TextDisabled(u8c(u8"指パラ/通常タイムライン再生中は、作画F再生表示を優先します。"));
         ImGui::End();
 
         if (isPlayingTimesheet_) {
@@ -795,10 +796,11 @@ void App::drawCanvasArea(float rightWidth)
     const ui::CellDisplayMode cellDisplayMode = ui::currentCellDisplayMode();
     const int soloCellIndex = ui::currentSoloCellIndex();
 
-    // Timesheet Rebuild Step 6:
+    // Timesheet Rebuild Step 6.6:
     // タイムシートに1件以上入力がある場合だけ、T選択をキャンバス表示へ反映する。
-    // activeFrameIndex_ は作画F編集対象として維持し、ここでは表示プレビューだけを切り替える。
-    const bool useTimesheetPreview = countTimesheetEntries(workingTimesheet_) > 0;
+    // ただし指パラ/通常タイムライン再生中は activeFrameIndex_ の再生表示を優先する。
+    // activeFrameIndex_ は作画F編集対象として維持し、タイムシートT表示とは混ぜない。
+    const bool useTimesheetPreview = countTimesheetEntries(workingTimesheet_) > 0 && !isPlayingFrames_;
     const int timesheetTimelineFrame = useTimesheetPreview
         ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
         : activeFrameIndex_ + 1;

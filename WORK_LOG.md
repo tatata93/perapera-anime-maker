@@ -1443,3 +1443,45 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 
 ### Codex/AI handoff note
 - Step 6.5 added only preview playback of timesheet timeline frames. Do not treat this as final production playback/export support. Keep drawing frame selection separate from timeline frame playback.
+
+## Timesheet Rebuild Step 6.6: タイムライン再生表示優先修正
+
+### 今回やったこと
+
+- タイムシート入力が存在する状態で通常の指パラ/タイムライン再生を行うと、`activeFrameIndex_` が進んでもキャンバスがタイムシートT表示に固定され、再生が動いていないように見える問題を修正した。
+- `isPlayingFrames_` が true の間はタイムシートプレビュー表示を一時停止し、通常再生の作画F表示を優先するようにした。
+- タイムシート再生ウィンドウに、指パラ/通常タイムライン再生中は作画F再生表示を優先する旨の説明を追加した。
+
+### 今回やらなかったこと
+
+- タイムシート再生と通常タイムライン再生の統合。
+- PNG/MP4出力反映。
+- Project保存との自動連動。
+- セリフ/カメラ/撮影/素材メモ欄の再生同期。
+
+### 触ったファイル
+
+- src/ui/AppDrawingMode.cpp
+- docs/timesheet_step6_6_timeline_playback_fix_note.md
+
+### 触っていない重要ファイル
+
+- AGENTS_for_perapera_anime.md
+- README_timesheet_step_c.md
+- README_timesheet_step_d.md
+- docs/final_spec_v6.md
+- my_anime_project/
+- build/
+
+### 既知の未解決問題
+
+- タイムシート再生はまだPNG/MP4出力へ反映していない。
+- タイムシート再生と通常指パラ再生は別機能として分かれている。
+
+### 次に推奨する作業
+
+- Step 7: タイムシート表示結果を出力系へ渡す前段を作る。
+
+### Codex/AI handoff note
+
+通常の指パラ/タイムライン再生中は `isPlayingFrames_` を優先し、タイムシートプレビュー表示を一時停止する方針にした。`activeFrameIndex_` とタイムシートTは引き続き混ぜない。

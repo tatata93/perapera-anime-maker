@@ -422,3 +422,10 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - 指パラ再生とタイムシート再生は同時実行しない。
 - タイムシート再生UIはまだ試作段階であり、出力・保存・音声同期には接続しない。
 - 次の出力対応では、表示と出力が同じTimesheetResolver結果を使うようにする。
+
+## Timesheet Rebuild Step 6.6 decision
+
+- タイムシート入力がある場合でも、通常の指パラ/タイムライン再生中は `activeFrameIndex_` の再生表示を優先する。
+- タイムシート再生はタイムシートT専用、通常タイムライン再生は作画F専用として扱う。
+- `activeFrameIndex_` とタイムシートTは混ぜない。
+- タイムシートT表示は、通常タイムライン再生が停止しているときにキャンバスへ反映する。
