@@ -59,6 +59,7 @@ private:
 
     int activeCellIndex_ = 0;
     int activeFrameIndex_ = 0;
+    int activeTimelineFrameIndex_ = 0;
     int activeLayerIndex_ = 0;
 
     ui::BrushSettings brushSettings_;
@@ -141,6 +142,7 @@ private:
     void redo();
     void afterProjectChanged();
     void clampSelection();
+    void syncActiveTimesheetExposureToDrawingFrame();
 
     void addLayer();
     void deleteActiveLayer();

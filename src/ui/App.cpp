@@ -10,6 +10,7 @@
 
 #include <imgui.h>
 
+#include "core/TimesheetResolver.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
 #include "ui/panels/ExportPanel.h"
@@ -271,13 +272,15 @@ void App::drawStatusBar()
     const int frameCount = activeCell() == nullptr ? 0 : static_cast<int>(activeCell()->frames.size());
     const int layerCount = frame == nullptr ? 0 : static_cast<int>(frame->layers.size());
     ImGui::BeginChild("StatusBar", ImVec2(0.0f, 24.0f), true);
-    ImGui::Text("fps: %.1f | canvas: %dx%d | zoom: %.0f%% | frame: %d/%d | layer: %d/%d | brush: %.1f px",
+    ImGui::Text("fps: %.1f | canvas: %dx%d | zoom: %.0f%% | draw F: %d/%d | sheet T: %d/%d | layer: %d/%d | brush: %.1f px",
                 ImGui::GetIO().Framerate,
                 project_.canvas.width,
                 project_.canvas.height,
                 canvasView_.zoom * 100.0f,
                 activeFrameIndex_ + 1,
                 frameCount,
+                activeTimelineFrameIndex_ + 1,
+                TimesheetResolver::timesheetFrameCount(project_),
                 activeLayerIndex_ + 1,
                 layerCount,
                 brushSettings_.radiusPx);
@@ -380,6 +383,7 @@ void App::afterProjectChanged()
     } else {
         canvasRenderer_.markAllDirty();
     }
+    activeTimelineFrameIndex_ = TimesheetResolver::clampTimelineFrame(project_, activeTimelineFrameIndex_);
 }
 
 void App::clampSelection()
@@ -406,6 +410,7 @@ void App::clampSelection()
         frame->layers.push_back(Layer::createDefault(1));
     }
     activeLayerIndex_ = std::clamp(activeLayerIndex_, 0, static_cast<int>(frame->layers.size()) - 1);
+    activeTimelineFrameIndex_ = TimesheetResolver::clampTimelineFrame(project_, activeTimelineFrameIndex_);
 }
 
 } // namespace perapera

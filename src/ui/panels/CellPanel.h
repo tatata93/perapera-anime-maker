@@ -18,7 +18,9 @@ struct CellPanelResult {
     bool projectStructureChanged = false;
     bool timesheetChanged = false; // タイムシートの露出指定が変更された
     bool timelineFrameChanged = false; // タイムシートウィンドウ側で表示中タイムラインFを変更した
+    bool drawingFrameChanged = false; // タイムシート欄から編集対象の作画Fを変更した
     int selectedTimelineFrame = 0; // 0-based
+    int selectedDrawingFrameIndex = 0; // 0-based
 };
 
 CellPanelResult drawCellPanel(Project& project, int activeCellIndex, int activeTimelineFrame = 0);

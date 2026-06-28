@@ -996,8 +996,12 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, int acti
                     editTimelineFrame = timelineFrame;
                     editCellIndex = index;
                     lastObservedActiveTimelineFrame = editTimelineFrame;
+                    result.selectedCellIndex = index;
                     result.selectedTimelineFrame = editTimelineFrame;
+                    result.selectedDrawingFrameIndex = sheetExposure->drawingFrameIndex;
+                    result.selectionChanged = true;
                     result.timelineFrameChanged = true;
+                    result.drawingFrameChanged = true;
                 }
                 if (selectedSlot) {
                     ImGui::PopStyleColor();
@@ -1388,6 +1392,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex, int activeT
 {
     CellPanelResult result{};
     result.selectedCellIndex = activeCellIndex;
+    result.selectedDrawingFrameIndex = 0;
 
     static int editingCellIndex = -1;
     static std::string editingCellId;

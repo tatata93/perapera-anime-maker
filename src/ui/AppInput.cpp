@@ -80,6 +80,7 @@ bool App::stepActiveFrame(int delta)
     }
 
     clampSelection();
+    syncActiveTimesheetExposureToDrawingFrame();
     // フレーム移動は表示対象キーが変わるだけなので、全dirtyは不要。
     // ここでmarkAllDirty()すると任意フレーム選択のたびにキャッシュ判定・再ベイク待ちが出る。
     lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
@@ -264,6 +265,7 @@ void App::handleFrameShortcuts()
             isPlayingFrames_ = false;
             activeFrameIndex_ = 0;
             clampSelection();
+            syncActiveTimesheetExposureToDrawingFrame();
             lastMessage_ = "frame stepped to 1";
         }
     }
@@ -275,6 +277,7 @@ void App::handleFrameShortcuts()
                 isPlayingFrames_ = false;
                 activeFrameIndex_ = lastIndex;
                 clampSelection();
+                syncActiveTimesheetExposureToDrawingFrame();
                 lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
             }
         }
@@ -294,6 +297,7 @@ void App::drawFingerPlaybackControls()
             isPlayingFrames_ = false;
             activeFrameIndex_ = 0;
             clampSelection();
+            syncActiveTimesheetExposureToDrawingFrame();
             lastMessage_ = "frame stepped to 1";
         }
     }
@@ -318,6 +322,7 @@ void App::drawFingerPlaybackControls()
             isPlayingFrames_ = false;
             activeFrameIndex_ = static_cast<int>(cell->frames.size()) - 1;
             clampSelection();
+            syncActiveTimesheetExposureToDrawingFrame();
             lastMessage_ = "frame stepped to " + std::to_string(activeFrameIndex_ + 1);
         }
     }

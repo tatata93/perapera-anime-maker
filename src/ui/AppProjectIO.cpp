@@ -212,6 +212,7 @@ void App::loadProject()
     project_ = std::move(loaded);
     activeCellIndex_ = selection.cellIndex;
     activeFrameIndex_ = selection.frameIndex;
+    activeTimelineFrameIndex_ = selection.frameIndex;
     activeLayerIndex_ = selection.layerIndex;
     afterProjectChanged();
     if (!loadColorPalette(projectFolder, &error)) {
@@ -279,6 +280,7 @@ void App::saveLoadRoundTripCheck()
         project_ = std::move(loaded);
         activeCellIndex_ = selection.cellIndex;
         activeFrameIndex_ = selection.frameIndex;
+        activeTimelineFrameIndex_ = selection.frameIndex;
         activeLayerIndex_ = selection.layerIndex;
         afterProjectChanged();
         if (!loadColorPalette(projectFolder, &error)) {
@@ -301,12 +303,12 @@ void App::exportActivePng()
 
     const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
     const std::vector<ExportCellFrameRef> refs =
-        exportFrameRefsForCurrentDisplay(project_, activeCellIndex_, activeFrameIndex_);
+        exportFrameRefsForCurrentDisplay(project_, activeCellIndex_, activeTimelineFrameIndex_);
     const std::filesystem::path output = appio::absolutePath(exportState_.exportFolder) / "active_frame.png";
     std::string error;
     if (PngExporter::exportCellFrameRefs(refs, output, project_.canvas.width, project_.canvas.height, exportState_.exportMode, &error)) {
         lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) + ", " +
-            exportCellScopeText(cells) + ", timesheet T" + std::to_string(activeFrameIndex_ + 1) + "]: " + output.string();
+            exportCellScopeText(cells) + ", timesheet T" + std::to_string(activeTimelineFrameIndex_ + 1) + "]: " + output.string();
     } else {
         lastMessage_ = "PNG export failed: " + error;
     }

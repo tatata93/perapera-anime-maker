@@ -399,7 +399,7 @@ void App::drawLeftSidebar()
 }
 void App::drawRightSidebar()
 {
-    const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_, activeFrameIndex_);
+    const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_, activeTimelineFrameIndex_);
     const auto resetPreviewReadiness = [&]() {
         previewWarmCursor_ = activeFrameIndex_;
         previewReadyFlags_.clear();
@@ -407,7 +407,10 @@ void App::drawRightSidebar()
         previewReadyScanCursor_ = activeFrameIndex_;
     };
     if (cellPanelResult.timelineFrameChanged) {
-        activeFrameIndex_ = TimesheetResolver::clampTimelineFrame(project_, cellPanelResult.selectedTimelineFrame);
+        activeTimelineFrameIndex_ = TimesheetResolver::clampTimelineFrame(project_, cellPanelResult.selectedTimelineFrame);
+        if (cellPanelResult.drawingFrameChanged) {
+            activeFrameIndex_ = cellPanelResult.selectedDrawingFrameIndex;
+        }
         resetPreviewReadiness();
         canvasRenderer_.markAllDirty();
         lastMessage_ = "timesheet frame selected";
@@ -425,6 +428,12 @@ void App::drawRightSidebar()
         resetPreviewReadiness();
         canvasRenderer_.markAllDirty();
         lastMessage_ = "active cell changed";
+    } else if (cellPanelResult.drawingFrameChanged) {
+        activeFrameIndex_ = cellPanelResult.selectedDrawingFrameIndex;
+        clampSelection();
+        resetPreviewReadiness();
+        canvasRenderer_.markAllDirty();
+        lastMessage_ = "drawing frame selected";
     } else if (cellPanelResult.timesheetChanged) {
         resetPreviewReadiness();
         canvasRenderer_.markAllDirty();
@@ -493,6 +502,7 @@ void App::drawTimelineArea()
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);
     if (activeFrameIndex_ != prevFrameIndex) {
+        syncActiveTimesheetExposureToDrawingFrame();
         canvasRenderer_.markAllDirty();
     }
     if (timelineAction == ui::TimelinePanelAction::AddFrame) {
@@ -579,10 +589,10 @@ void App::drawCanvasArea(float rightWidth)
     };
 
     if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
-        drawResolvedCell(TimesheetResolver::resolveCell(project_, activeFrameIndex_, activeCellIndex_), false);
+        drawResolvedCell(TimesheetResolver::resolveCell(project_, activeTimelineFrameIndex_, activeCellIndex_), false);
     } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
         const int safeSoloIndex = std::clamp(soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_, 0, static_cast<int>(project_.cells.size()) - 1);
-        drawResolvedCell(TimesheetResolver::resolveCell(project_, activeFrameIndex_, safeSoloIndex), false);
+        drawResolvedCell(TimesheetResolver::resolveCell(project_, activeTimelineFrameIndex_, safeSoloIndex), false);
         const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
         if (false && !soloCell.frames.empty()) {
             const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
@@ -592,7 +602,7 @@ void App::drawCanvasArea(float rightWidth)
     } else {
         TimesheetResolveOptions options;
         options.includeHiddenCells = false;
-        const ResolvedTimesheetFrame resolvedFrame = TimesheetResolver::resolveFrame(project_, activeFrameIndex_, options);
+        const ResolvedTimesheetFrame resolvedFrame = TimesheetResolver::resolveFrame(project_, activeTimelineFrameIndex_, options);
         for (const ResolvedTimesheetCell& resolved : resolvedFrame.cells) {
             drawResolvedCell(resolved, true);
         }

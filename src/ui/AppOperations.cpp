@@ -52,6 +52,60 @@ void renumberFrames(Cell& cell)
     }
 }
 
+void shiftTimesheetExposuresForFrameInsert(Project& project, const std::string& cellId, int insertIndex)
+{
+    if (cellId.empty()) {
+        return;
+    }
+    for (TimesheetFrame& timesheetFrame : project.timesheet.frames) {
+        TimesheetCellExposure* exposure = timesheetFrame.exposureForCell(cellId);
+        if (exposure != nullptr && exposure->drawingFrameIndex >= insertIndex) {
+            ++exposure->drawingFrameIndex;
+        }
+    }
+}
+
+void shiftTimesheetExposuresForFrameDelete(Project& project, const std::string& cellId, int deleteIndex)
+{
+    if (cellId.empty()) {
+        return;
+    }
+    for (TimesheetFrame& timesheetFrame : project.timesheet.frames) {
+        TimesheetCellExposure* exposure = timesheetFrame.exposureForCell(cellId);
+        if (exposure == nullptr) {
+            continue;
+        }
+        if (exposure->drawingFrameIndex > deleteIndex) {
+            --exposure->drawingFrameIndex;
+        } else if (exposure->drawingFrameIndex == deleteIndex) {
+            exposure->drawingFrameIndex = std::max(0, deleteIndex - 1);
+        }
+    }
+}
+
+void setTimesheetExposureForActiveSlot(Project& project,
+                                       const Cell& cell,
+                                       int timelineFrameIndex,
+                                       int drawingFrameIndex)
+{
+    if (cell.id.empty()) {
+        return;
+    }
+    const int totalFrames = std::max(1, project.timeline.totalFrames);
+    project.timesheet.ensureFrameCount(totalFrames);
+    project.timesheet.ensureCell(cell.id, 0);
+    timelineFrameIndex = std::clamp(timelineFrameIndex, 0, totalFrames - 1);
+    drawingFrameIndex = std::clamp(drawingFrameIndex, 0, std::max(0, static_cast<int>(cell.frames.size()) - 1));
+    TimesheetCellExposure* exposure = project.timesheet.exposureOrNull(timelineFrameIndex, cell.id);
+    if (exposure == nullptr) {
+        return;
+    }
+    exposure->drawingFrameIndex = drawingFrameIndex;
+    if (exposure->kind == TimesheetExposureKind::Null) {
+        exposure->kind = TimesheetExposureKind::Hold;
+    }
+}
+
 } // namespace
 
 void App::addLayer()
@@ -102,6 +156,16 @@ void App::clearActiveLayer()
     lastMessage_ = "layer cleared";
 }
 
+void App::syncActiveTimesheetExposureToDrawingFrame()
+{
+    Cell* cell = activeCell();
+    if (cell == nullptr) {
+        return;
+    }
+    activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, std::max(0, static_cast<int>(cell->frames.size()) - 1));
+    setTimesheetExposureForActiveSlot(project_, *cell, activeTimelineFrameIndex_, activeFrameIndex_);
+}
+
 void App::addFrame()
 {
     Cell* cell = activeCell();
@@ -116,6 +180,7 @@ void App::addFrame()
     activeFrameIndex_ = frameCount <= 0 ? 0 : std::clamp(activeFrameIndex_, 0, frameCount - 1);
     const int insertIndex = frameCount <= 0 ? 0 : activeFrameIndex_ + 1;
 
+    shiftTimesheetExposuresForFrameInsert(project_, cell->id, insertIndex);
     cell->frames.insert(cell->frames.begin() + insertIndex, Frame::createDefault(insertIndex + 1));
     renumberFrames(*cell);
     appio::normalizeCellStructure(project_);
@@ -123,6 +188,7 @@ void App::addFrame()
     activeFrameIndex_ = insertIndex;
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
+    syncActiveTimesheetExposureToDrawingFrame();
     clampSelection();
     canvasRenderer_.clearLayerCaches();
     lastMessage_ = "blank frame added and selected.";
@@ -140,11 +206,13 @@ void App::duplicateFrame()
     pushUndoSnapshot();
     const int insertIndex = std::clamp(activeFrameIndex_ + 1, 0, static_cast<int>(cell->frames.size()));
     Frame duplicate = *frame;
+    shiftTimesheetExposuresForFrameInsert(project_, cell->id, insertIndex);
     cell->frames.insert(cell->frames.begin() + insertIndex, duplicate);
     renumberFrames(*cell);
     appio::normalizeCellStructure(project_);
     activeFrameIndex_ = insertIndex;
     activeLayerIndex_ = 0;
+    syncActiveTimesheetExposureToDrawingFrame();
     clampSelection();
     canvasRenderer_.clearLayerCaches();
     lastMessage_ = "frame duplicated: count=" + std::to_string(cell->frames.size());
@@ -164,11 +232,14 @@ void App::deleteActiveFrame()
 
     pushUndoSnapshot();
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
-    cell->frames.erase(cell->frames.begin() + activeFrameIndex_);
+    const int deleteIndex = activeFrameIndex_;
+    shiftTimesheetExposuresForFrameDelete(project_, cell->id, deleteIndex);
+    cell->frames.erase(cell->frames.begin() + deleteIndex);
     renumberFrames(*cell);
     appio::normalizeCellStructure(project_);
     activeFrameIndex_ = std::clamp(activeFrameIndex_, 0, static_cast<int>(cell->frames.size()) - 1);
     activeLayerIndex_ = 0;
+    syncActiveTimesheetExposureToDrawingFrame();
     clampSelection();
     canvasRenderer_.clearLayerCaches();
     lastMessage_ = "frame deleted: count=" + std::to_string(cell->frames.size());
