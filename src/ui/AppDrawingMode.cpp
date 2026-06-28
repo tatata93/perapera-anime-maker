@@ -339,10 +339,13 @@ Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Str
 void App::drawDrawingMode()
 {
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
-    if (isColoringMode) {
+    clampSelection();
+    if (isColoringMode && pendingColoringModeSetup_) {
+        enterColoringMode();
+        pendingColoringModeSetup_ = false;
+    } else if (isColoringMode) {
         selectPaintLayerForColoring(true);
     }
-    clampSelection();
     handleFrameShortcuts();
     updateFramePlayback();
     ImGui::BeginChild("DrawingWorkspace", ImVec2(0.0f, -28.0f), true);

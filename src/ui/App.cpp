@@ -187,7 +187,7 @@ void App::drawModeTabs()
             const AppMode nextMode = modeFromIndex(index);
             currentMode_ = nextMode;
             if (currentMode_ == AppMode::Coloring) {
-                enterColoringMode();
+                pendingColoringModeSetup_ = true;
             }
         }
         if (selected) {
@@ -215,6 +215,7 @@ void App::drawModeWorkspace()
 
 void App::enterColoringMode()
 {
+    clampSelection();
     brushSettings_.tool = ui::ToolKind::FloodFill;
     if (selectPaintLayerForColoring(true)) {
         lastMessage_ = "coloring mode: Paint layer active";
@@ -225,6 +226,7 @@ void App::enterColoringMode()
 
 bool App::selectPaintLayerForColoring(bool createIfMissing)
 {
+    clampSelection();
     Frame* frame = activeFrame();
     if (frame == nullptr) {
         return false;

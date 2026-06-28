@@ -110,6 +110,7 @@ void setTimesheetExposureForActiveSlot(Project& project,
 
 void App::addLayer()
 {
+    clampSelection();
     Frame* frame = activeFrame();
     if (frame == nullptr) {
         lastMessage_ = "layer add failed: no active frame";
@@ -127,6 +128,7 @@ void App::addLayer()
 
 void App::deleteActiveLayer()
 {
+    clampSelection();
     Frame* frame = activeFrame();
     if (frame == nullptr || frame->layers.size() <= 1U) {
         lastMessage_ = "cannot delete last layer";
@@ -144,6 +146,7 @@ void App::deleteActiveLayer()
 
 void App::clearActiveLayer()
 {
+    clampSelection();
     Layer* layer = activeLayer();
     if (layer == nullptr) {
         lastMessage_ = "layer clear failed: no active layer";
@@ -168,6 +171,7 @@ void App::syncActiveTimesheetExposureToDrawingFrame()
 
 void App::addFrame()
 {
+    clampSelection();
     Cell* cell = activeCell();
     if (cell == nullptr) {
         lastMessage_ = "frame add failed: no active cell";
@@ -196,6 +200,7 @@ void App::addFrame()
 
 void App::duplicateFrame()
 {
+    clampSelection();
     Cell* cell = activeCell();
     Frame* frame = activeFrame();
     if (cell == nullptr || frame == nullptr) {
@@ -220,6 +225,7 @@ void App::duplicateFrame()
 
 void App::deleteActiveFrame()
 {
+    clampSelection();
     Cell* cell = activeCell();
     if (cell == nullptr) {
         lastMessage_ = "frame delete failed: no active cell";

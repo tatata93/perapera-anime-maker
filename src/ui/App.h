@@ -61,6 +61,7 @@ private:
     int activeFrameIndex_ = 0;
     int activeTimelineFrameIndex_ = 0;
     int activeLayerIndex_ = 0;
+    bool pendingColoringModeSetup_ = false;
 
     ui::BrushSettings brushSettings_;
     ui::ColorPanelState colorPanelState_;
