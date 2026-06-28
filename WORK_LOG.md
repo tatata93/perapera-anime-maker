@@ -1045,3 +1045,41 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 
 - 以前の Step 3.5 修正スクリプトは `anonymous namespace` の閉じ位置を探して失敗した。
 - 今後は現在の実ソースを確認してから、完成ファイル方式でApp接続を行うこと。
+
+## 2026-06-29 Timesheet Rebuild Step 3.6: external drag verification
+
+### 今回やったこと
+- `src/app/main.cpp` に Dear ImGui multi-viewports の最小有効化処理を追加した。
+- `IMGUI_HAS_VIEWPORT` が定義されている構成だけ `ImGuiConfigFlags_ViewportsEnable` を有効にするようにした。
+- メインフレーム描画後に platform windows の更新・描画を呼ぶようにした。
+- `docs/timesheet_step3_6_external_drag_note.md` を追加した。
+
+### 今回やらなかったこと
+- タイムシート編集はまだ実装していない。
+- 保存読み込みへの接続はまだ行っていない。
+- キャンバス表示、再生、PNG/MP4出力への反映はまだ行っていない。
+- 外部ウィンドウ位置の保存はまだ行っていない。
+
+### 触ったファイル
+- `src/app/main.cpp`
+- `docs/timesheet_step3_6_external_drag_note.md`
+
+### 触っていない重要ファイル
+- `src/ui/panels/CellPanel.*`
+- `src/ui/panels/TimesheetPanel.*`
+- `src/core/Timesheet.*`
+- `src/io/TimesheetIO.*`
+- `src/io/CutIO.*`
+
+### 既知の未解決問題
+- SDL3 + SDL_Renderer3 + Dear ImGui の組み合わせで外部ウィンドウが安定するかは実機確認が必要。
+- 不安定な場合は本体内独立ウィンドウに戻す。
+
+### 次に推奨する作業
+- Step 4 として、タイムシート表の最小編集を追加する。
+
+### なぜその作業を推奨するか
+- 外部ドラッグ可否を先に確認したため、次はタイムシートの基本操作へ進める段階になったため。
+
+### Codex/AI handoff note
+- Step 3.6 is a viewport feasibility step only. Do not mix timesheet editing or resolver application here.

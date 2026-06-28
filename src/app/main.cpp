@@ -103,6 +103,37 @@ void setupJapaneseFont(ImGuiIO& io)
     std::fprintf(stderr, "Japanese UI font was not loaded. Fallback font used.\n");
 }
 
+void configureImGuiPlatformWindows(ImGuiIO& io)
+{
+    // Step 3.6:
+    // Dear ImGui の multi-viewports が利用できる構成では、通常の ImGui ウィンドウを
+    // メインSDLウィンドウの外へドラッグできるようにする。
+    // 利用できない構成では従来どおりメインウィンドウ内だけで動作する。
+#if defined(IMGUI_HAS_VIEWPORT)
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    if ((io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0) {
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
+#else
+    (void)io;
+#endif
+}
+
+void renderImGuiPlatformWindowsIfEnabled(const ImGuiIO& io)
+{
+#if defined(IMGUI_HAS_VIEWPORT)
+    if ((io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0) {
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
+    }
+#else
+    (void)io;
+#endif
+}
+
 } // namespace
 
 int main(int, char**)
@@ -140,6 +171,7 @@ int main(int, char**)
 
     setupJapaneseFont(io);
     perapera::ui::applyDarkTheme();
+    configureImGuiPlatformWindows(io);
 
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -173,6 +205,8 @@ int main(int, char**)
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
+
+        renderImGuiPlatformWindowsIfEnabled(io);
     }
 
     app.setRenderer(nullptr);

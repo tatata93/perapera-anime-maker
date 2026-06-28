@@ -343,3 +343,10 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - anonymous namespace の閉じ位置に依存する差し込み方式は採用しない。
 - この段階では、タイムシートウィンドウは表示確認を優先し、閉じると再表示される挙動を許容する。
 - 正式な開閉状態・外部ドラッグ・編集は後続Stepへ回す。
+
+## 2026-06-29 Timesheet Rebuild Step 3.6 decision
+
+- タイムシートウィンドウの外部ドラッグは、Dear ImGui multi-viewports が利用できる場合のみ有効化する。
+- `IMGUI_HAS_VIEWPORT` がない構成ではコンパイルが壊れないようにし、従来の本体内ウィンドウとして動作させる。
+- このStepでは、タイムシート編集・保存・表示反映・出力反映は行わない。
+- 外部ドラッグが不安定な場合は、正式タイムシートUIは本体内独立ウィンドウを標準とし、外部ウィンドウ化は後回しにする。
