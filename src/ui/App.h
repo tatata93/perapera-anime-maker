@@ -93,6 +93,14 @@ private:
     int playbackDirection_ = 1;
     float playbackSpeed_ = 1.0f;
     float playbackAccumulator_ = 0.0f;
+
+    // Timesheet Rebuild Step 6.5:
+    // タイムシートTだけを進める試作再生。activeFrameIndex_ は変更しない。
+    bool isPlayingTimesheet_ = false;
+    bool timesheetPlaybackPingPong_ = false;
+    int timesheetPlaybackDirection_ = 1;
+    float timesheetPlaybackSpeed_ = 1.0f;
+    float timesheetPlaybackAccumulator_ = 0.0f;
     int previewWarmCursor_ = 0;
     CanvasDisplayMode previewReadyDisplayMode_ = CanvasDisplayMode::Drawing;
     std::vector<char> previewReadyFlags_;

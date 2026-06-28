@@ -1401,3 +1401,45 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 ### Codex/AI handoff note
 - T選択で `activeFrameIndex_` を変えない方針を維持すること。
 - 表示対象Fと編集対象Fが違う場合は、誤編集を避けるため入力ロックを続けるか、明示的な「表示Fを編集対象にする」操作を追加してから解除すること。
+
+## 2026-06-29 Timesheet Rebuild Step 6.5: タイムシートT再生の試作
+
+### 今回やったこと
+- タイムシートTだけを進める試作再生UIを追加した。
+- `App` に `isPlayingTimesheet_`, `timesheetPlaybackSpeed_`, `timesheetPlaybackAccumulator_`, `timesheetPlaybackDirection_`, `timesheetPlaybackPingPong_` を追加した。
+- `タイムシート再生` ウィンドウを追加し、先頭/前/再生停止/次/最後/速度/ピンポンを操作できるようにした。
+- タイムシート再生中も `activeFrameIndex_` は変更せず、作画F編集対象を維持するようにした。
+- 既存の指パラ再生とタイムシート再生が同時に走らないようにした。
+
+### 今回やらなかったこと
+- タイムシート再生のProject保存連動。
+- PNG / MP4 出力へのタイムシート再生反映。
+- セリフ、カメラ、撮影、素材メモ欄の編集や再生表示。
+- タイムシートT再生中の音声同期。
+
+### 触ったファイル
+- `src/ui/App.h`
+- `src/ui/AppDrawingMode.cpp`
+- `docs/timesheet_step6_5_playback_note.md`
+
+### 触っていない重要ファイル
+- `src/ui/panels/CellPanel.cpp`
+- `src/ui/panels/TimesheetPanel.cpp`
+- `src/ui/panels/TimesheetPanelBridge.cpp`
+- `src/io/TimesheetIO.cpp`
+- `src/io/CutIO.cpp`
+- `docs/final_spec_v6.md`
+
+### 既知の未解決問題
+- タイムシート再生はまだ表示確認用で、出力や通常Project保存には連動していない。
+- 再生中に表示Fと編集Fが異なる場合は、Step 6の仕様によりキャンバス入力が停止する。
+- セリフ、カメラ、撮影、素材メモ欄はまだ再生対象ではない。
+
+### 次に推奨する作業
+- Step 7: タイムシート再生結果をPNG連番/MP4出力へ反映する前段として、まず現在Tの表示解決結果をExport用関数へ渡す境界を作る。
+
+### なぜその作業を推奨するか
+- 表示、再生、出力の全てが同じTimesheetResolver結果を使う設計にすると、画面で見たものと書き出し結果がズレにくくなるため。
+
+### Codex/AI handoff note
+- Step 6.5 added only preview playback of timesheet timeline frames. Do not treat this as final production playback/export support. Keep drawing frame selection separate from timeline frame playback.

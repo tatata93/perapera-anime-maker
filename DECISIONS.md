@@ -414,3 +414,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - タイムシート入力が1件もない場合は従来の `activeFrameIndex_` 表示を維持する。
 - 表示Fと編集Fが違う場合、キャンバス入力を一時停止して誤編集を防ぐ。
 - 再生、保存、出力反映は後続Stepへ送る。
+
+## 2026-06-29 Timesheet Rebuild Step 6.5 Decisions
+
+- タイムシート再生は `activeFrameIndex_` を変更しない。
+- タイムシート再生は `timesheetPanelState_.selectedTimelineFrame` だけを進める。
+- 指パラ再生とタイムシート再生は同時実行しない。
+- タイムシート再生UIはまだ試作段階であり、出力・保存・音声同期には接続しない。
+- 次の出力対応では、表示と出力が同じTimesheetResolver結果を使うようにする。

@@ -391,6 +391,124 @@ void App::drawDrawingMode()
             workingTimesheet_.totalFrames = std::max(1, timesheetPanelData.totalFrames);
         }
 
+        // Timesheet Rebuild Step 6.5:
+        // タイムシートTだけを進める試作再生。作画F編集対象 activeFrameIndex_ は変更しない。
+        auto setTimesheetPreviewFrame = [&](int zeroBasedFrame, const char* reason) {
+            const int lastFrame = std::max(0, timesheetPanelData.totalFrames - 1);
+            const int nextFrame = std::clamp(zeroBasedFrame, 0, lastFrame);
+            if (timesheetPanelState_.selectedTimelineFrame != nextFrame) {
+                timesheetPanelState_.selectedTimelineFrame = nextFrame;
+                canvasRenderer_.markAllDirty();
+                lastMessage_ = std::string(reason) + " T" + std::to_string(nextFrame + 1) +
+                    " / edit F" + std::to_string(activeFrameIndex_ + 1);
+            }
+        };
+
+        auto stepTimesheetPreviewFrame = [&](int delta) {
+            const int frameCount = std::max(1, timesheetPanelData.totalFrames);
+            if (frameCount <= 1) {
+                isPlayingTimesheet_ = false;
+                timesheetPlaybackAccumulator_ = 0.0f;
+                return;
+            }
+
+            int nextFrame = timesheetPanelState_.selectedTimelineFrame + delta;
+            if (nextFrame < 0 || nextFrame >= frameCount) {
+                if (timesheetPlaybackPingPong_) {
+                    timesheetPlaybackDirection_ = -timesheetPlaybackDirection_;
+                    nextFrame = timesheetPanelState_.selectedTimelineFrame + timesheetPlaybackDirection_;
+                } else {
+                    nextFrame = nextFrame >= frameCount ? 0 : frameCount - 1;
+                }
+            }
+            setTimesheetPreviewFrame(nextFrame, "timesheet playback");
+        };
+
+        if (isPlayingFrames_ && isPlayingTimesheet_) {
+            isPlayingTimesheet_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
+
+        ImGui::Begin(
+            u8c(u8"タイムシート再生##FormalTimesheetPlayback"),
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+        ImGui::TextUnformatted(u8c(u8"Step 6.5: タイムシートT再生の試作"));
+        ImGui::Text(
+            u8c(u8"T %d / %d   entries=%d"),
+            timesheetPanelState_.selectedTimelineFrame + 1,
+            std::max(1, timesheetPanelData.totalFrames),
+            countTimesheetEntries(workingTimesheet_));
+        if (ImGui::SmallButton("|<##TimesheetPlaybackFirst")) {
+            isPlayingTimesheet_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+            setTimesheetPreviewFrame(0, "timesheet preview");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("<##TimesheetPlaybackPrev")) {
+            isPlayingTimesheet_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+            stepTimesheetPreviewFrame(-1);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(isPlayingTimesheet_ ? u8c(u8"停止##TimesheetPlaybackStop") : u8c(u8"再生##TimesheetPlaybackPlay"))) {
+            isPlayingTimesheet_ = !isPlayingTimesheet_;
+            isPlayingFrames_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+            lastMessage_ = isPlayingTimesheet_ ? "timesheet playback started" : "timesheet playback stopped";
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(">##TimesheetPlaybackNext")) {
+            isPlayingTimesheet_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+            stepTimesheetPreviewFrame(1);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(">|##TimesheetPlaybackLast")) {
+            isPlayingTimesheet_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+            setTimesheetPreviewFrame(timesheetPanelData.totalFrames - 1, "timesheet preview");
+        }
+
+        const char* timesheetSpeedItems[] = {"0.25x", "0.5x", "1x", "2x"};
+        int timesheetSpeedIndex = 2;
+        if (timesheetPlaybackSpeed_ <= 0.26f) {
+            timesheetSpeedIndex = 0;
+        } else if (timesheetPlaybackSpeed_ <= 0.51f) {
+            timesheetSpeedIndex = 1;
+        } else if (timesheetPlaybackSpeed_ >= 1.99f) {
+            timesheetSpeedIndex = 3;
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90.0f);
+        if (ImGui::Combo(u8c(u8"速度##TimesheetPlaybackSpeed"), &timesheetSpeedIndex, timesheetSpeedItems, IM_ARRAYSIZE(timesheetSpeedItems))) {
+            const float timesheetSpeeds[] = {0.25f, 0.5f, 1.0f, 2.0f};
+            timesheetPlaybackSpeed_ = timesheetSpeeds[std::clamp(timesheetSpeedIndex, 0, 3)];
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox(u8c(u8"ピンポン##TimesheetPlaybackPingPong"), &timesheetPlaybackPingPong_);
+        ImGui::TextDisabled(u8c(u8"タイムシート再生はTだけを進めます。作画F編集対象は変更しません。"));
+        ImGui::End();
+
+        if (isPlayingTimesheet_) {
+            if (isDrawingStroke_ || timesheetPanelData.totalFrames <= 1) {
+                isPlayingTimesheet_ = false;
+                timesheetPlaybackAccumulator_ = 0.0f;
+            } else {
+                const float playbackFps = static_cast<float>(std::max(1, timesheetPanelData.fps));
+                const float secondsPerTimelineFrame = std::max(1.0f / 60.0f, 1.0f / (playbackFps * std::max(0.01f, timesheetPlaybackSpeed_)));
+                timesheetPlaybackAccumulator_ += std::clamp(ImGui::GetIO().DeltaTime, 0.0f, 0.1f);
+                while (timesheetPlaybackAccumulator_ >= secondsPerTimelineFrame) {
+                    timesheetPlaybackAccumulator_ -= secondsPerTimelineFrame;
+                    const int direction = timesheetPlaybackDirection_ == 0 ? 1 : timesheetPlaybackDirection_;
+                    stepTimesheetPreviewFrame(direction);
+                }
+            }
+        } else {
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
+
         if (!timesheetPanelState_.windowOpen) {
             ImGui::Begin(
                 u8c(u8"タイムシートを開く##FormalTimesheetReopen"),
