@@ -314,3 +314,15 @@ Current limitation:
 
 Recommendation:
 - Prioritize Timesheet Step E next, because the user needs the timing data to control what is actually displayed before moving on to cell placement controls.
+
+## 2026-06-29 - Decision: 日本語UI修正時もビルド順序の依存を確認する
+
+### 決定
+- UI文言の日本語化のような小変更でも、関数の定義順・前方宣言・include漏れを確認してからパッケージ化する。
+
+### 理由
+- 今回、`categoryLabelFromValue()` の呼び出しが定義より前にあり、MSVCで未定義識別子エラーになったため。
+
+### 今後の作業選択への反映
+- 今後の作業では、実装対象の性質を先に見て、制作上の流れに沿った作業を推奨する。
+- タイムシートは「いつ、どのセルの、どの作画Fを表示するか」を決める機能なので、セル配置UIより先に表示・再生への反映を優先する。

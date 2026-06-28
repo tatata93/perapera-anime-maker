@@ -1,4 +1,4 @@
-// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.9e moves the timesheet editor into a detached ImGui window so the right Cell panel stays compact.
+// このファイルの役割: セルの選択、追加、複製、編集、削除、並べ替え、表示設定を行うコンパクトなセル管理UI。v1.9gでは日本語UI化で漏れたカテゴリ表示関数の前方宣言を追加し、ビルドエラーを修正する。
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -13,23 +13,30 @@
 namespace perapera::ui {
 namespace {
 
+const char* u8c(const char8_t* text)
+{
+    return reinterpret_cast<const char*>(text);
+}
+
 struct CategoryOption {
     const char* label;
     const char* value;
 };
 
-constexpr std::array<CategoryOption, 6> kCategoryOptions{{
-    {"Character", "character"},
-    {"Background", "background"},
-    {"Book", "book"},
-    {"Effect", "effect"},
-    {"CameraGuide", "camera_guide"},
-    {"Other", "other"},
+const std::array<CategoryOption, 6> kCategoryOptions{{
+    {u8c(u8"キャラ"), "character"},
+    {u8c(u8"背景"), "background"},
+    {u8c(u8"ブック"), "book"},
+    {u8c(u8"効果"), "effect"},
+    {u8c(u8"カメラガイド"), "camera_guide"},
+    {u8c(u8"その他"), "other"},
 }};
 
 CellDisplayMode gDisplayMode = CellDisplayMode::VisibleCells;
 int gSoloCellIndex = -1;
 bool gTimesheetWindowOpen = true;
+
+const char* categoryLabelFromValue(const std::string& value);
 
 std::string sanitizeIdComponent(const std::string& value, const std::string& fallback)
 {
@@ -102,10 +109,12 @@ std::string displayNameForCell(const Cell& cell, int index)
 {
     std::string label = cell.name.empty() ? cell.id : cell.name;
     if (label.empty()) {
-        label = "Cell " + std::to_string(index + 1);
+        label = std::string(u8c(u8"セル ")) + std::to_string(index + 1);
     }
     if (!cell.category.empty()) {
-        label += " [" + cell.category + "]";
+        label += " [";
+        label += categoryLabelFromValue(cell.category);
+        label += "]";
     }
     return label;
 }
@@ -160,6 +169,11 @@ int categoryIndexFromValue(const std::string& value)
         }
     }
     return 0;
+}
+
+const char* categoryLabelFromValue(const std::string& value)
+{
+    return kCategoryOptions[static_cast<std::size_t>(categoryIndexFromValue(value))].label;
 }
 
 void syncCellOrder(Project& project, const std::string& cellId)
@@ -335,15 +349,15 @@ const char* exposureKindLabel(TimesheetExposureKind kind)
 {
     switch (kind) {
     case TimesheetExposureKind::Null:
-        return "Null";
+        return u8c(u8"空セル");
     case TimesheetExposureKind::Hold:
-        return "Hold";
+        return u8c(u8"止め");
     case TimesheetExposureKind::Key:
-        return "Key";
+        return u8c(u8"原画");
     case TimesheetExposureKind::Inbetween:
-        return "Inbetween";
+        return u8c(u8"中割");
     }
-    return "Hold";
+    return u8c(u8"止め");
 }
 
 void fillSelectedCellExposures(Project& project,
@@ -412,9 +426,9 @@ std::string makeDuplicateName(const Cell& source, int copyNumber)
 {
     std::string base = source.name.empty() ? source.id : source.name;
     if (base.empty()) {
-        base = "Cell";
+        base = u8c(u8"セル");
     }
-    return base + " Copy " + std::to_string(std::max(1, copyNumber));
+    return base + u8c(u8" 複製 ") + std::to_string(std::max(1, copyNumber));
 }
 
 void reassignLayerIdsForCell(Cell& cell, int cellIndex)
@@ -516,7 +530,7 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
     cell.id = makeUniqueCellId(project);
 
     const std::string name = requestedName != nullptr ? std::string(requestedName) : std::string{};
-    cell.name = name.empty() ? ("Cell " + std::to_string(displayNumber)) : name;
+    cell.name = name.empty() ? (std::string(u8c(u8"セル ")) + std::to_string(displayNumber)) : name;
 
     const int safeCategoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
     cell.category = kCategoryOptions[static_cast<std::size_t>(safeCategoryIndex)].value;
@@ -537,7 +551,7 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 
     Layer layer = Layer::createDefault(1);
     layer.layerId = expectedLayerIdForCellFrame(cell, displayNumber - 1, 0, 0);
-    layer.name = "Line";
+    layer.name = u8c(u8"線画");
     layer.visible = true;
     layer.opacity = 1.0f;
     layer.blendMode = "normal";
@@ -553,7 +567,7 @@ Cell makeNewCell(Project& project, const char* requestedName, int categoryIndex)
 
 void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult& result)
 {
-    ImGui::TextUnformatted("Display");
+    ImGui::TextUnformatted(u8c(u8"表示"));
 
     int mode = 0;
     if (gDisplayMode == CellDisplayMode::VisibleCells) {
@@ -562,19 +576,19 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
         mode = 2;
     }
 
-    if (ImGui::RadioButton("Active", mode == 0)) {
+    if (ImGui::RadioButton(u8c(u8"選択セル"), mode == 0)) {
         gDisplayMode = CellDisplayMode::ActiveOnly;
         gSoloCellIndex = -1;
         result.displayChanged = true;
     }
     ImGui::SameLine();
-    if (ImGui::RadioButton("Visible", mode == 1)) {
+    if (ImGui::RadioButton(u8c(u8"表示セル"), mode == 1)) {
         gDisplayMode = CellDisplayMode::VisibleCells;
         gSoloCellIndex = -1;
         result.displayChanged = true;
     }
     ImGui::SameLine();
-    if (ImGui::RadioButton("Solo", mode == 2)) {
+    if (ImGui::RadioButton(u8c(u8"単独"), mode == 2)) {
         if (gDisplayMode == CellDisplayMode::SoloSelected) {
             gDisplayMode = CellDisplayMode::VisibleCells;
             gSoloCellIndex = -1;
@@ -588,7 +602,7 @@ void drawDisplayModeControls(int activeCellIndex, int cellCount, CellPanelResult
     }
 
     if (gDisplayMode == CellDisplayMode::SoloSelected) {
-        if (ImGui::Button("Clear Solo", ImVec2(-1.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"単独表示を解除"), ImVec2(-1.0f, 0.0f))) {
             gDisplayMode = CellDisplayMode::VisibleCells;
             gSoloCellIndex = -1;
             result.displayChanged = true;
@@ -646,18 +660,18 @@ void drawEditCellPopup(Project& project,
     }
 
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal("Edit Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Edit Cell");
+    if (ImGui::BeginPopupModal(u8c(u8"セル編集##Edit Cell"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(u8c(u8"セル編集"));
         ImGui::Separator();
         ImGui::TextDisabled("id=%s", cell.id.c_str());
 
         ImGui::SetNextItemWidth(280.0f);
-        ImGui::InputText("Name", nameBuffer, nameBufferSize);
+        ImGui::InputText(u8c(u8"名前##Name"), nameBuffer, nameBufferSize);
 
         categoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
         const char* preview = kCategoryOptions[static_cast<std::size_t>(categoryIndex)].label;
         ImGui::SetNextItemWidth(280.0f);
-        if (ImGui::BeginCombo("Category", preview)) {
+        if (ImGui::BeginCombo(u8c(u8"分類##Category"), preview)) {
             for (int optionIndex = 0; optionIndex < static_cast<int>(kCategoryOptions.size()); ++optionIndex) {
                 const bool selected = optionIndex == categoryIndex;
                 if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(optionIndex)].label, selected)) {
@@ -671,7 +685,7 @@ void drawEditCellPopup(Project& project,
         }
 
         ImGui::Spacing();
-        if (ImGui::Button("Apply", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"適用"), ImVec2(120.0f, 0.0f))) {
             const std::string nextName = nameBuffer != nullptr ? std::string(nameBuffer) : std::string{};
             const int safeCategoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
             cell.name = nextName.empty() ? cell.id : nextName;
@@ -682,7 +696,7 @@ void drawEditCellPopup(Project& project,
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"キャンセル"), ImVec2(120.0f, 0.0f))) {
             cancelEditCell(editingIndex, editingCellId);
             ImGui::CloseCurrentPopup();
         }
@@ -706,15 +720,15 @@ bool drawDeleteCellPopup(Project& project,
     }
 
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal("Delete Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(u8c(u8"セル削除##Delete Cell"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         const Cell& cell = project.cells[static_cast<std::size_t>(pendingDeleteIndex)];
-        ImGui::TextUnformatted("Delete this cell?");
+        ImGui::TextUnformatted(u8c(u8"このセルを削除しますか？"));
         ImGui::Separator();
         ImGui::TextDisabled("id=%s", cell.id.c_str());
-        ImGui::TextWrapped("This removes the cell's frames, layers, and strokes from the project.");
+        ImGui::TextWrapped(u8c(u8"この操作で、セル内のフレーム、レイヤー、線データがプロジェクトから削除されます。"));
 
         ImGui::Spacing();
-        if (ImGui::Button("Delete", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"削除"), ImVec2(120.0f, 0.0f))) {
             const bool deleted = deleteCell(project, pendingDeleteIndex, result, editingIndex, editingCellId);
             pendingDeleteIndex = -1;
             pendingDeleteCellId.clear();
@@ -723,7 +737,7 @@ bool drawDeleteCellPopup(Project& project,
             return deleted;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"キャンセル"), ImVec2(120.0f, 0.0f))) {
             pendingDeleteIndex = -1;
             pendingDeleteCellId.clear();
             ImGui::CloseCurrentPopup();
@@ -739,25 +753,25 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
     static char nameBuffer[128] = "";
     static int categoryIndex = 0;
 
-    if (ImGui::Button("+ Add Cell", ImVec2(-1.0f, 0.0f))) {
-        const std::string defaultName = "Cell " + std::to_string(static_cast<int>(project.cells.size()) + 1);
+    if (ImGui::Button(u8c(u8"＋ セル追加"), ImVec2(-1.0f, 0.0f))) {
+        const std::string defaultName = std::string(u8c(u8"セル ")) + std::to_string(static_cast<int>(project.cells.size()) + 1);
         std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", defaultName.c_str());
         categoryIndex = 0;
-        ImGui::OpenPopup("Add Cell");
+        ImGui::OpenPopup(u8c(u8"セル追加##Add Cell"));
     }
 
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_Appearing);
-    if (ImGui::BeginPopupModal("Add Cell", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Add Cell");
+    if (ImGui::BeginPopupModal(u8c(u8"セル追加##Add Cell"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(u8c(u8"セル追加"));
         ImGui::Separator();
 
         ImGui::SetNextItemWidth(280.0f);
-        ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer));
+        ImGui::InputText(u8c(u8"名前##Name"), nameBuffer, sizeof(nameBuffer));
 
         categoryIndex = std::clamp(categoryIndex, 0, static_cast<int>(kCategoryOptions.size()) - 1);
         const char* preview = kCategoryOptions[static_cast<std::size_t>(categoryIndex)].label;
         ImGui::SetNextItemWidth(280.0f);
-        if (ImGui::BeginCombo("Category", preview)) {
+        if (ImGui::BeginCombo(u8c(u8"分類##Category"), preview)) {
             for (int i = 0; i < static_cast<int>(kCategoryOptions.size()); ++i) {
                 const bool selected = i == categoryIndex;
                 if (ImGui::Selectable(kCategoryOptions[static_cast<std::size_t>(i)].label, selected)) {
@@ -771,7 +785,7 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
         }
 
         ImGui::Spacing();
-        if (ImGui::Button("Create", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"作成"), ImVec2(120.0f, 0.0f))) {
             Cell cell = makeNewCell(project, nameBuffer, categoryIndex);
             const std::string newCellId = cell.id;
             project.cells.push_back(std::move(cell));
@@ -788,7 +802,7 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+        if (ImGui::Button(u8c(u8"キャンセル"), ImVec2(120.0f, 0.0f))) {
             ImGui::CloseCurrentPopup();
         }
 
@@ -798,7 +812,7 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
 
 void drawCellList(Project& project, CellPanelResult& result)
 {
-    ImGui::TextDisabled("Cells: %d", static_cast<int>(project.cells.size()));
+    ImGui::TextDisabled(u8c(u8"セル数: %d"), static_cast<int>(project.cells.size()));
     ImGui::BeginChild("CellPanel_v18b_compact_list", ImVec2(0.0f, 150.0f), true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
@@ -818,7 +832,7 @@ void drawCellList(Project& project, CellPanelResult& result)
         std::snprintf(suffix,
                       sizeof(suffix),
                       "  %s %3d%% z=%d F=%d L=%d",
-                      cell.visible ? "V" : "-",
+                      cell.visible ? u8c(u8"表") : "-",
                       opacityPercent,
                       cell.zOrder,
                       frameCount,
@@ -841,8 +855,8 @@ void drawCellList(Project& project, CellPanelResult& result)
             ImGui::TextUnformatted(displayNameForCell(cell, index).c_str());
             ImGui::Separator();
             ImGui::TextDisabled("id=%s", cell.id.c_str());
-            ImGui::TextDisabled("visible=%s | opacity=%d%% | z=%d", cell.visible ? "true" : "false", opacityPercent, cell.zOrder);
-            ImGui::TextDisabled("frames=%d | firstFrameLayers=%d | totalLayers=%d",
+            ImGui::TextDisabled(u8c(u8"表示=%s | 不透明度=%d%% | 前後=%d"), cell.visible ? u8c(u8"表示") : u8c(u8"非表示"), opacityPercent, cell.zOrder);
+            ImGui::TextDisabled(u8c(u8"作画F=%d | 先頭Fレイヤー=%d | 総レイヤー=%d"),
                                 frameCount,
                                 firstLayers,
                                 layerCountForCell(cell));
@@ -883,33 +897,33 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
     editCellIndex = std::clamp(editCellIndex, 0, maxCellIndex);
 
     ImGui::SetNextWindowSize(ImVec2(620.0f, 560.0f), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Timesheet", &gTimesheetWindowOpen)) {
+    if (!ImGui::Begin(u8c(u8"タイムシート##Timesheet"), &gTimesheetWindowOpen)) {
         ImGui::End();
         return;
     }
 
-    ImGui::TextUnformatted("Timesheet v1 - detached window");
-    ImGui::TextDisabled("Edits timing data only. Canvas/playback hookup is the next step.");
+    ImGui::TextUnformatted(u8c(u8"タイムシート v1 - 別ウィンドウ"));
+    ImGui::TextDisabled(u8c(u8"ここでは露出タイミングだけを編集します。キャンバス表示・再生への反映は次段階です。"));
     ImGui::Separator();
 
     int timelineFrameOneBased = editTimelineFrame + 1;
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderInt("Timeline frame", &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
+    if (ImGui::SliderInt(u8c(u8"タイムラインF##Timeline frame"), &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
         timelineFrameOneBased = std::clamp(timelineFrameOneBased, 1, totalFrames);
         editTimelineFrame = timelineFrameOneBased - 1;
     }
 
     const int activeClamped = std::clamp(activeCellIndex, 0, maxCellIndex);
-    if (ImGui::Button("Use active cell")) {
+    if (ImGui::Button(u8c(u8"選択中セルを使う"))) {
         editCellIndex = activeClamped;
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("Active: %s", displayNameForCell(project.cells[static_cast<std::size_t>(activeClamped)], activeClamped).c_str());
+    ImGui::TextDisabled(u8c(u8"選択中: %s"), displayNameForCell(project.cells[static_cast<std::size_t>(activeClamped)], activeClamped).c_str());
 
     Cell& cell = project.cells[static_cast<std::size_t>(editCellIndex)];
     const std::string selectedCellLabel = displayNameForCell(cell, editCellIndex);
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::BeginCombo("Cell", selectedCellLabel.c_str())) {
+    if (ImGui::BeginCombo(u8c(u8"セル##Cell"), selectedCellLabel.c_str())) {
         for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
             const bool selected = index == editCellIndex;
             const std::string label = displayNameForCell(project.cells[static_cast<std::size_t>(index)], index);
@@ -925,14 +939,14 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
 
     Cell& editCell = project.cells[static_cast<std::size_t>(editCellIndex)];
     if (editCell.id.empty()) {
-        ImGui::TextDisabled("Selected cell has no id.");
+        ImGui::TextDisabled(u8c(u8"選択セルにIDがありません。"));
         ImGui::End();
         return;
     }
 
     TimesheetCellExposure* exposure = ensureTimesheetExposure(project, editTimelineFrame, editCell.id);
     if (exposure == nullptr) {
-        ImGui::TextDisabled("Timesheet exposure unavailable.");
+        ImGui::TextDisabled(u8c(u8"タイムシート露出を取得できません。"));
         ImGui::End();
         return;
     }
@@ -941,11 +955,11 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
     exposure->drawingFrameIndex = std::clamp(exposure->drawingFrameIndex, 0, drawingFrameCount - 1);
 
     ImGui::Separator();
-    ImGui::TextUnformatted("Current exposure");
+    ImGui::TextUnformatted(u8c(u8"現在の露出"));
 
     int drawingFrameOneBased = exposure->drawingFrameIndex + 1;
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderInt("Drawing frame", &drawingFrameOneBased, 1, drawingFrameCount, "F%03d")) {
+    if (ImGui::SliderInt(u8c(u8"作画F##Drawing frame"), &drawingFrameOneBased, 1, drawingFrameCount, "F%03d")) {
         drawingFrameOneBased = std::clamp(drawingFrameOneBased, 1, drawingFrameCount);
         exposure->drawingFrameIndex = drawingFrameOneBased - 1;
         if (exposure->kind == TimesheetExposureKind::Null) {
@@ -963,9 +977,9 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
         kindIndex = 3;
     }
 
-    constexpr const char* kKindLabels[] = {"Null", "Hold", "Key", "Inbetween"};
+    const char* kKindLabels[] = {u8c(u8"空セル"), u8c(u8"止め"), u8c(u8"原画"), u8c(u8"中割")};
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::Combo("Kind", &kindIndex, kKindLabels, 4)) {
+    if (ImGui::Combo(u8c(u8"種類##Kind"), &kindIndex, kKindLabels, 4)) {
         kindIndex = std::clamp(kindIndex, 0, 3);
         switch (kindIndex) {
         case 0:
@@ -988,28 +1002,28 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const float quarter = std::max(86.0f, (fullWidth - gap * 3.0f) / 4.0f);
 
-    if (ImGui::Button("Null", ImVec2(quarter, 0.0f))) {
+    if (ImGui::Button(u8c(u8"空セル"), ImVec2(quarter, 0.0f))) {
         exposure->kind = TimesheetExposureKind::Null;
         markTimesheetChanged(result);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Hold", ImVec2(quarter, 0.0f))) {
+    if (ImGui::Button(u8c(u8"止め"), ImVec2(quarter, 0.0f))) {
         exposure->kind = TimesheetExposureKind::Hold;
         markTimesheetChanged(result);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Key", ImVec2(quarter, 0.0f))) {
+    if (ImGui::Button(u8c(u8"原画"), ImVec2(quarter, 0.0f))) {
         exposure->kind = TimesheetExposureKind::Key;
         markTimesheetChanged(result);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Inbetween", ImVec2(quarter, 0.0f))) {
+    if (ImGui::Button(u8c(u8"中割"), ImVec2(quarter, 0.0f))) {
         exposure->kind = TimesheetExposureKind::Inbetween;
         markTimesheetChanged(result);
     }
 
     const float half = std::max(120.0f, (fullWidth - gap) / 2.0f);
-    if (ImGui::Button("Expose on ones to end", ImVec2(half, 0.0f))) {
+    if (ImGui::Button(u8c(u8"ここから1コマ打ち"), ImVec2(half, 0.0f))) {
         fillSelectedCellExposures(project,
                                   editCell,
                                   editTimelineFrame,
@@ -1019,7 +1033,7 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
         markTimesheetChanged(result);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Expose on twos to end", ImVec2(half, 0.0f))) {
+    if (ImGui::Button(u8c(u8"ここから2コマ打ち"), ImVec2(half, 0.0f))) {
         fillSelectedCellExposures(project,
                                   editCell,
                                   editTimelineFrame,
@@ -1030,9 +1044,9 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
     }
 
     if (exposure->kind == TimesheetExposureKind::Null) {
-        ImGui::TextDisabled("T%03d: %s -> Null", editTimelineFrame + 1, editCell.id.c_str());
+        ImGui::TextDisabled(u8c(u8"T%03d: %s → 空セル"), editTimelineFrame + 1, editCell.id.c_str());
     } else {
-        ImGui::TextDisabled("T%03d: %s -> F%03d (%s)",
+        ImGui::TextDisabled(u8c(u8"T%03d: %s → F%03d（%s）"),
                             editTimelineFrame + 1,
                             editCell.id.c_str(),
                             exposure->drawingFrameIndex + 1,
@@ -1040,15 +1054,15 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
     }
 
     ImGui::Separator();
-    ImGui::TextUnformatted("All cells at this timeline frame");
+    ImGui::TextUnformatted(u8c(u8"このタイムラインFの全セル露出"));
     if (ImGui::BeginTable("TimesheetFrameOverview",
                           4,
                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
                           ImVec2(0.0f, 190.0f))) {
-        ImGui::TableSetupColumn("Cell");
-        ImGui::TableSetupColumn("Kind");
-        ImGui::TableSetupColumn("Drawing");
-        ImGui::TableSetupColumn("Opacity");
+        ImGui::TableSetupColumn(u8c(u8"セル"));
+        ImGui::TableSetupColumn(u8c(u8"種類"));
+        ImGui::TableSetupColumn(u8c(u8"作画F"));
+        ImGui::TableSetupColumn(u8c(u8"不透明度"));
         ImGui::TableHeadersRow();
 
         for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
@@ -1102,13 +1116,13 @@ void drawSelectedCellControls(Project& project,
     Cell& cell = project.cells[static_cast<std::size_t>(result.selectedCellIndex)];
 
     const std::string selectedName = displayNameForCell(cell, result.selectedCellIndex);
-    ImGui::TextDisabled("Selected: %s", selectedName.c_str());
+    ImGui::TextDisabled(u8c(u8"選択中: %s"), selectedName.c_str());
     if (ImGui::IsItemHovered()) {
         ImGui::BeginTooltip();
         ImGui::TextUnformatted(selectedName.c_str());
         ImGui::Separator();
         ImGui::TextDisabled("id=%s", cell.id.c_str());
-        ImGui::TextDisabled("z=%d | frames=%d | layers=%d",
+        ImGui::TextDisabled(u8c(u8"前後=%d | 作画F=%d | レイヤー=%d"),
                             cell.zOrder,
                             static_cast<int>(cell.frames.size()),
                             layerCountForCell(cell));
@@ -1119,16 +1133,16 @@ void drawSelectedCellControls(Project& project,
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
 
     bool visible = cell.visible;
-    if (ImGui::Checkbox("V", &visible)) {
+    if (ImGui::Checkbox(u8c(u8"表示##Visible"), &visible)) {
         cell.visible = visible;
         result.displayChanged = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Visible");
+        ImGui::SetTooltip(u8c(u8"表示"));
     }
 
     ImGui::SameLine();
-    ImGui::TextUnformatted("Op");
+    ImGui::TextUnformatted(u8c(u8"不透明度"));
     ImGui::SameLine();
     int opacityPercent = static_cast<int>(std::clamp(cell.opacity, 0.0f, 1.0f) * 100.0f + 0.5f);
     const float opacityWidth = std::max(74.0f, ImGui::GetContentRegionAvail().x - 62.0f);
@@ -1140,7 +1154,7 @@ void drawSelectedCellControls(Project& project,
         result.projectStructureChanged = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Opacity percent. Stored as 0.00-1.00 float.");
+        ImGui::SetTooltip(u8c(u8"不透明度。内部では0.00〜1.00のfloatで保存します。"));
     }
 
     const bool solo = gDisplayMode == CellDisplayMode::SoloSelected && gSoloCellIndex == result.selectedCellIndex;
@@ -1151,7 +1165,7 @@ void drawSelectedCellControls(Project& project,
     const float gap = ImGui::GetStyle().ItemSpacing.x;
     const float third = std::max(46.0f, (fullWidth - gap * 2.0f) / 3.0f);
 
-    if (ImGui::Button(solo ? "Solo*" : "Solo", ImVec2(third, 0.0f))) {
+    if (ImGui::Button(solo ? u8c(u8"単独*##Solo") : u8c(u8"単独##Solo"), ImVec2(third, 0.0f))) {
         if (solo) {
             gSoloCellIndex = -1;
             gDisplayMode = CellDisplayMode::VisibleCells;
@@ -1162,7 +1176,7 @@ void drawSelectedCellControls(Project& project,
         result.displayChanged = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(solo ? "Cancel solo display" : "Show only this cell");
+        ImGui::SetTooltip(solo ? u8c(u8"単独表示を解除") : u8c(u8"このセルだけ表示"));
     }
 
     ImGui::SameLine();
@@ -1170,7 +1184,7 @@ void drawSelectedCellControls(Project& project,
     if (!canMoveBack) {
         ImGui::BeginDisabled();
     }
-    if (ImGui::Button("Back", ImVec2(third, 0.0f))) {
+    if (ImGui::Button(u8c(u8"後ろへ"), ImVec2(third, 0.0f))) {
         moveCell(project, index, index - 1, result);
     }
     if (!canMoveBack) {
@@ -1182,7 +1196,7 @@ void drawSelectedCellControls(Project& project,
     if (!canMoveFront) {
         ImGui::BeginDisabled();
     }
-    if (ImGui::Button("Front", ImVec2(third, 0.0f))) {
+    if (ImGui::Button(u8c(u8"前へ"), ImVec2(third, 0.0f))) {
         moveCell(project, index, index + 1, result);
     }
     if (!canMoveFront) {
@@ -1190,15 +1204,15 @@ void drawSelectedCellControls(Project& project,
     }
 
     const float half = std::max(70.0f, (ImGui::GetContentRegionAvail().x - gap) / 2.0f);
-    if (ImGui::Button("Dup", ImVec2(half, 0.0f))) {
+    if (ImGui::Button(u8c(u8"複製"), ImVec2(half, 0.0f))) {
         duplicateCell(project, result.selectedCellIndex, result);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Duplicate selected cell");
+        ImGui::SetTooltip(u8c(u8"選択セルを複製"));
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Edit", ImVec2(half, 0.0f))) {
+    if (ImGui::Button(u8c(u8"編集"), ImVec2(half, 0.0f))) {
         beginEditCell(result.selectedCellIndex,
                       project.cells[static_cast<std::size_t>(result.selectedCellIndex)],
                       editingCellIndex,
@@ -1206,26 +1220,26 @@ void drawSelectedCellControls(Project& project,
                       editNameBuffer,
                       editNameBufferSize,
                       editCategoryIndex);
-        ImGui::OpenPopup("Edit Cell");
+        ImGui::OpenPopup(u8c(u8"セル編集##Edit Cell"));
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Edit name and category");
+        ImGui::SetTooltip(u8c(u8"名前と分類を編集"));
     }
 
     const bool canDelete = cellCount > 1;
     if (!canDelete) {
         ImGui::BeginDisabled();
     }
-    if (ImGui::Button("Delete", ImVec2(-1.0f, 0.0f))) {
+    if (ImGui::Button(u8c(u8"削除"), ImVec2(-1.0f, 0.0f))) {
         pendingDeleteIndex = result.selectedCellIndex;
         pendingDeleteCellId = project.cells[static_cast<std::size_t>(result.selectedCellIndex)].id;
-        ImGui::OpenPopup("Delete Cell");
+        ImGui::OpenPopup(u8c(u8"セル削除##Delete Cell"));
     }
     if (!canDelete) {
         ImGui::EndDisabled();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip(canDelete ? "Delete selected cell" : "The last cell cannot be deleted");
+        ImGui::SetTooltip(canDelete ? u8c(u8"選択セルを削除") : u8c(u8"最後のセルは削除できません"));
     }
 
     ImGui::PopStyleVar(2);
@@ -1264,7 +1278,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.9e");
+    ImGui::TextUnformatted(u8c(u8"セルパネル v1.9g"));
     drawAddCellPopup(project, result);
     ImGui::Separator();
 
@@ -1274,7 +1288,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     ImGui::Separator();
 
     if (project.cells.empty()) {
-        ImGui::TextDisabled("No cells. Use + Add Cell.");
+        ImGui::TextDisabled(u8c(u8"セルがありません。＋セル追加を使ってください。"));
         result.selectedCellIndex = 0;
         return result;
     }
@@ -1285,8 +1299,8 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
     drawCellList(project, result);
     ImGui::Separator();
 
-    ImGui::TextDisabled("Timesheet is now a separate window.");
-    if (ImGui::SmallButton("Open Timesheet Window")) {
+    ImGui::TextDisabled(u8c(u8"タイムシートは別ウィンドウです。"));
+    if (ImGui::SmallButton(u8c(u8"タイムシートを開く"))) {
         gTimesheetWindowOpen = true;
     }
     ImGui::Separator();

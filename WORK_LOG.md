@@ -735,3 +735,24 @@ Not changed in this step:
 
 Recommended next work:
 - Timesheet Step E: connect `TimesheetResolver` to drawing-mode canvas display and playback, while preserving Active / Visible / Solo display modes.
+
+## 2026-06-29 - Timesheet Step D3b: 日本語UIビルド修正
+
+### 作業者
+- ChatGPT / Codex引き継ぎ用作業パッケージ
+
+### 実施内容
+- `src/ui/panels/CellPanel.cpp` の日本語UI化パッケージで発生したビルドエラーを修正。
+- `displayNameForCell()` が `categoryLabelFromValue()` を定義前に呼んでいたため、匿名namespace内に前方宣言を追加。
+- セルパネル表示バージョンを `v1.9g` に更新。
+
+### 触った範囲
+- `src/ui/panels/CellPanel.cpp` のみ。
+
+### まだやっていないこと
+- タイムシートのキャンバス表示反映。
+- タイムシートの再生反映。
+- セル配置UI。
+
+### 次に推奨する作業
+- ビルド確認後、Timesheet Step Eとして、タイムシート指定をキャンバス表示・再生へ反映する。
