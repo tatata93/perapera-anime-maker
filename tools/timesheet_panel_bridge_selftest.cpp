@@ -69,6 +69,30 @@ int main()
     require(trackB->entries[1].type == TimesheetEntryType::Inbetween, "inbetween kind should convert");
     require(trackB->entries[1].drawingFrameNumber == 3, "inbetween drawing number should be preserved");
 
+    TimesheetPanelState dirtyState;
+    dirtyState.selectedTimelineFrame = 99;
+    dirtyState.selectedCellColumn = 99;
+    dirtyState.editDrawingFrameNumber = 0;
+    dirtyState.entries.push_back(TimesheetPanelEditableEntry{0, "char_a", TimesheetPanelEntryKind::Drawing, 0});
+    dirtyState.entries.push_back(TimesheetPanelEditableEntry{0, "char_a", TimesheetPanelEntryKind::Key, 4});
+    dirtyState.entries.push_back(TimesheetPanelEditableEntry{20, "char_a", TimesheetPanelEntryKind::Drawing, 2});
+    dirtyState.entries.push_back(TimesheetPanelEditableEntry{1, "missing", TimesheetPanelEntryKind::Drawing, 2});
+    dirtyState.entries.push_back(TimesheetPanelEditableEntry{2, "char_b", TimesheetPanelEntryKind::Empty, 2});
+    dirtyState.entries.push_back(TimesheetPanelEditableEntry{3, "char_b", TimesheetPanelEntryKind::Hold, 8});
+
+    const bool normalized = normalizeTimesheetPanelStateForViewModel(view, dirtyState);
+    require(normalized, "dirty panel state should report normalization");
+    require(dirtyState.selectedTimelineFrame == 11, "selected timeline should clamp to last frame");
+    require(dirtyState.selectedCellColumn == 1, "selected cell column should clamp to last cell");
+    require(dirtyState.editDrawingFrameNumber == 1, "edit drawing number should clamp to one");
+    require(dirtyState.entries.size() == 2, "normalization should drop unknown, out-of-range and empty entries");
+    require(dirtyState.entries[0].timelineFrame == 0, "duplicate entry should remain on T0");
+    require(dirtyState.entries[0].cellId == "char_a", "duplicate entry should keep char_a");
+    require(dirtyState.entries[0].kind == TimesheetPanelEntryKind::Key, "later duplicate entry should win");
+    require(dirtyState.entries[0].drawingFrameNumber == 4, "later duplicate drawing number should win");
+    require(dirtyState.entries[1].cellId == "char_b", "hold entry should remain for known cell");
+    require(dirtyState.entries[1].drawingFrameNumber == 0, "hold drawing number should be cleared");
+
     TimesheetPanelState restored;
     replacePanelEntriesFromTimesheet(timesheet, restored);
     require(restored.entries.size() == 5, "restored panel entries should round-trip non-empty known entries");

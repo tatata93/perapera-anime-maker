@@ -168,4 +168,102 @@ void replacePanelEntriesFromTimesheet(
     }
 }
 
+
+bool normalizeTimesheetPanelStateForViewModel(
+    const TimesheetPanelViewModel& data,
+    TimesheetPanelState& state)
+{
+    bool changed = false;
+
+    const int totalFrames = normalizeTimesheetFrameCount(data.totalFrames);
+    const int previousTimelineFrame = state.selectedTimelineFrame;
+    state.selectedTimelineFrame = std::clamp(state.selectedTimelineFrame, 0, totalFrames - 1);
+    changed = changed || state.selectedTimelineFrame != previousTimelineFrame;
+
+    const int previousCellColumn = state.selectedCellColumn;
+    if (data.cells.empty()) {
+        state.selectedCellColumn = 0;
+    } else {
+        state.selectedCellColumn = std::clamp(state.selectedCellColumn, 0, static_cast<int>(data.cells.size()) - 1);
+    }
+    changed = changed || state.selectedCellColumn != previousCellColumn;
+
+    const int previousDrawingFrameNumber = state.editDrawingFrameNumber;
+    state.editDrawingFrameNumber = std::max(1, state.editDrawingFrameNumber);
+    changed = changed || state.editDrawingFrameNumber != previousDrawingFrameNumber;
+
+    std::vector<TimesheetPanelEditableEntry> normalizedEntries;
+    normalizedEntries.reserve(state.entries.size());
+
+    for (TimesheetPanelEditableEntry entry : state.entries) {
+        if (entry.kind == TimesheetPanelEntryKind::Empty || entry.cellId.empty()) {
+            changed = true;
+            continue;
+        }
+        if (entry.timelineFrame < 0 || entry.timelineFrame >= totalFrames) {
+            changed = true;
+            continue;
+        }
+        if (!isKnownTrackCell(data, entry.cellId)) {
+            changed = true;
+            continue;
+        }
+
+        if (panelKindUsesDrawingNumber(entry.kind)) {
+            const int previous = entry.drawingFrameNumber;
+            entry.drawingFrameNumber = std::max(1, entry.drawingFrameNumber);
+            changed = changed || previous != entry.drawingFrameNumber;
+        } else if (entry.drawingFrameNumber != 0) {
+            entry.drawingFrameNumber = 0;
+            changed = true;
+        }
+
+        const auto existing = std::find_if(
+            normalizedEntries.begin(),
+            normalizedEntries.end(),
+            [&](const TimesheetPanelEditableEntry& existingEntry) {
+                return existingEntry.timelineFrame == entry.timelineFrame &&
+                    existingEntry.cellId == entry.cellId;
+            });
+        if (existing == normalizedEntries.end()) {
+            normalizedEntries.push_back(std::move(entry));
+        } else {
+            *existing = std::move(entry);
+            changed = true;
+        }
+    }
+
+    std::stable_sort(
+        normalizedEntries.begin(),
+        normalizedEntries.end(),
+        [](const TimesheetPanelEditableEntry& left, const TimesheetPanelEditableEntry& right) {
+            if (left.timelineFrame != right.timelineFrame) {
+                return left.timelineFrame < right.timelineFrame;
+            }
+            return left.cellId < right.cellId;
+        });
+
+    if (normalizedEntries.size() != state.entries.size()) {
+        changed = true;
+    }
+    if (!changed && normalizedEntries.size() == state.entries.size()) {
+        for (std::size_t i = 0; i < normalizedEntries.size(); ++i) {
+            const TimesheetPanelEditableEntry& left = normalizedEntries[i];
+            const TimesheetPanelEditableEntry& right = state.entries[i];
+            if (left.timelineFrame != right.timelineFrame ||
+                left.cellId != right.cellId ||
+                left.kind != right.kind ||
+                left.drawingFrameNumber != right.drawingFrameNumber) {
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    if (changed) {
+        state.entries = std::move(normalizedEntries);
+    }
+    return changed;
+}
+
 } // namespace perapera::ui

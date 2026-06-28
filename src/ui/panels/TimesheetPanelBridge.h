@@ -25,4 +25,13 @@ void replacePanelEntriesFromTimesheet(
     const Timesheet& timesheet,
     TimesheetPanelState& state);
 
+// 現在のセル列・総フレーム数に合わせて、TimesheetPanelStateを安全に正規化する。
+// - 選択T / 選択セル列を範囲内にクランプする。
+// - 存在しないセルID、範囲外T、Empty指定を一時entriesから取り除く。
+// - 同じ T x セル に複数entryがある場合は、後のentryを採用する。
+// 何かを変更した場合は true を返す。
+bool normalizeTimesheetPanelStateForViewModel(
+    const TimesheetPanelViewModel& data,
+    TimesheetPanelState& state);
+
 } // namespace perapera::ui

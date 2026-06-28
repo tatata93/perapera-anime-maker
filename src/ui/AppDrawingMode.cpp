@@ -371,6 +371,18 @@ void App::drawDrawingMode()
             timesheetPanelData.cells.push_back(column);
         }
 
+        // Timesheet Rebuild Step 5.6:
+        // 現在のセル列・総フレーム数に合わせて、UI一時入力を先に正規化する。
+        // セル削除後の古いcellId、範囲外T、重複entryを残したまま保存・変換しない。
+        const bool timesheetPanelStateNormalized =
+            ::perapera::ui::normalizeTimesheetPanelStateForViewModel(timesheetPanelData, timesheetPanelState_);
+        if (timesheetPanelStateNormalized) {
+            workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
+            workingTimesheetDirty_ = true;
+            lastMessage_ = "timesheet panel state normalized: entries=" +
+                std::to_string(countTimesheetEntries(workingTimesheet_));
+        }
+
         if (workingTimesheet_.tracks.empty() || !workingTimesheetDirty_) {
             workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
         } else {
@@ -440,7 +452,12 @@ void App::drawDrawingMode()
             if (TimesheetIO::loadTimesheet(timesheetPath, loadedTimesheet, &error)) {
                 workingTimesheet_ = std::move(loadedTimesheet);
                 ::perapera::ui::replacePanelEntriesFromTimesheet(workingTimesheet_, timesheetPanelState_);
-                workingTimesheetDirty_ = false;
+                const bool normalizedLoadedPanel =
+                    ::perapera::ui::normalizeTimesheetPanelStateForViewModel(timesheetPanelData, timesheetPanelState_);
+                if (normalizedLoadedPanel) {
+                    workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
+                }
+                workingTimesheetDirty_ = normalizedLoadedPanel;
                 lastMessage_ = "timesheet loaded: " + timesheetPath.string() +
                     " | entries=" + std::to_string(countTimesheetEntries(workingTimesheet_));
             } else {

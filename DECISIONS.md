@@ -396,3 +396,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - Project保存との自動連動はまだ行わない。
 - 読み込み時は正式 `Timesheet` を `TimesheetPanelState` の一時入力へ戻す。
 - キャンバス表示、再生、出力への反映は、保存/読み込み確認後の後続Stepで行う。
+
+## Timesheet Rebuild Step 5.6 decisions
+
+- タイムシートUIの一時entryは、現在存在するセルIDと総フレーム数に合わない場合、保存・表示反映の前に除去する。
+- 同一 `T x cellId` の重複entryは後勝ちにする。
+- `Hold / Null` は作画F番号を持たないため、正規化時に `drawingFrameNumber = 0` へ戻す。
+- タイムシート保存/読み込み後も、現在のセル列に存在しないtrackはUI一時状態へ残さない。
+- キャンバス表示反映はStep 6以降に分ける。

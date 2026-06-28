@@ -1307,3 +1307,58 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - Step 5.5 adds explicit manual IO for the temporary formal Timesheet.
 - The manual buttons use `TimesheetIO::saveTimesheet` and `TimesheetIO::loadTimesheet` with `appio::absolutePath(exportState_.projectFolder) / timesheet.json` via `timesheetPathForCutFolder`.
 - This is intentionally not wired into Project save/load yet.
+
+## Timesheet Rebuild Step 5.6: タイムシート一時状態の安全正規化
+
+### 今回やったこと
+
+- `TimesheetPanelState` を現在の `TimesheetPanelViewModel` に合わせて正規化する `normalizeTimesheetPanelStateForViewModel()` を追加した。
+- 選択T、選択セル列、作画F番号入力を安全範囲へクランプするようにした。
+- 既に削除されたセルID、範囲外T、Empty entry、重複entryを一時状態から取り除くようにした。
+- `Hold / Null` が作画F番号を持たないように正規化した。
+- `AppDrawingMode.cpp` でタイムシート描画前・手動保存前・手動読み込み後に正規化を通すようにした。
+- `timesheet_panel_bridge_selftest.cpp` に不整合状態の正規化テストを追加した。
+
+### 今回やらなかったこと
+
+- キャンバス表示反映はまだ行っていない。
+- 再生、PNG連番、MP4出力への反映はまだ行っていない。
+- Project保存との自動連動はまだ行っていない。
+- セリフ、カメラ、撮影、素材メモ欄の編集はまだ行っていない。
+
+### 触ったファイル
+
+- `src/ui/AppDrawingMode.cpp`
+- `src/ui/panels/TimesheetPanelBridge.h`
+- `src/ui/panels/TimesheetPanelBridge.cpp`
+- `tools/timesheet_panel_bridge_selftest.cpp`
+- `docs/timesheet_step5_6_state_safety_note.md`
+
+### 触っていない重要ファイル
+
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- `docs/final_spec_v6.md`
+- `my_anime_project/`
+- `build/`
+
+### 既知の未解決問題
+
+- タイムシート入力はまだキャンバス表示へ反映されない。
+- 保存は手動ボタンのみで、Project保存とはまだ統合していない。
+- タイムシートのセリフ、カメラ、撮影、素材メモ欄はまだ表示枠のみ。
+
+### 次に推奨する作業
+
+- Step 6: タイムシートT選択と表示解決をキャンバス表示へ接続する。
+
+### なぜその作業を推奨するか
+
+- UI入力、core変換、手動保存/読み込み、安全正規化まで分離して確認できたため、次に初めて表示反映へ進める段階になった。
+- 表示反映はクラッシュや誤編集につながりやすいため、今回の正規化を先に入れておくことでセル削除・フレーム数変更時の事故を減らせる。
+
+### Codex/AI handoff note
+
+- Step 5.6では `TimesheetPanelState` の不整合を現在のセル列・総フレーム数に合わせて正規化する境界を追加した。
+- 次のStep 6では `TimesheetResolver` の結果を使ってキャンバス表示へ反映する。ただし作画F編集対象とタイムラインTは混ぜないこと。
