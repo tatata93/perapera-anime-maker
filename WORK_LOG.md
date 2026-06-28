@@ -777,3 +777,29 @@ Recommended next work:
 次に推奨する作業:
 - Timesheet Step Fとして、PNG連番/MP4書き出しでもTimesheetResolverを使う。
 - アニメ制作上、キャンバスと再生で露出が効いても、書き出し結果が違うと制作物として破綻するため、セル配置UIより先に書き出し反映を推奨する。
+
+## Timesheet Step E2: 表示F同期と空セル非表示の修正
+
+担当: ChatGPT
+
+目的:
+- タイムシートで「空セル」にしたフレームでもセルが表示される問題を修正する。
+- タイムシート別ウィンドウの編集対象Tと、キャンバスで表示中のタイムラインFがズレて分かりにくい問題を解消する。
+
+実施内容:
+- CellPanelResult に timelineFrameChanged / selectedTimelineFrame を追加。
+- drawCellPanel に activeTimelineFrame を渡せるように変更。
+- タイムシート別ウィンドウで選んだタイムラインFを App 側の activeFrameIndex_ に反映できるようにした。
+- タイムシート別ウィンドウへ「現在表示中: Txxx」「編集中Tと表示中Tは同じです/違います」を追加。
+- AppDrawingMode の描画ブロックを TimesheetResolver 経由に再置換し、resolved.renderable が false のセルを描画しないようにした。
+- kind == Null の露出は必ず非描画になるようにした。
+
+未実施:
+- PNG/MP4書き出しへのタイムシート反映。
+- 本格的な縦型タイムシートUI。
+- セル配置UI。
+- Scene/Cut移行。
+
+次の推奨:
+- この修正でキャンバス表示と再生の空セル挙動を確認する。
+- 問題がなければ Timesheet Step F: PNG連番/MP4書き出しへの反映へ進む。

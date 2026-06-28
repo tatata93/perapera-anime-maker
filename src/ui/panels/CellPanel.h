@@ -1,5 +1,5 @@
 #pragma once
-// This file's role: draw the drawing-mode Cell panel and expose compact cell display mode state. v1.9e keeps compact cell controls and moves the timesheet editor into a detached ImGui window.
+// This file's role: draw the drawing-mode Cell panel and expose compact cell display mode state. v1.9h keeps compact cell controls and uses Japanese UI and keeps the detached timesheet window synchronized with the current timeline frame.
 
 #include "core/Project.h"
 
@@ -16,10 +16,12 @@ struct CellPanelResult {
     bool selectionChanged = false;
     bool displayChanged = false;
     bool projectStructureChanged = false;
-    bool timesheetChanged = false;
+    bool timesheetChanged = false; // タイムシートの露出指定が変更された
+    bool timelineFrameChanged = false; // タイムシートウィンドウ側で表示中タイムラインFを変更した
+    int selectedTimelineFrame = 0; // 0-based
 };
 
-CellPanelResult drawCellPanel(Project& project, int activeCellIndex);
+CellPanelResult drawCellPanel(Project& project, int activeCellIndex, int activeTimelineFrame = 0);
 CellDisplayMode currentCellDisplayMode();
 int currentSoloCellIndex();
 

@@ -871,7 +871,7 @@ void drawCellList(Project& project, CellPanelResult& result)
 }
 
 
-void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPanelResult& result)
+void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, int activeTimelineFrame, CellPanelResult& result)
 {
     if (!gTimesheetWindowOpen) {
         return;
@@ -882,13 +882,20 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
 
     static int editTimelineFrame = 0;
     static int editCellIndex = -1;
+    static int lastObservedActiveTimelineFrame = -1;
 
     if (normalizeTimesheetForProject(project)) {
         markTimesheetChanged(result);
     }
 
     const int totalFrames = safeTimelineFrameCount(project);
+    const int clampedActiveTimelineFrame = std::clamp(activeTimelineFrame, 0, totalFrames - 1);
+    if (lastObservedActiveTimelineFrame != clampedActiveTimelineFrame) {
+        editTimelineFrame = clampedActiveTimelineFrame;
+        lastObservedActiveTimelineFrame = clampedActiveTimelineFrame;
+    }
     editTimelineFrame = std::clamp(editTimelineFrame, 0, totalFrames - 1);
+    result.selectedTimelineFrame = editTimelineFrame;
 
     const int maxCellIndex = static_cast<int>(project.cells.size()) - 1;
     if (editCellIndex < 0 || editCellIndex > maxCellIndex) {
@@ -902,8 +909,9 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
         return;
     }
 
-    ImGui::TextUnformatted(u8c(u8"タイムシート v1 - 別ウィンドウ"));
-    ImGui::TextDisabled(u8c(u8"ここでは露出タイミングだけを編集します。キャンバス表示・再生への反映は次段階です。"));
+    ImGui::TextUnformatted(u8c(u8"タイムシート v1.1 - 表示F連動"));
+    ImGui::TextDisabled(u8c(u8"ここで選んだタイムラインFは、キャンバスで表示中のFと連動します。"));
+    ImGui::TextDisabled(u8c(u8"現在表示中: T%03d"), clampedActiveTimelineFrame + 1);
     ImGui::Separator();
 
     int timelineFrameOneBased = editTimelineFrame + 1;
@@ -911,6 +919,21 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, CellPane
     if (ImGui::SliderInt(u8c(u8"タイムラインF##Timeline frame"), &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
         timelineFrameOneBased = std::clamp(timelineFrameOneBased, 1, totalFrames);
         editTimelineFrame = timelineFrameOneBased - 1;
+        lastObservedActiveTimelineFrame = editTimelineFrame;
+        result.timelineFrameChanged = true;
+        result.selectedTimelineFrame = editTimelineFrame;
+        markTimesheetChanged(result);
+    }
+
+    if (ImGui::SmallButton(u8c(u8"現在表示中Fへ戻す"))) {
+        editTimelineFrame = clampedActiveTimelineFrame;
+        result.selectedTimelineFrame = editTimelineFrame;
+    }
+    ImGui::SameLine();
+    if (editTimelineFrame != clampedActiveTimelineFrame) {
+        ImGui::TextDisabled(u8c(u8"編集中Tと表示中Tが違います"));
+    } else {
+        ImGui::TextDisabled(u8c(u8"編集中Tと表示中Tは同じです"));
     }
 
     const int activeClamped = std::clamp(activeCellIndex, 0, maxCellIndex);
@@ -1257,7 +1280,7 @@ int currentSoloCellIndex()
     return gSoloCellIndex;
 }
 
-CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
+CellPanelResult drawCellPanel(Project& project, int activeCellIndex, int activeTimelineFrame)
 {
     CellPanelResult result{};
     result.selectedCellIndex = activeCellIndex;
@@ -1278,7 +1301,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted(u8c(u8"セルパネル v1.9g"));
+    ImGui::TextUnformatted(u8c(u8"セルパネル v1.9h"));
     drawAddCellPopup(project, result);
     ImGui::Separator();
 
@@ -1339,7 +1362,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         }
     }
 
-    drawDetachedTimesheetWindow(project, result.selectedCellIndex, result);
+    drawDetachedTimesheetWindow(project, result.selectedCellIndex, activeTimelineFrame, result);
 
     return result;
 }
