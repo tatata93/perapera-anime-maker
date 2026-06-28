@@ -1362,3 +1362,42 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 
 - Step 5.6では `TimesheetPanelState` の不整合を現在のセル列・総フレーム数に合わせて正規化する境界を追加した。
 - 次のStep 6では `TimesheetResolver` の結果を使ってキャンバス表示へ反映する。ただし作画F編集対象とタイムラインTは混ぜないこと。
+
+## Timesheet Rebuild Step 6: タイムシートT選択のキャンバス表示反映
+
+### 今回やったこと
+- `TimesheetResolver` を作画キャンバス表示経路へ接続した。
+- タイムシートに1件以上入力がある場合、選択中Tの解決結果をキャンバスへ表示するようにした。
+- `activeFrameIndex_` は作画F編集対象として維持し、T選択で自動変更しないようにした。
+- 表示Fと編集Fが違う場合は、誤編集防止のためキャンバス入力を一時停止する表示を追加した。
+- タイムシートのT変更・entry変更時にキャンバスキャッシュをdirtyにするようにした。
+
+### 今回やらなかったこと
+- Project保存との自動連動。
+- 再生へのタイムシート反映。
+- PNG/MP4出力へのタイムシート反映。
+- セリフ、カメラ、撮影、素材メモ欄の編集。
+
+### 触ったファイル
+- `src/ui/AppDrawingMode.cpp`
+- `docs/timesheet_step6_canvas_preview_note.md`
+
+### 触っていない重要ファイル
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- `docs/final_spec_v6.md`
+
+### 既知の未解決問題
+- タイムシート表示はまだプレビュー段階で、再生・出力には反映されない。
+- 表示Fと編集Fが違う場合は入力を止める安全仕様にしているため、直接修正ワークフローは後続Stepで設計する。
+
+### 次に推奨する作業
+- Step 6.5: タイムシートT再生の試作。
+
+### なぜその作業を推奨するか
+- まず静止表示でResolver経路を確認できたら、次は再生時にTを進めて表示が変わるか確認するのが自然な順序だから。
+
+### Codex/AI handoff note
+- T選択で `activeFrameIndex_` を変えない方針を維持すること。
+- 表示対象Fと編集対象Fが違う場合は、誤編集を避けるため入力ロックを続けるか、明示的な「表示Fを編集対象にする」操作を追加してから解除すること。

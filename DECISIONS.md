@@ -404,3 +404,13 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - `Hold / Null` は作画F番号を持たないため、正規化時に `drawingFrameNumber = 0` へ戻す。
 - タイムシート保存/読み込み後も、現在のセル列に存在しないtrackはUI一時状態へ残さない。
 - キャンバス表示反映はStep 6以降に分ける。
+
+## Timesheet Rebuild Step 6 decision
+
+タイムシートT選択をキャンバス表示へ反映する。ただし、作画F編集対象とタイムラインTは混ぜない。
+
+- `activeFrameIndex_` は作画F編集対象として維持する。
+- タイムシート表示は `TimesheetResolver` の結果で行う。
+- タイムシート入力が1件もない場合は従来の `activeFrameIndex_` 表示を維持する。
+- 表示Fと編集Fが違う場合、キャンバス入力を一時停止して誤編集を防ぐ。
+- 再生、保存、出力反映は後続Stepへ送る。

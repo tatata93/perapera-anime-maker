@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 #include <imgui.h>
+#include "core/TimesheetResolver.h"
 #include "io/TimesheetIO.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
@@ -352,9 +353,10 @@ Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Str
 } // namespace
 void App::drawDrawingMode()
 {
-    // Timesheet Rebuild Step 5:
-    // TimesheetPanelの一時入力をApp内の正式core Timesheetへ同期する。
-    // まだ保存、キャンバス表示、再生、出力には反映しない。
+    // Timesheet Rebuild Step 6:
+    // TimesheetPanelの一時入力をApp内の正式core Timesheetへ同期し、
+    // T選択をキャンバス表示プレビューへ反映する。
+    // まだ再生、出力、Project保存の自動連動には反映しない。
     {
         timesheetPanelState_.showDetachedWindow = true;
 
@@ -407,9 +409,16 @@ void App::drawDrawingMode()
         if (timesheetPanelResult.entryChanged) {
             workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
             workingTimesheetDirty_ = true;
+            canvasRenderer_.markAllDirty();
 
             const int entryCount = countTimesheetEntries(workingTimesheet_);
             lastMessage_ = "timesheet temporary core data updated: entries=" + std::to_string(entryCount);
+        }
+
+        if (timesheetPanelResult.timelineFrameChanged) {
+            canvasRenderer_.markAllDirty();
+            lastMessage_ = "timesheet preview T" + std::to_string(timesheetPanelState_.selectedTimelineFrame + 1) +
+                " / edit F" + std::to_string(activeFrameIndex_ + 1);
         }
 
         // Timesheet Rebuild Step 5.5:
@@ -666,91 +675,133 @@ void App::drawCanvasArea(float rightWidth)
         const CanvasDisplayMode canvasDisplayMode = isColoringMode ? CanvasDisplayMode::Coloring : CanvasDisplayMode::Drawing;
 
     const ui::CellDisplayMode cellDisplayMode = ui::currentCellDisplayMode();
-
     const int soloCellIndex = ui::currentSoloCellIndex();
 
-
+    // Timesheet Rebuild Step 6:
+    // タイムシートに1件以上入力がある場合だけ、T選択をキャンバス表示へ反映する。
+    // activeFrameIndex_ は作画F編集対象として維持し、ここでは表示プレビューだけを切り替える。
+    const bool useTimesheetPreview = countTimesheetEntries(workingTimesheet_) > 0;
+    const int timesheetTimelineFrame = useTimesheetPreview
+        ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
+        : activeFrameIndex_ + 1;
 
     auto drawCellFrame = [&](int cellIndex, const Cell& drawCell, const Frame& drawFrame, int drawFrameIndex) {
-
         const bool isActiveCell = cellIndex == activeCellIndex_;
-
-        const int drawActiveLayer = isActiveCell ? activeLayerIndex_ : -1;
-
-        const Stroke* drawPreview = isActiveCell ? preview : nullptr;
-
+        const bool isActiveEditingFrame = isActiveCell && drawFrameIndex == activeFrameIndex_;
+        const int drawActiveLayer = isActiveEditingFrame ? activeLayerIndex_ : -1;
+        const Stroke* drawPreview = isActiveEditingFrame ? preview : nullptr;
         const float drawOpacity = std::clamp(drawCell.opacity, 0.0f, 1.0f);
-
         if (drawOpacity <= 0.0f) {
-
             return;
-
         }
 
         canvasRenderer_.draw(drawFrame,
-
                              drawFrameIndex,
-
                              drawActiveLayer,
-
                              drawPreview,
-
                              drawOpacity,
-
                              canvasView_,
-
                              canvasDisplayMode,
-
                              areaMin,
-
                              areaSize,
-
                              drawList);
-
     };
 
-
-
-    if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
-
-        drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
-
-    } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
-
-        const int safeSoloIndex = std::clamp(soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_, 0, static_cast<int>(project_.cells.size()) - 1);
-
-        const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
-
-        if (!soloCell.frames.empty()) {
-
-            const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
-
-            const Frame& soloFrame = soloCell.frames[static_cast<std::size_t>(soloFrameIndex)];
-
-            drawCellFrame(safeSoloIndex, soloCell, soloFrame, soloFrameIndex);
-
+    auto drawResolvedCell = [&](int cellIndex, const Cell& drawCell, bool requireCellVisible) {
+        if (drawCell.frames.empty()) {
+            return false;
+        }
+        if (requireCellVisible && (!drawCell.visible || drawCell.opacity <= 0.0f)) {
+            return false;
         }
 
-    } else {
+        const ResolvedTimesheetCell resolved = resolveTimesheetCell(workingTimesheet_, drawCell.id, timesheetTimelineFrame);
+        if (!resolved.visible || resolved.drawingFrameNumber <= 0) {
+            return false;
+        }
 
-        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+        const int drawFrameIndex = resolved.drawingFrameNumber - 1;
+        if (drawFrameIndex < 0 || drawFrameIndex >= static_cast<int>(drawCell.frames.size())) {
+            return false;
+        }
 
-            const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
+        const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
+        drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
+        return true;
+    };
 
-            if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
-
-                continue;
-
+    if (useTimesheetPreview) {
+        if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
+            const Cell* cellForPreview = activeCell();
+            if (cellForPreview != nullptr) {
+                drawResolvedCell(activeCellIndex_, *cellForPreview, false);
             }
-
-            const int drawFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(drawCell.frames.size()) - 1);
-
-            const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
-
-            drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
-
+        } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
+            const int safeSoloIndex = std::clamp(
+                soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_,
+                0,
+                static_cast<int>(project_.cells.size()) - 1);
+            const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
+            drawResolvedCell(safeSoloIndex, soloCell, false);
+        } else {
+            for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+                const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
+                drawResolvedCell(cellIndex, drawCell, true);
+            }
         }
+    } else if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
+        drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
+    } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
+        const int safeSoloIndex = std::clamp(
+            soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_,
+            0,
+            static_cast<int>(project_.cells.size()) - 1);
+        const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
+        if (!soloCell.frames.empty()) {
+            const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
+            const Frame& soloFrame = soloCell.frames[static_cast<std::size_t>(soloFrameIndex)];
+            drawCellFrame(safeSoloIndex, soloCell, soloFrame, soloFrameIndex);
+        }
+    } else {
+        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+            const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
+            if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
+                continue;
+            }
+            const int drawFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(drawCell.frames.size()) - 1);
+            const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
+            drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
+        }
+    }
 
+    bool allowCanvasInput = true;
+    if (useTimesheetPreview) {
+        if (const Cell* editingCell = activeCell(); editingCell != nullptr) {
+            const ResolvedTimesheetCell activeResolved =
+                resolveTimesheetCell(workingTimesheet_, editingCell->id, timesheetTimelineFrame);
+            allowCanvasInput = activeResolved.visible && activeResolved.drawingFrameNumber == activeFrameIndex_ + 1;
+        }
+    }
+
+    if (useTimesheetPreview) {
+        const std::string previewText = std::string(u8c(u8"タイムシート表示 T")) +
+            std::to_string(timesheetTimelineFrame) +
+            std::string(u8c(u8" / 編集対象 作画F")) +
+            std::to_string(activeFrameIndex_ + 1);
+        drawList->AddRectFilled(
+            ImVec2(areaMin.x + 8.0f, areaMin.y + 8.0f),
+            ImVec2(areaMin.x + 380.0f, areaMin.y + (allowCanvasInput ? 34.0f : 54.0f)),
+            IM_COL32(255, 255, 255, 220));
+        drawList->AddText(
+            ImVec2(areaMin.x + 14.0f, areaMin.y + 14.0f),
+            IM_COL32(40, 40, 40, 255),
+            previewText.c_str());
+        if (!allowCanvasInput) {
+            drawList->AddText(
+                ImVec2(areaMin.x + 14.0f, areaMin.y + 34.0f),
+                IM_COL32(180, 40, 40, 255),
+                u8c(u8"表示Fと編集Fが違うため、キャンバス入力を一時停止中"));
+        }
     }
     warmPlaybackFrameCache();
     if (isDrawingStroke_ && brushSettings_.tool == ui::ToolKind::Eraser && !currentStroke_.points.empty()) {
@@ -765,7 +816,9 @@ void App::drawCanvasArea(float rightWidth)
         const float radius = std::max(2.0f, currentStroke_.radiusPx * std::clamp(canvasView_.zoom, 0.05f, 32.0f));
         drawList->AddCircle(screenPoint, radius, IM_COL32(255, 80, 70, 210), 32, 2.0f);
     }
-    handleCanvasInput(areaMin, areaSize);
+    if (allowCanvasInput) {
+        handleCanvasInput(areaMin, areaSize);
+    }
     ImGui::Dummy(areaSize);
 }
 void App::fitCanvasToArea(ImVec2 areaSize)
