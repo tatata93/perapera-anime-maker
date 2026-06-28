@@ -1,6 +1,7 @@
 // このファイルの役割:
 // Appの保存・読み込み・PNG/MP4書き出しを実装する。
 // Phase 1.5 Step 20: 通常保存時の検証リロードを外し、重い全ストローク再走査を明示チェック操作へ分離する。
+// Phase 2-pre Timesheet Step B: Project直下の仮Timesheetを timesheet.json として保存・読み込みする。
 
 #include "ui/App.h"
 
@@ -14,6 +15,7 @@
 #include "io/FfmpegRunner.h"
 #include "io/PngExporter.h"
 #include "io/ProjectIO.h"
+#include "io/TimesheetIO.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/panels/CellPanel.h"
 
@@ -44,8 +46,8 @@ std::vector<const Cell*> exportCellsForCurrentDisplay(const Project& project, in
     if (displayMode == ui::CellDisplayMode::SoloSelected) {
         const int soloIndex = ui::currentSoloCellIndex();
         const int safeIndex = std::clamp(soloIndex >= 0 ? soloIndex : activeCellIndex,
-                                         0,
-                                         static_cast<int>(project.cells.size()) - 1);
+            0,
+            static_cast<int>(project.cells.size()) - 1);
         appendCellIfValid(project, safeIndex, cells);
         return cells;
     }
@@ -77,11 +79,17 @@ void App::saveProject()
 {
     Project toSave = project_;
     appio::normalizeProjectForStep14(toSave);
+    TimesheetIO::normalizeProjectTimesheet(toSave);
 
     const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
     std::string error;
     if (!ProjectIO::save(toSave, projectFolder, &error)) {
         lastMessage_ = "save failed: " + error;
+        return;
+    }
+
+    if (!TimesheetIO::saveProjectTimesheet(toSave, projectFolder, &error)) {
+        lastMessage_ = "project saved, but timesheet save failed: " + error;
         return;
     }
 
@@ -118,6 +126,11 @@ void App::loadProject()
     }
 
     appio::normalizeProjectForStep14(loaded);
+    if (!TimesheetIO::loadProjectTimesheet(loaded, projectFolder, &error)) {
+        lastMessage_ = "load failed: " + error;
+        return;
+    }
+
     appio::SavedSelection selection = appio::readAppState(projectFolder);
     std::string selectionSource = "app_state";
     if (!selection.hasValue || !appio::validSelection(loaded, selection)) {
@@ -128,8 +141,7 @@ void App::loadProject()
         }
     }
 
-    if (selection.hasValue && appio::validSelection(loaded, selection) &&
-        !appio::selectionFrameHasStrokes(loaded, selection)) {
+    if (selection.hasValue && appio::validSelection(loaded, selection) && !appio::selectionFrameHasStrokes(loaded, selection)) {
         appio::SavedSelection visibleSelection;
         if (appio::findFirstNonEmptySelection(loaded, visibleSelection)) {
             selection = visibleSelection;
@@ -152,27 +164,34 @@ void App::loadProject()
         canvasViewInitialized_ = false;
         return;
     }
-    canvasViewInitialized_ = false;
 
+    canvasViewInitialized_ = false;
     const appio::ProjectStats stats = appio::collectProjectStats(project_);
     const appio::SavedSelection active{activeCellIndex_, activeFrameIndex_, activeLayerIndex_, true};
-    lastMessage_ = "project loaded: " + projectFolder.string() + " | " + appio::statsToText(stats) +
-        " | " + appio::selectionText(active) + " via " + selectionSource;
+    lastMessage_ = "project loaded: " + projectFolder.string() + " | " +
+        appio::statsToText(stats) + " | " + appio::selectionText(active) + " via " + selectionSource;
 }
 
 void App::saveLoadRoundTripCheck()
 {
     Project toSave = project_;
     appio::normalizeProjectForStep14(toSave);
+    TimesheetIO::normalizeProjectTimesheet(toSave);
+
     const appio::ProjectStats beforeStats = appio::collectProjectStats(toSave);
     const std::uint64_t beforeSignature = appio::projectSignature(toSave);
     const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
-
     std::string error;
     if (!ProjectIO::save(toSave, projectFolder, &error)) {
         lastMessage_ = "round trip save failed: " + error;
         return;
     }
+
+    if (!TimesheetIO::saveProjectTimesheet(toSave, projectFolder, &error)) {
+        lastMessage_ = "round trip timesheet save failed: " + error;
+        return;
+    }
+
     if (!appio::writeAppState(projectFolder, activeCellIndex_, activeFrameIndex_, activeLayerIndex_, beforeStats, &error)) {
         lastMessage_ = "round trip app_state failed: " + error;
         return;
@@ -189,6 +208,10 @@ void App::saveLoadRoundTripCheck()
         return;
     }
     appio::normalizeProjectForStep14(loaded);
+    if (!TimesheetIO::loadProjectTimesheet(loaded, projectFolder, &error)) {
+        lastMessage_ = "round trip timesheet load failed: " + error;
+        return;
+    }
 
     const appio::ProjectStats afterStats = appio::collectProjectStats(loaded);
     const std::uint64_t afterSignature = appio::projectSignature(loaded);
@@ -197,6 +220,7 @@ void App::saveLoadRoundTripCheck()
         if (!selection.hasValue || !appio::validSelection(loaded, selection)) {
             selection = appio::SavedSelection{activeCellIndex_, activeFrameIndex_, activeLayerIndex_, true};
         }
+
         project_ = std::move(loaded);
         activeCellIndex_ = selection.cellIndex;
         activeFrameIndex_ = selection.frameIndex;
@@ -223,8 +247,7 @@ void App::exportActivePng()
 
     const std::filesystem::path output = appio::absolutePath(exportState_.exportFolder) / "active_frame.png";
     std::string error;
-    if (PngExporter::exportCellsFrame(cells, activeFrameIndex_, output, project_.canvas.width, project_.canvas.height,
-                                      exportState_.exportMode, &error)) {
+    if (PngExporter::exportCellsFrame(cells, activeFrameIndex_, output, project_.canvas.width, project_.canvas.height, exportState_.exportMode, &error)) {
         lastMessage_ = "PNG exported [" + std::string(exportModeToString(exportState_.exportMode)) + ", " +
             exportCellScopeText(cells) + "]: " + output.string();
     } else {
@@ -242,8 +265,7 @@ void App::exportPngSequence()
 
     const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
     std::string error;
-    if (PngExporter::exportCellsFrameSequence(cells, pngFolder, project_.canvas.width, project_.canvas.height,
-                                              exportState_.exportMode, &error)) {
+    if (PngExporter::exportCellsFrameSequence(cells, pngFolder, project_.canvas.width, project_.canvas.height, exportState_.exportMode, &error)) {
         lastMessage_ = "PNG sequence exported [" + std::string(exportModeToString(exportState_.exportMode)) + "]: " +
             pngFolder.string() + " | " + exportCellScopeText(cells);
     } else {
@@ -270,8 +292,7 @@ void App::exportMp4()
     appio::appendTextLog(logPath, "\n");
 
     std::string error;
-    if (!PngExporter::exportCellsFrameSequence(cells, pngFolder, project_.canvas.width, project_.canvas.height,
-                                               exportState_.exportMode, &error)) {
+    if (!PngExporter::exportCellsFrameSequence(cells, pngFolder, project_.canvas.width, project_.canvas.height, exportState_.exportMode, &error)) {
         appio::appendTextLog(logPath, "ERROR: PNG sequence export failed before FFmpeg.\n");
         appio::appendTextLog(logPath, "Reason: " + error + "\n");
         lastMessage_ = "MP4 failed before ffmpeg: " + error + " log: " + logPath.string();

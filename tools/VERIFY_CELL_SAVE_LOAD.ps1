@@ -76,7 +76,7 @@ if ([string]::IsNullOrWhiteSpace($ProjectDir)) {
     $ProjectDir = Join-Path $RepoRoot "my_anime_project"
 }
 
-Write-Host "=== CellPanel v1.9 save/load audit ===" -ForegroundColor Cyan
+Write-Host "=== CellPanel + Timesheet Step B save/load audit ===" -ForegroundColor Cyan
 Write-Host "RepoRoot  : $RepoRoot"
 Write-Host "ProjectDir: $ProjectDir"
 Write-Host ""
@@ -235,6 +235,113 @@ if ($cellRecords.Count -gt 0) {
             }
             $expected += 1
         }
+    }
+}
+
+
+Write-Host ""
+Write-Host "=== Timesheet summary ===" -ForegroundColor Cyan
+$timesheetPath = Join-Path $ProjectDir "timesheet.json"
+$timesheetJson = $null
+if (-not (Test-Path $timesheetPath)) {
+    Add-WarningLine "timesheet.json not found yet. Save the project once after Timesheet Step B."
+} else {
+    $timesheetJson = Read-JsonSafe $timesheetPath "timesheet.json"
+}
+
+if ($null -ne $timesheetJson) {
+    $timesheetTotalFrames = Get-JsonPropertyValue $timesheetJson "totalFrames" $null
+    $projectTotalFrames = $null
+    if ($null -ne $projectJson -and (Has-JsonProperty $projectJson "timeline")) {
+        $timelineJson = Get-JsonPropertyValue $projectJson "timeline" $null
+        $projectTotalFrames = Get-JsonPropertyValue $timelineJson "totalFrames" $null
+    }
+
+    Write-Host "Timesheet file : $timesheetPath"
+    Write-Host "Total frames   : $timesheetTotalFrames"
+
+    if ($null -ne $projectTotalFrames -and $null -ne $timesheetTotalFrames) {
+        $projectFramesInt = 0
+        $timesheetFramesInt = 0
+        $projectFramesParsed = [int]::TryParse([string]$projectTotalFrames, [ref]$projectFramesInt)
+        $timesheetFramesParsed = [int]::TryParse([string]$timesheetTotalFrames, [ref]$timesheetFramesInt)
+        if ($projectFramesParsed -and $timesheetFramesParsed) {
+            if ($projectFramesInt -ne $timesheetFramesInt) {
+                Add-Issue "timesheet totalFrames does not match project timeline.totalFrames: timesheet=$timesheetFramesInt project=$projectFramesInt"
+            }
+        }
+    }
+
+    $timesheetFrames = @()
+    if (Has-JsonProperty $timesheetJson "frames") {
+        $timesheetFrames = @(To-ArraySafe (Get-JsonPropertyValue $timesheetJson "frames" @()))
+    } else {
+        Add-Issue "timesheet.json has no frames array"
+    }
+
+    if ($null -ne $timesheetTotalFrames) {
+        $expectedFrameCount = 0
+        if ([int]::TryParse([string]$timesheetTotalFrames, [ref]$expectedFrameCount)) {
+            if ($timesheetFrames.Count -ne $expectedFrameCount) {
+                Add-Issue "timesheet frames count mismatch: frames=$($timesheetFrames.Count) totalFrames=$expectedFrameCount"
+            }
+        }
+    }
+
+    $frameIndex = 0
+    foreach ($frame in $timesheetFrames) {
+        $timelineFrame = Get-JsonPropertyValue $frame "timelineFrame" $frameIndex
+        $timelineFrameInt = 0
+        if (-not [int]::TryParse([string]$timelineFrame, [ref]$timelineFrameInt)) {
+            Add-Issue "timesheet frame[$frameIndex] timelineFrame is not integer: $timelineFrame"
+        } elseif ($timelineFrameInt -ne $frameIndex) {
+            Add-WarningLine "timesheet frame index mismatch: index=$frameIndex timelineFrame=$timelineFrameInt"
+        }
+
+        $exposures = @()
+        if (Has-JsonProperty $frame "cellExposures") {
+            $exposures = @(To-ArraySafe (Get-JsonPropertyValue $frame "cellExposures" @()))
+        } else {
+            Add-Issue "timesheet frame[$frameIndex] has no cellExposures"
+        }
+
+        $exposureCellIds = @($exposures | ForEach-Object { [string](Get-JsonPropertyValue $_ "cellId" "") })
+        foreach ($cellId in $folderIds) {
+            if ($exposureCellIds -notcontains $cellId) {
+                Add-Issue "timesheet frame[$frameIndex] missing exposure for cell: $cellId"
+            }
+        }
+
+        $duplicates = $exposureCellIds | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Group-Object | Where-Object { $_.Count -gt 1 }
+        foreach ($dup in $duplicates) {
+            Add-Issue "timesheet frame[$frameIndex] duplicate exposure for cell: $($dup.Name)"
+        }
+
+        foreach ($exposure in $exposures) {
+            $cellId = [string](Get-JsonPropertyValue $exposure "cellId" "")
+            if ([string]::IsNullOrWhiteSpace($cellId)) {
+                Add-Issue "timesheet frame[$frameIndex] exposure has empty cellId"
+                continue
+            }
+            if ($folderIds -notcontains $cellId) {
+                Add-WarningLine "timesheet frame[$frameIndex] exposure references missing/deleted cell: $cellId"
+            }
+
+            $kind = [string](Get-JsonPropertyValue $exposure "kind" "hold")
+            if (@("null", "hold", "key", "inbetween") -notcontains $kind) {
+                Add-Issue "timesheet frame[$frameIndex] $cellId has invalid kind: $kind"
+            }
+
+            $drawingFrameIndex = Get-JsonPropertyValue $exposure "drawingFrameIndex" $null
+            $drawingFrameIndexInt = 0
+            if (-not [int]::TryParse([string]$drawingFrameIndex, [ref]$drawingFrameIndexInt)) {
+                Add-Issue "timesheet frame[$frameIndex] $cellId drawingFrameIndex is not integer: $drawingFrameIndex"
+            } elseif ($drawingFrameIndexInt -lt 0) {
+                Add-Issue "timesheet frame[$frameIndex] $cellId drawingFrameIndex is negative: $drawingFrameIndexInt"
+            }
+        }
+
+        $frameIndex += 1
     }
 }
 
