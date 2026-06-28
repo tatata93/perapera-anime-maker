@@ -257,3 +257,17 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 ## CellPanel v1.2d
 - Treat each cell as owning its own independent frames and layers.
 - New cells are initialized as a blank cel with one frame and one layer. Layer count inheritance from the previously active cell is intentionally avoided.
+
+## 2026-06-29 Timesheet Spec v1 Decisions
+
+- 正式タイムシートは縦型UIとする。
+- 横方向はセル列、縦方向はタイムラインTとする。
+- タイムシート上の数字は作画F番号を意味する。
+- 作画FとタイムラインTは別管理にする。
+- タイムシートはProject直下ではなくCut単位に置く方針とする。
+- CellPanelにタイムシートUIを戻さない。
+- 原画/中割は表示対象そのものではなく制作管理属性として扱う。
+- カメラ/撮影/セリフ欄は最初はテキスト欄として扱う。
+- TimesheetResolverはcore側に置く。
+- 実装順は core -> io -> UI -> 表示反映 -> 再生/出力反映 とする。
+- MVPでは複雑な撮影効果、カメラキーフレーム、絵コンテ/レイアウト完全接続は行わない。

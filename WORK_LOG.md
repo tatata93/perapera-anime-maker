@@ -648,3 +648,58 @@ src/io/ProjectIO.cpp
 ## CellPanel v1.2d
 - Fixed new-cell layer isolation: newly created cells now start from a fresh blank Frame/Layer instead of inheriting any active cell layer layout.
 - Reset activeFrameIndex_ and activeLayerIndex_ to 0 when changing active cells, then clamp selection.
+
+## 2026-06-29 Timesheet Spec v1
+
+### 今回やったこと
+
+- 正式タイムシート実装前の仕様書 `docs/timesheet_spec_v1.md` を作成した。
+- 作画FとタイムラインTの分離方針を明記した。
+- 縦型TimesheetPanelの基本UI仕様を整理した。
+- 作画番号、ホールド、空セル、原画、中割の意味を整理した。
+- TimesheetResolverによる表示解決ルールを整理した。
+- Cut単位のTimesheet保存方針を整理した。
+- core / io / ui / App の責務分離を整理した。
+- 実装順を Step 1 から Step 7 まで整理した。
+
+### 今回やらなかったこと
+
+- コード実装は行っていない。
+- 既存 `docs/` 内ファイルの編集は行っていない。
+- TimesheetPanelの実装は行っていない。
+- cut.json保存実装は行っていない。
+- キャンバス表示反映は行っていない。
+- PNG/MP4出力反映は行っていない。
+
+### 触ったファイル
+
+- docs/timesheet_spec_v1.md
+
+### 触っていない重要ファイル
+
+- AGENTS_for_perapera_anime.md
+- README_timesheet_step_c.md
+- README_timesheet_step_d.md
+- 既存 docs/ 配下のファイル
+- src/ 配下のコード
+- CMakeLists.txt
+
+### 既知の未解決問題
+
+- 正式Timesheetモデルはまだ未実装。
+- TimesheetResolverはまだ未実装。
+- Cutモデルはまだ未実装。
+- TimesheetPanelはまだ未実装。
+- 再生/出力との接続はまだ未実装。
+
+### 次に推奨する作業
+
+Timesheet Rebuild Step 1 として、core側に Cut / Timesheet / TimesheetResolver の最小モデルを追加する。
+
+### なぜその作業を推奨するか
+
+UI、保存、描画反映を先に作ると、前回と同様に責務が混ざって壊れやすくなるため。まずcore側でデータの意味と表示解決ルールを安定させる。
+
+### Codex/AI handoff note
+
+The provisional timesheet implementation was rolled back to the pre-timesheet commit. Do not revive the previous Project-level dense timesheet or the CellPanel embedded/detached timesheet UI. Use `docs/timesheet_spec_v1.md` as the planning baseline. Implement the new timesheet from core models first, then IO, then UI, then display/export integration.
