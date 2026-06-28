@@ -49,6 +49,19 @@ void appendFrameIfValid(const Cell& cell, int frameIndex, std::vector<const Fram
     frames.push_back(frame);
 }
 
+const char* floodFillWallSourceLabel(ui::FloodFillWallSource source)
+{
+    switch (source) {
+    case ui::FloodFillWallSource::ActiveCell:
+        return "active";
+    case ui::FloodFillWallSource::VisibleCells:
+        return "visible";
+    case ui::FloodFillWallSource::SoloCell:
+        return "solo";
+    }
+    return "visible";
+}
+
 } // namespace
 
 bool App::stepActiveFrame(int delta)
@@ -458,7 +471,8 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
                                                                     brushSettings_.color,
                                                                     settings);
     if (!result.success || result.strokes.empty()) {
-        lastMessage_ = "flood fill: " + result.message;
+        lastMessage_ = "flood fill [" + std::string(floodFillWallSourceLabel(brushSettings_.fillWallSource)) +
+            "]: " + result.message;
         return;
     }
 
@@ -470,7 +484,8 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     targetLayer->strokes.insert(targetLayer->strokes.end(), result.strokes.begin(), result.strokes.end());
     targetLayer->touchRevision();
     canvasRenderer_.clearLayerCaches();
-    lastMessage_ = "flood fill: " + std::to_string(result.filledPixelCount) +
+    lastMessage_ = "flood fill [" + std::string(floodFillWallSourceLabel(brushSettings_.fillWallSource)) +
+                   "]: " + std::to_string(result.filledPixelCount) +
                    " px / " + std::to_string(result.strokes.size()) + " fills";
 }
 
