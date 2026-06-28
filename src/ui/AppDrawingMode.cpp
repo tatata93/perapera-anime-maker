@@ -1,4 +1,4 @@
-// このファイルの役割:
+﻿// このファイルの役割:
 #include "ui/App.h"
 #include <algorithm>
 #include <cmath>
@@ -16,6 +16,7 @@
 #include "ui/panels/FramePanel.h"
 #include "ui/panels/LayerPanel.h"
 #include "ui/panels/TimelinePanel.h"
+#include "ui/panels/TimesheetPanel.h"
 namespace perapera {
 namespace {
 const char* u8c(const char8_t* text)
@@ -337,6 +338,30 @@ Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Str
 } // namespace
 void App::drawDrawingMode()
 {
+    // TimesheetStep35RobustBlock: display-only formal TimesheetPanel skeleton.
+    // Step 3.5 only shows the panel. It does not edit, save, resolve, or affect canvas drawing.
+    {
+        static ::perapera::ui::TimesheetPanelState timesheetPanelState;
+        timesheetPanelState.showDetachedWindow = true;
+        timesheetPanelState.windowOpen = true;
+
+        ::perapera::ui::TimesheetPanelViewModel timesheetPanelData;
+        timesheetPanelData.totalFrames = project_.timeline.totalFrames > 0 ? project_.timeline.totalFrames : 1;
+        timesheetPanelData.fps = 24;
+        timesheetPanelData.cells.reserve(project_.cells.size());
+
+        for (const auto& timesheetCell : project_.cells) {
+            ::perapera::ui::TimesheetPanelCellColumn column;
+            column.cellId = timesheetCell.id;
+            column.displayName = timesheetCell.name;
+            column.category = timesheetCell.category;
+            timesheetPanelData.cells.push_back(column);
+        }
+
+        const ::perapera::ui::TimesheetPanelResult timesheetPanelResult =
+            ::perapera::ui::drawTimesheetPanel(timesheetPanelData, timesheetPanelState);
+        (void)timesheetPanelResult;
+    }
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
     if (isColoringMode) {
         selectPaintLayerForColoring(true);
@@ -686,3 +711,4 @@ void App::removeIntersectingStrokes(const Stroke& eraserStroke)
     }
 }
 } // namespace perapera
+

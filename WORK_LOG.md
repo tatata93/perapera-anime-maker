@@ -958,3 +958,90 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - Step 3は表示専用部品の追加に留めた。
 - `CellPanel` にはタイムシートUIを戻していない。
 - Step 3.5では既存Appの現在ソースを確認してから、`TimesheetPanel` を作画モードに表示接続すること。
+
+
+## Timesheet Rebuild Step 3.5: TimesheetPanel 表示接続
+
+### 今回やったこと
+
+- Step 3で追加した表示専用 `TimesheetPanel` を作画モードから呼び出す接続手順を追加した。
+- `AppDrawingMode.cpp` に対して、現在の実ファイルを古い版で丸ごと上書きしないため、目印確認付きの最小差し込みスクリプトを用意した。
+- タイムシートウィンドウは通常のDear ImGui独立ウィンドウとして表示する方針にした。
+- 閉じた場合に再表示できる小さな再オープンウィンドウを出す方針にした。
+
+### 今回やらなかったこと
+
+- タイムシート編集。
+- タイムシート保存・読み込み接続。
+- キャンバス表示、再生、PNG/MP4出力への反映。
+- Dear ImGui multi-viewports の有効化。
+- ソフト大ウィンドウ外へのドラッグ実装。
+
+### 触ったファイル
+
+- `src/ui/AppDrawingMode.cpp` は適用スクリプト実行時に変更される。
+- `docs/timesheet_step3_5_connection_note.md` を追加。
+
+### 触っていない重要ファイル
+
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- 既存 `docs/final_spec_v6.md`
+- `ProjectIO` / `CutIO` / `TimesheetIO` の本体接続
+
+### 既知の未解決問題
+
+- タイムシートは表示専用で、まだ実データ・編集・保存・表示反映にはつながっていない。
+- 大ウィンドウ外ドラッグは未検証。
+- App接続に対して今回は例外的に差し込みスクリプトを使っている。次にApp本体を大きく変更する前には、現在ソースを再バンドルして完全ファイル方式へ戻す。
+
+### 次に推奨する作業
+
+- Step 3.6: multi-viewports検証、またはStep 4: TimesheetPanel最小編集。
+
+### なぜその作業を推奨するか
+
+- 外部ドラッグ要望があるため、編集機能を作る前にmulti-viewportsの可否を早めに確認した方がよい。
+- ただし、不安定なら通常のアプリ内独立ウィンドウに留め、編集機能を優先する。
+
+### Codex/AI handoff note
+
+- Step 3.5は `AppDrawingMode.cpp` への最小接続である。
+- `CellPanel` にタイムシートを戻さないこと。
+- 作画FとタイムラインTの連動はまだ行わないこと。
+
+## Timesheet Rebuild Step 3.5 connection robust fix
+
+### 今回やったこと
+
+- `apply_timesheet_step3_5_connection_fixed.ps1` が現在の `AppDrawingMode.cpp` 構造に合わず失敗したため、anonymous namespace の位置に依存しない堅牢版スクリプトを追加した。
+- `App::drawDrawingMode()` の開始直後へ表示専用 `TimesheetPanel` 呼び出しを挿入する方式に変更した。
+- タイムシートUIは表示専用で、編集・保存・キャンバス反映はまだ行わない。
+
+### 今回やらなかったこと
+
+- タイムシート編集。
+- 保存読み込み接続。
+- キャンバス表示反映。
+- 再生・PNG・MP4出力反映。
+- Dear ImGui multi-viewports 有効化。
+
+### 触ったファイル
+
+- `src/ui/AppDrawingMode.cpp`（スクリプト実行後）
+- `docs/timesheet_step3_5_connection_robust_note.md`
+
+### 既知の未解決問題
+
+- この段階ではタイムシートウィンドウを閉じても次フレームで再表示される。
+- タイムシートT選択はまだキャンバス表示や作画Fに反映されない。
+
+### 次に推奨する作業
+
+- Step 3.6: App側に正式な TimesheetPanel 表示状態を持たせ、閉じる/開く操作と外部ドラッグ検証を行う。
+
+### Codex/AI handoff note
+
+- 以前の Step 3.5 修正スクリプトは `anonymous namespace` の閉じ位置を探して失敗した。
+- 今後は現在の実ソースを確認してから、完成ファイル方式でApp接続を行うこと。

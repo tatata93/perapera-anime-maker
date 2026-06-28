@@ -328,3 +328,18 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - セリフ、カメラ、撮影、素材メモ欄は最初から列として確保する。
 - 大ウィンドウ外へのドラッグは、Dear ImGui multi-viewports の安定性確認後に対応する。
 - Step 3時点ではmulti-viewportsを有効化しない。
+
+
+## Timesheet Rebuild Step 3.5 decisions
+
+- `TimesheetPanel` は `CellPanel` へ混ぜず、作画モードから独立ウィンドウとして呼び出す。
+- Step 3.5では表示専用に留め、T選択を `activeFrameIndex_` や作画Fへ反映しない。
+- ユーザー環境の現在Appファイルを古い版で上書きしないため、今回は例外的に目印確認付きの最小差し込みスクリプトで `AppDrawingMode.cpp` を更新する。
+- 大ウィンドウ外ドラッグは Dear ImGui multi-viewports の安定性確認後に判断する。
+
+## Timesheet Rebuild Step 3.5 connection robust fix
+
+- Step 3.5 の接続は、現在の `AppDrawingMode.cpp` 構造に合わせて `App::drawDrawingMode()` 開始直後へ表示専用ブロックを挿入する。
+- anonymous namespace の閉じ位置に依存する差し込み方式は採用しない。
+- この段階では、タイムシートウィンドウは表示確認を優先し、閉じると再表示される挙動を許容する。
+- 正式な開閉状態・外部ドラッグ・編集は後続Stepへ回す。
