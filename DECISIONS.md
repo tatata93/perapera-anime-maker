@@ -367,3 +367,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - UI側のTは0始まり、正式Timesheet側のTは1始まりとして変換する。
 - `Empty` は紙タイムシート上の未記入であり、正式Timesheetにはエントリとして保存しない。
 - まだキャンバス表示、再生、PNG/MP4出力には反映しない。
+
+## Timesheet Rebuild Step 5 decisions
+
+- TimesheetPanelの編集結果は、まずApp内の `workingTimesheet_` へ一時同期する。
+- この段階では、正式TimesheetをProject保存、キャンバス表示、再生、出力へ接続しない。
+- タイムシートウィンドウの開閉状態は `App` メンバーの `TimesheetPanelState` として保持する。
+- `static TimesheetPanelState` はやめ、Appのライフタイムに紐づける。
+- 保存接続は後続Stepで行う。

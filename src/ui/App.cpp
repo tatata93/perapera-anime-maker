@@ -57,6 +57,8 @@ App::App()
     : project_(Project::createDefault())
 {
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
+    workingTimesheet_.totalFrames = std::max(1, project_.timeline.totalFrames);
+    workingTimesheet_.defaultExposure = 1;
     lastMessage_ = "Phase 1.5 Step 20: ready";
 }
 

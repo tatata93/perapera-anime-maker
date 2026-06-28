@@ -1186,3 +1186,44 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - Step 4.5 is intentionally not connected to ProjectIO or rendering.
 - Use `buildTimesheetFromPanelState()` only as a boundary conversion.
 - Keep drawing frame and timeline frame separated in later steps.
+
+## Timesheet Rebuild Step 5: App内正式Timesheet一時保持
+
+### 今回やったこと
+- `App` に `TimesheetPanelState` をメンバーとして追加した。
+- `App` に正式core `Timesheet workingTimesheet_` を一時保持する状態を追加した。
+- `TimesheetPanelResult::entryChanged` を受けて、`buildTimesheetFromPanelState()` でUI一時入力を正式Timesheetへ同期するようにした。
+- タイムシート記入数をステータスメッセージへ表示するようにした。
+
+### 今回やらなかったこと
+- Project保存への接続。
+- cut.json / timesheet.json 保存への接続。
+- キャンバス表示反映。
+- 再生、PNG、MP4出力への反映。
+
+### 触ったファイル
+- `src/ui/App.h`
+- `src/ui/App.cpp`
+- `src/ui/AppDrawingMode.cpp`
+- `docs/timesheet_step5_app_temp_timesheet_note.md`
+
+### 触っていない重要ファイル
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- 既存の仕様書本文
+
+### 既知の未解決問題
+- タイムシート入力はまだ保存されない。
+- タイムシート入力はまだキャンバス、再生、出力へ反映されない。
+- セリフ、カメラ、撮影、素材メモ欄の編集はまだ未実装。
+
+### 次に推奨する作業
+- Step 5.5: App内一時Timesheetを `timesheet.json` へ手動保存/読み込みする試験接続。
+
+### なぜその作業を推奨するか
+- キャンバス反映より前に保存境界を小さく確認しておくと、UI編集、保存、表示反映の責務が混ざりにくい。
+
+### Codex/AI handoff note
+- 今回は `Project` 直下へ正式Timesheetを戻していない。`App` 内の一時状態に限定している。
+- 次に保存接続する場合も、いきなり表示反映へ進まず、まず明示ボタンまたはデバッグ保存で往復確認すること。

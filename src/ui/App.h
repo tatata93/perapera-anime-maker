@@ -15,11 +15,13 @@
 #include "core/Frame.h"
 #include "core/Project.h"
 #include "core/Stroke.h"
+#include "core/Timesheet.h"
 #include "brush/MyPaintBrushEngine.h"
 #include "render/CanvasRenderer.h"
 #include "ui/panels/BrushPanel.h"
 #include "ui/panels/ColorPanel.h"
 #include "ui/panels/ExportPanel.h"
+#include "ui/panels/TimesheetPanel.h"
 
 namespace perapera {
 
@@ -64,6 +66,13 @@ private:
     ui::BrushSettings brushSettings_;
     ui::ColorPanelState colorPanelState_;
     ui::ExportPanelState exportState_;
+
+    // Timesheet Rebuild Step 5:
+    // タイムシートUIの一時入力を正式core Timesheetへ同期するためのApp内一時状態。
+    // まだProject保存、キャンバス表示、再生、出力には接続しない。
+    ui::TimesheetPanelState timesheetPanelState_;
+    Timesheet workingTimesheet_;
+    bool workingTimesheetDirty_ = false;
 
     Stroke currentStroke_;
     bool isDrawingStroke_ = false;
