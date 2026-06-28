@@ -286,3 +286,14 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - タイムシートウィンドウは将来的に独立 `TimesheetPanel` とし、CellPanelには戻さない。
 - タイムシートウィンドウをソフト本体の大ウィンドウ外へドラッグできる機能は、Dear ImGui multi-viewportsとSDL3 + SDL_Renderer3バックエンドの安定性を確認したうえで実装する。
 - 外部ドラッグ機能は便利機能であり、データモデル、保存、表示解決、再生、出力より優先しない。
+
+## 2026-06-29 Timesheet Rebuild Step 1.5 decisions
+
+- 正式タイムシートは、UIや保存へ接続する前に core resolver の自己診断を通す。
+- `Hold` は現在の表示/非表示状態を維持する。
+- `Null` は空セルとして非表示状態へ切り替える。
+- `Drawing` / `Key` / `Inbetween` は指定された作画F番号を表示する。
+- `Key` / `Inbetween` は表示上は作画F指定だが、制作管理上の属性として保持する。
+- 同一Tに複数の指定がある場合は、後に記入された指定を優先する。
+- `perapera_timesheet_resolver_selftest` は本体アプリへ影響しない検証用ターゲットとして扱う。
+- 次は `io` 側に正式タイムシート保存読み込みを追加する。

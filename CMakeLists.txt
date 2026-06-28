@@ -211,10 +211,23 @@ if (PERAPERA_LIBMYPAINT_AVAILABLE)
     endif()
 endif()
 
+
+add_executable(perapera_timesheet_resolver_selftest
+    tools/timesheet_resolver_selftest.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetResolver.cpp
+)
+
+target_include_directories(perapera_timesheet_resolver_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 if (MSVC)
     target_compile_options(perapera_anime_maker PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_timesheet_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # WindowsでSDL3.dllをexe横にコピーする。

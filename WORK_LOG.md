@@ -757,3 +757,49 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - `drawingFrameNumber` もUI上の作画F番号として1始まりで扱う。既存 `Cell.frames` のvector indexへ接続する時は `drawingFrameNumber - 1` に変換すること。
 - `Hold` は「前状態維持」であり、直前が `Null` なら非表示を維持する。
 - `Key` / `Inbetween` は表示上はDrawing指定と同様に作画Fを表示し、制作管理属性として区別する。
+
+## 2026-06-29 Timesheet Rebuild Step 1.5: resolver self-test
+
+### 今回やったこと
+- 正式タイムシートv1 core resolver の自己診断ツール `tools/timesheet_resolver_selftest.cpp` を追加した。
+- `CMakeLists.txt` に `perapera_timesheet_resolver_selftest` ターゲットを追加した。
+- `Hold / Null / Drawing / Key / Inbetween` の最小解決ルールを、UIや保存処理へ接続する前に検証できるようにした。
+- 同一Tに複数指定がある場合は、後に記入されたものが勝つことを確認するケースを入れた。
+- 範囲外Tの正規化、存在しないセル列、フレーム全体解決の確認ケースを入れた。
+
+### 今回やらなかったこと
+- タイムシートUIはまだ作っていない。
+- `Project` / `Cut` への正式接続はまだ行っていない。
+- `cut.json` 保存読み込みはまだ行っていない。
+- キャンバス表示、再生、PNG/MP4出力への反映はまだ行っていない。
+- タイムシートウィンドウの外部ドラッグ実装はまだ行っていない。
+
+### 触ったファイル
+- `CMakeLists.txt`
+- `tools/timesheet_resolver_selftest.cpp`
+- `WORK_LOG.md`
+- `DECISIONS.md`
+
+### 触っていない重要ファイル
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- 既存の `docs/final_spec_v6.md`
+- ユーザーの作画データ
+
+### 既知の未解決問題
+- `Timesheet` はまだ既存 `Project` へ接続していない。
+- UI表示、編集、保存、出力は未実装。
+- 外部ドラッグ可能な独立タイムシートウィンドウは、ImGui multi-viewports の安定性確認後に実装する必要がある。
+
+### 次に推奨する作業
+- Step 2 として、正式 `Timesheet` の JSON 保存読み込みを `io` 側に追加する。
+
+### なぜその作業を推奨するか
+- UIを先に作ると、データ意味、保存形式、表示解決が混ざって壊れやすい。
+- 先に core resolver の自己診断を通し、その後に保存読み込みを固めることで、UI実装時の事故を減らせる。
+
+### Codex/AI handoff note
+- `perapera_timesheet_resolver_selftest` はアプリ本体とは独立したCMakeターゲットである。
+- 実行コマンドは `& .\build\bin\perapera_timesheet_resolver_selftest.exe` を想定する。
+- この段階ではユーザー向けUIに変化がないのが正しい。
