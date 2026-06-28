@@ -1083,3 +1083,49 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 
 ### Codex/AI handoff note
 - Step 3.6 is a viewport feasibility step only. Do not mix timesheet editing or resolver application here.
+
+## 2026-06-29 Timesheet Rebuild Step 4: 最小編集スケルトン
+
+### 今回やったこと
+- `TimesheetPanel` に最小編集用の一時データ構造を追加した。
+- タイムシート表のマスをクリックしてTとセル列を選択できるようにした。
+- 選択マスへ作画、原画、中割、ホールド、空セル、消去を入力できるようにした。
+- 作画F番号入力欄を追加した。
+- 入力結果を表上に記号として表示するようにした。
+
+### 今回やらなかったこと
+- Project / Cut / Timesheet本体への接続は行っていない。
+- `timesheet.json` / `cut.json` への保存は行っていない。
+- キャンバス表示、再生、PNG、MP4出力への反映は行っていない。
+- タイムシート追加欄の編集はまだ行っていない。
+
+### 触ったファイル
+- `src/ui/panels/TimesheetPanel.h`
+- `src/ui/panels/TimesheetPanel.cpp`
+- `docs/timesheet_step4_min_edit_note.md`
+
+### 触っていない重要ファイル
+- `src/ui/AppDrawingMode.cpp`
+- `src/app/main.cpp`
+- `src/core/Timesheet.*`
+- `src/io/TimesheetIO.*`
+- `src/io/CutIO.*`
+- `docs/final_spec_v6.md`
+
+### 既知の未解決問題
+- 入力結果は一時状態であり、アプリを閉じると消える。
+- 入力結果はキャンバス表示・再生・出力には反映されない。
+- セリフ、カメラ、撮影、素材メモ欄はまだ表示のみ。
+
+### 次に推奨する作業
+- Step 4.5として、入力結果を正式`Timesheet`へ変換するアダプタを作る。
+- その後に保存接続、表示解決、キャンバス反映へ進む。
+
+### なぜその作業を推奨するか
+- UI編集と保存/表示反映を直接つなぐと、前回同様に責務が混ざって不安定化しやすい。
+- 一時UI入力を正式coreモデルへ変換する境界を作ることで、テストしやすくなる。
+
+### Codex/AI handoff note
+- Step 4はUIだけの最小編集である。
+- `TimesheetPanelState::entries` は保存データではない。
+- 後続Stepではこの一時入力を `perapera::Timesheet` へ同期する関数を明示的に作ること。

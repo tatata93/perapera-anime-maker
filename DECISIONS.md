@@ -350,3 +350,12 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - `IMGUI_HAS_VIEWPORT` がない構成ではコンパイルが壊れないようにし、従来の本体内ウィンドウとして動作させる。
 - このStepでは、タイムシート編集・保存・表示反映・出力反映は行わない。
 - 外部ドラッグが不安定な場合は、正式タイムシートUIは本体内独立ウィンドウを標準とし、外部ウィンドウ化は後回しにする。
+
+## 2026-06-29 Timesheet Rebuild Step 4 Decisions
+
+- タイムシート最小編集は、まず `TimesheetPanelState::entries` 内の一時データとして扱う。
+- Step 4では保存・キャンバス表示・再生・出力には接続しない。
+- マスの意味は `未記入 / 作画 / 原画 / 中割 / ホールド / 空セル` に限定する。
+- 表示記号は、数字、原+数字、中+数字、｜、×、—、□ を使う。
+- セリフ、カメラ、撮影、素材メモ欄の編集は後続Stepに回す。
+- 次は、一時UI入力を正式 `Timesheet` coreモデルへ同期する境界を作る。
