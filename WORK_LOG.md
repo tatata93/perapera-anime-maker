@@ -852,3 +852,55 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - This step intentionally adds standalone formal TimesheetIO and a self-test target only.
 - Do not connect it to ProjectIO yet.
 - Next recommended step is CutIO/cut.json scaffold, not UI wiring.
+
+## 2026-06-29 Timesheet Rebuild Step 2.5: CutIO / cut.json scaffold
+
+### 今回やったこと
+- 正式タイムシートv1を持つCut単位の保存・読み込み入口として `src/io/CutIO.h` / `src/io/CutIO.cpp` を追加した。
+- `cut.json` はカットのメタ情報、`timesheet.json` はタイムシート本体として分離する方針をコード上の保存形式に反映した。
+- `CutIO::saveCut()` / `CutIO::loadCut()` を追加した。
+- `CutIO::cutJsonPathForCutFolder()` / `CutIO::timesheetJsonPathForCutFolder()` を追加し、cutフォルダ内のファイル配置を固定した。
+- `tools/cut_io_selftest.cpp` を追加し、`cut.json` と `timesheet.json` の往復保存を自己診断できるようにした。
+- `CMakeLists.txt` に `src/io/CutIO.cpp` と `perapera_cut_io_selftest` ターゲットを追加した。
+
+### 今回やらなかったこと
+- 既存Project保存/読み込みへの接続はまだ行っていない。
+- `Project` から `Cut` を作成する移行処理はまだ行っていない。
+- タイムシートUIはまだ実装していない。
+- キャンバス表示、再生、PNG連番、MP4出力へのタイムシート反映はまだ行っていない。
+- タイムシートウィンドウの外部ドラッグ実装はまだ行っていない。
+
+### 触ったファイル
+- `CMakeLists.txt`
+- `src/io/CutIO.h`
+- `src/io/CutIO.cpp`
+- `tools/cut_io_selftest.cpp`
+
+### 触っていない重要ファイル
+- `src/ui/panels/CellPanel.cpp`
+- `src/ui/AppDrawingMode.cpp`
+- `src/ui/AppProjectIO.cpp`
+- `src/core/Project.h`
+- `docs/final_spec_v6.md`
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+
+### 既知の未解決問題
+- `CutIO` はまだアプリ本体の保存/読み込み経路に接続していない。
+- 既存Projectのセル一覧と正式Cut/Timesheet tracksの同期ルールは未実装。
+- タイムシートUIとキャンバス反映は未実装。
+- ImGui multi-viewports による外部ドラッグ可能ウィンドウは未検証。
+
+### 次に推奨する作業
+- Timesheet Rebuild Step 3として、Projectへ接続せずに表示専用の `TimesheetPanel` スケルトンを追加する。
+- まだ編集やキャンバス反映は行わず、固定サンプル/空データを縦型表として表示するところから始める。
+
+### なぜその作業を推奨するか
+- core / io の自己診断がそろったため、次はUIの骨組みを作ってもよい段階になった。
+- ただし、編集・保存・描画反映を同時に入れると前回と同じ壊れ方をするため、まず表示専用に限定する。
+
+### Codex/AI handoff note
+- `cut.json` は `kind=perapera.cut.v1`、`formatVersion=1`、`timesheetFile=timesheet.json` を持つ。
+- タイムシート本体は `TimesheetIO` が `timesheet.json` へ保存する。
+- `perapera_cut_io_selftest` は日本語カット名、セル列順、タイムシート解決結果、JSON安定性を検証する。

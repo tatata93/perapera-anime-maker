@@ -306,3 +306,13 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - 保存前・読み込み後は `normalizeTimesheet()` を通す。
 - Step 2ではアプリの保存・読み込み動作を変えない。正式接続は `CutIO` とProject/Cut構造の最小導入後に行う。
 - UIより先にIO自己診断を追加し、JSON往復の安定性を確認する。
+
+## 2026-06-29 Timesheet Rebuild Step 2.5 Decisions
+
+- 正式Cut保存では、`cut.json` と `timesheet.json` を分離する。
+  - `cut.json`: カットID、カット名、fps、総フレーム数、タイムシートファイル名、セル重ね順キー。
+  - `timesheet.json`: タイムシート本体、セル列、各マス、セリフ、カメラ指示、撮影指示、素材メモ。
+- `CutIO` はProject/UI/描画へ接続しない独立IOとして先に追加する。
+- `cut.json` にはタイムシート列の表示名や各マス内容を混ぜない。
+- `loadCut()` 時、`timesheet.json` の `totalFrames` は `cut.json` の `totalFrames` に合わせて正規化する。
+- タイムシートウィンドウの外部ドラッグ対応はまだ有効化しない。UI実装段階でSDL3 + ImGui multi-viewportsの安定性を確認してから判断する。

@@ -148,6 +148,7 @@ add_executable(perapera_anime_maker
 
     src/io/ProjectIO.cpp
     src/io/TimesheetIO.cpp
+    src/io/CutIO.cpp
     src/io/PngExporter.cpp
     src/io/FfmpegRunner.cpp
 
@@ -238,14 +239,32 @@ target_link_libraries(perapera_timesheet_io_selftest PRIVATE
     nlohmann_json::nlohmann_json
 )
 
+add_executable(perapera_cut_io_selftest
+    tools/cut_io_selftest.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetResolver.cpp
+    src/io/TimesheetIO.cpp
+    src/io/CutIO.cpp
+)
+
+target_include_directories(perapera_cut_io_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(perapera_cut_io_selftest PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 if (MSVC)
     target_compile_options(perapera_anime_maker PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_cut_io_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_cut_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # WindowsでSDL3.dllをexe横にコピーする。
