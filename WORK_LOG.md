@@ -803,3 +803,52 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 - `perapera_timesheet_resolver_selftest` はアプリ本体とは独立したCMakeターゲットである。
 - 実行コマンドは `& .\build\bin\perapera_timesheet_resolver_selftest.exe` を想定する。
 - この段階ではユーザー向けUIに変化がないのが正しい。
+
+## 2026-06-29 Timesheet Rebuild Step 2: formal TimesheetIO save/load scaffold
+
+### 今回やったこと
+- 正式タイムシートv1 core model 用の `src/io/TimesheetIO.h` / `src/io/TimesheetIO.cpp` を追加した。
+- `Timesheet` を `timesheet.json` として保存・読み込みする最小IOを追加した。
+- `kind: perapera.timesheet.v1` と `formatVersion: 1` を持つJSON形式にした。
+- `totalFrames`, `defaultExposure`, `tracks`, `entries`, `frameNotes` を往復保存できるようにした。
+- 保存前・読み込み後に `normalizeTimesheet()` を通し、範囲外Tや未指定作画番号を安全化する方針にした。
+- `tools/timesheet_io_selftest.cpp` を追加し、保存、読み込み、UTF-8日本語、frameNotes、resolver結果、安定JSON出力を自己診断できるようにした。
+- `CMakeLists.txt` に `src/io/TimesheetIO.cpp` と `perapera_timesheet_io_selftest` ターゲットを追加した。
+
+### 今回やらなかったこと
+- `ProjectIO` への接続は行っていない。
+- `Cut` 保存、`cut.json` 保存、既存プロジェクト保存との統合は行っていない。
+- タイムシートUI、キャンバス表示反映、再生、PNG/MP4出力反映は行っていない。
+- タイムシートウィンドウの外部ドラッグ実装はまだ行っていない。
+
+### 触ったファイル
+- `CMakeLists.txt`
+- `src/io/TimesheetIO.h`
+- `src/io/TimesheetIO.cpp`
+- `tools/timesheet_io_selftest.cpp`
+
+### 触っていない重要ファイル
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- 既存 `docs/` 内の他ファイル
+- 既存Project保存経路
+- UIファイル群
+
+### 既知の未解決問題
+- MSVC実ビルドと `perapera_timesheet_io_selftest.exe` 実行確認はユーザー環境で必要。
+- `TimesheetIO` はまだProject/Cutへ接続していないため、アプリ上の保存・読み込み動作は変わらない。
+- 正式タイムシートUIとウィンドウ外ドラッグ対応は後続Stepで実装判断する。
+
+### 次に推奨する作業
+- Step 2.5 として `CutIO` / `cut.json` の最小保存読み込みを追加する。
+- まだUIへ行かず、`Cut` が `Timesheet` を持ち、JSONで往復できるところまで確認する。
+
+### なぜその作業を推奨するか
+- 前回はUI、保存、表示反映、出力が混ざって壊れたため、今回は `core -> io -> UI -> 表示 -> 出力` の順で進める。
+- `TimesheetIO` 単体の次に `CutIO` を固めると、後の `TimesheetPanel` が保存形式に引きずられにくくなる。
+
+### Codex/AI handoff note
+- This step intentionally adds standalone formal TimesheetIO and a self-test target only.
+- Do not connect it to ProjectIO yet.
+- Next recommended step is CutIO/cut.json scaffold, not UI wiring.

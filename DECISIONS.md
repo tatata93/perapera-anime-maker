@@ -297,3 +297,12 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - 同一Tに複数の指定がある場合は、後に記入された指定を優先する。
 - `perapera_timesheet_resolver_selftest` は本体アプリへ影響しない検証用ターゲットとして扱う。
 - 次は `io` 側に正式タイムシート保存読み込みを追加する。
+
+## 2026-06-29 Timesheet Rebuild Step 2 decisions
+
+- 正式タイムシートJSONは `kind: perapera.timesheet.v1` と `formatVersion: 1` を持つ形式にする。
+- `TimesheetIO` は `ProjectIO` に直接依存させず、`core::Timesheet` の保存・読み込みだけを担当する。
+- `timesheet.json` は将来的にCutフォルダ直下へ置く前提で、`TimesheetIO::timesheetPathForCutFolder(cutFolder)` を追加する。
+- 保存前・読み込み後は `normalizeTimesheet()` を通す。
+- Step 2ではアプリの保存・読み込み動作を変えない。正式接続は `CutIO` とProject/Cut構造の最小導入後に行う。
+- UIより先にIO自己診断を追加し、JSON往復の安定性を確認する。
