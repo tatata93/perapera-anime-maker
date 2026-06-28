@@ -1266,3 +1266,44 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 
 ### Codex/AI handoff note
 - Step 5.1 fixed a Dear ImGui ID conflict in the timesheet grid. The cell selectable labels are often identical across rows, so the grid now pushes both timeline frame and cell column IDs before calling Selectable.
+
+## Timesheet Rebuild Step 5.5: 一時タイムシート手動保存/読み込み
+
+### 今回やったこと
+- `AppDrawingMode.cpp` に一時タイムシートの手動保存/読み込みUIを追加した。
+- `TimesheetPanelState` の一時入力を正式 `Timesheet` へ変換して `timesheet.json` に保存できるようにした。
+- `timesheet.json` から正式 `Timesheet` を読み込み、`TimesheetPanelState` の表入力へ戻せるようにした。
+- 保存先は暫定的に `<projectFolder>/timesheet.json` とした。
+
+### 今回やらなかったこと
+- Project保存との自動連動。
+- CutIO / cut.json との統合。
+- キャンバス表示反映。
+- 再生、PNG、MP4出力反映。
+- セリフ、カメラ、撮影、素材メモ欄の編集。
+
+### 触ったファイル
+- `src/ui/AppDrawingMode.cpp`
+- `docs/timesheet_step5_5_manual_io_note.md`
+
+### 触っていない重要ファイル
+- `AGENTS_for_perapera_anime.md`
+- `README_timesheet_step_c.md`
+- `README_timesheet_step_d.md`
+- `docs/final_spec_v6.md`
+
+### 既知の未解決問題
+- タイムシート保存はまだProject保存と自動連動しない。
+- 保存先はCut単位ではなく暫定的にProjectフォルダ直下である。
+- 保存したタイムシートはまだキャンバス表示、再生、出力に反映されない。
+
+### 次に推奨する作業
+- Step 6として、タイムシートT選択とキャンバス表示反映を安全に接続する前に、まず読み込み後のセル列不一致・フレーム数変更時の扱いを確認する。
+
+### なぜその作業を推奨するか
+- 保存/読み込みが入ると、Project側のセル追加・削除・名前変更とタイムシートのセル列がずれる可能性があるため、表示反映へ進む前に不整合時の安全動作を固める必要がある。
+
+### Codex/AI handoff note
+- Step 5.5 adds explicit manual IO for the temporary formal Timesheet.
+- The manual buttons use `TimesheetIO::saveTimesheet` and `TimesheetIO::loadTimesheet` with `appio::absolutePath(exportState_.projectFolder) / timesheet.json` via `timesheetPathForCutFolder`.
+- This is intentionally not wired into Project save/load yet.

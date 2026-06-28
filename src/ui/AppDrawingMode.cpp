@@ -3,11 +3,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
 #include <iterator>
 #include <limits>
+#include <string>
 #include <utility>
 #include <vector>
 #include <imgui.h>
+#include "io/TimesheetIO.h"
+#include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
 #include "ui/panels/BrushPanel.h"
 #include "ui/panels/CellPanel.h"
@@ -23,6 +27,15 @@ namespace {
 const char* u8c(const char8_t* text)
 {
     return reinterpret_cast<const char*>(text);
+}
+
+int countTimesheetEntries(const Timesheet& timesheet)
+{
+    int count = 0;
+    for (const TimesheetCellTrack& track : timesheet.tracks) {
+        count += static_cast<int>(track.entries.size());
+    }
+    return count;
 }
 float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 {
@@ -383,12 +396,60 @@ void App::drawDrawingMode()
             workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
             workingTimesheetDirty_ = true;
 
-            int entryCount = 0;
-            for (const TimesheetCellTrack& track : workingTimesheet_.tracks) {
-                entryCount += static_cast<int>(track.entries.size());
-            }
+            const int entryCount = countTimesheetEntries(workingTimesheet_);
             lastMessage_ = "timesheet temporary core data updated: entries=" + std::to_string(entryCount);
         }
+
+        // Timesheet Rebuild Step 5.5:
+        // まだProject保存とは統合せず、現在のプロジェクトフォルダ直下 timesheet.json へ
+        // 明示ボタンで一時Timesheetを保存/読み込みする。
+        const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
+        const std::filesystem::path timesheetPath = TimesheetIO::timesheetPathForCutFolder(projectFolder);
+
+        ImGui::Begin(
+            u8c(u8"タイムシート保存##FormalTimesheetManualIO"),
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+        ImGui::TextUnformatted(u8c(u8"Step 5.5: 一時タイムシートの手動保存/読み込み"));
+        ImGui::TextWrapped(
+            u8c(u8"保存先: %s"),
+            timesheetPath.string().c_str());
+        ImGui::Text(
+            u8c(u8"一時Timesheet: entries=%d%s"),
+            countTimesheetEntries(workingTimesheet_),
+            workingTimesheetDirty_ ? u8c(u8" / 未保存の可能性") : u8c(u8""));
+
+        if (ImGui::SmallButton(u8c(u8"一時タイムシート保存"))) {
+            workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
+            workingTimesheet_.totalFrames = std::max(1, timesheetPanelData.totalFrames);
+
+            std::string error;
+            if (TimesheetIO::saveTimesheet(workingTimesheet_, timesheetPath, &error)) {
+                workingTimesheetDirty_ = false;
+                lastMessage_ = "timesheet saved: " + timesheetPath.string() +
+                    " | entries=" + std::to_string(countTimesheetEntries(workingTimesheet_));
+            } else {
+                lastMessage_ = "timesheet save failed: " + error;
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton(u8c(u8"一時タイムシート読込"))) {
+            Timesheet loadedTimesheet;
+            std::string error;
+            if (TimesheetIO::loadTimesheet(timesheetPath, loadedTimesheet, &error)) {
+                workingTimesheet_ = std::move(loadedTimesheet);
+                ::perapera::ui::replacePanelEntriesFromTimesheet(workingTimesheet_, timesheetPanelState_);
+                workingTimesheetDirty_ = false;
+                lastMessage_ = "timesheet loaded: " + timesheetPath.string() +
+                    " | entries=" + std::to_string(countTimesheetEntries(workingTimesheet_));
+            } else {
+                lastMessage_ = "timesheet load failed: " + error;
+            }
+        }
+
+        ImGui::TextDisabled(u8c(u8"この保存は試験段階です。Project保存・キャンバス表示・再生・出力にはまだ接続していません。"));
+        ImGui::End();
     }
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
     if (isColoringMode) {

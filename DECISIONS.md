@@ -388,3 +388,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 理由:
 - Dear ImGui は表示ラベルをIDに使うため、同じラベルのマスが大量にある表ではID衝突しやすい。
 - タイムシートは同種ラベルが多数並ぶUIなので、行列座標ベースのIDが必要。
+
+## Timesheet Rebuild Step 5.5 decisions
+
+- 一時タイムシートは、まず明示ボタンでのみ `timesheet.json` へ保存・読み込みする。
+- 保存先はCut管理へ接続するまで暫定的に `<projectFolder>/timesheet.json` とする。
+- Project保存との自動連動はまだ行わない。
+- 読み込み時は正式 `Timesheet` を `TimesheetPanelState` の一時入力へ戻す。
+- キャンバス表示、再生、出力への反映は、保存/読み込み確認後の後続Stepで行う。
