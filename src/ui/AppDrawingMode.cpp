@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 #include <imgui.h>
+#include "core/TimesheetResolver.h"
 #include "ui/Theme.h"
 #include "ui/panels/BrushPanel.h"
 #include "ui/panels/CellPanel.h"
@@ -398,13 +399,20 @@ void App::drawLeftSidebar()
 }
 void App::drawRightSidebar()
 {
-    const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_);
+    const ui::CellPanelResult cellPanelResult = ui::drawCellPanel(project_, activeCellIndex_, activeFrameIndex_);
     const auto resetPreviewReadiness = [&]() {
         previewWarmCursor_ = activeFrameIndex_;
         previewReadyFlags_.clear();
         previewReadyCount_ = 0;
         previewReadyScanCursor_ = activeFrameIndex_;
     };
+    if (cellPanelResult.timelineFrameChanged) {
+        activeFrameIndex_ = TimesheetResolver::clampTimelineFrame(project_, cellPanelResult.selectedTimelineFrame);
+        resetPreviewReadiness();
+        canvasRenderer_.markAllDirty();
+        lastMessage_ = "timesheet frame selected";
+    }
+
     if (cellPanelResult.projectStructureChanged) {
         activeCellIndex_ = cellPanelResult.selectedCellIndex;
         clampSelection();
@@ -417,6 +425,10 @@ void App::drawRightSidebar()
         resetPreviewReadiness();
         canvasRenderer_.markAllDirty();
         lastMessage_ = "active cell changed";
+    } else if (cellPanelResult.timesheetChanged) {
+        resetPreviewReadiness();
+        canvasRenderer_.markAllDirty();
+        lastMessage_ = "timesheet changed";
     } else if (cellPanelResult.displayChanged) {
         canvasRenderer_.markAllDirty();
         lastMessage_ = "cell display changed";
@@ -556,18 +568,36 @@ void App::drawCanvasArea(float rightWidth)
                              drawList);
     };
 
-    if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
-        drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
+    auto drawResolvedCell = [&](const ResolvedTimesheetCell& resolved, bool requireCellVisible) {
+        if (resolved.cell == nullptr || resolved.frame == nullptr || !resolved.timesheetVisible) {
+            return;
+        }
+        if (requireCellVisible && !resolved.cellVisible) {
+            return;
+        }
+        drawCellFrame(resolved.cellIndex, *resolved.cell, *resolved.frame, resolved.drawingFrameIndex);
+    };
+
+    if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
+        drawResolvedCell(TimesheetResolver::resolveCell(project_, activeFrameIndex_, activeCellIndex_), false);
     } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
-        const int safeSoloIndex = std::clamp(soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_, 0, static_cast<int>(project_.cells.size()) - 1);
+        const int safeSoloIndex = std::clamp(soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_, 0, static_cast<int>(project_.cells.size()) - 1);
+        drawResolvedCell(TimesheetResolver::resolveCell(project_, activeFrameIndex_, safeSoloIndex), false);
         const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
-        if (!soloCell.frames.empty()) {
+        if (false && !soloCell.frames.empty()) {
             const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
             const Frame& soloFrame = soloCell.frames[static_cast<std::size_t>(soloFrameIndex)];
             drawCellFrame(safeSoloIndex, soloCell, soloFrame, soloFrameIndex);
         }
     } else {
-        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+        TimesheetResolveOptions options;
+        options.includeHiddenCells = false;
+        const ResolvedTimesheetFrame resolvedFrame = TimesheetResolver::resolveFrame(project_, activeFrameIndex_, options);
+        for (const ResolvedTimesheetCell& resolved : resolvedFrame.cells) {
+            drawResolvedCell(resolved, true);
+        }
+
+        for (int cellIndex = static_cast<int>(project_.cells.size()); cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
             const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
             if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
                 continue;

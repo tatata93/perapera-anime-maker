@@ -20,6 +20,11 @@ enum class ExportMode {
     LineOnly,
 };
 
+struct ExportCellFrameRef {
+    const Cell* cell = nullptr;
+    const Frame* frame = nullptr;
+};
+
 const char* exportModeToString(ExportMode mode);
 const char* exportModeDisplayName(ExportMode mode);
 
@@ -47,12 +52,26 @@ public:
                                  ExportMode mode = ExportMode::Composite,
                                  std::string* errorMessage = nullptr);
 
+    static bool exportCellFrameRefs(const std::vector<ExportCellFrameRef>& refs,
+                                    const std::filesystem::path& outputPath,
+                                    int width,
+                                    int height,
+                                    ExportMode mode = ExportMode::Composite,
+                                    std::string* errorMessage = nullptr);
+
     static bool exportCellsFrameSequence(const std::vector<const Cell*>& cells,
                                          const std::filesystem::path& outputFolder,
                                          int width,
                                          int height,
                                          ExportMode mode = ExportMode::Composite,
                                          std::string* errorMessage = nullptr);
+
+    static bool exportCellFrameRefSequence(const std::vector<std::vector<ExportCellFrameRef>>& frames,
+                                           const std::filesystem::path& outputFolder,
+                                           int width,
+                                           int height,
+                                           ExportMode mode = ExportMode::Composite,
+                                           std::string* errorMessage = nullptr);
 };
 
 } // namespace perapera

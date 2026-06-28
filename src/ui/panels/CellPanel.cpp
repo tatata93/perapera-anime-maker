@@ -342,7 +342,6 @@ void markTimesheetChanged(CellPanelResult& result)
 {
     result.timesheetChanged = true;
     result.displayChanged = true;
-    result.projectStructureChanged = true;
 }
 
 const char* exposureKindLabel(TimesheetExposureKind kind)
@@ -358,6 +357,37 @@ const char* exposureKindLabel(TimesheetExposureKind kind)
         return u8c(u8"中割");
     }
     return u8c(u8"止め");
+}
+
+const char* exposureKindShortLabel(TimesheetExposureKind kind)
+{
+    switch (kind) {
+    case TimesheetExposureKind::Null:
+        return "-";
+    case TimesheetExposureKind::Key:
+        return "K";
+    case TimesheetExposureKind::Inbetween:
+        return "I";
+    case TimesheetExposureKind::Hold:
+        return "";
+    }
+    return "";
+}
+
+std::string timesheetExposureCellLabel(const TimesheetCellExposure& exposure)
+{
+    if (exposure.kind == TimesheetExposureKind::Null) {
+        return "-";
+    }
+
+    char buffer[32]{};
+    const char* suffix = exposureKindShortLabel(exposure.kind);
+    if (suffix[0] == '\0') {
+        std::snprintf(buffer, sizeof(buffer), "F%03d", std::max(1, exposure.drawingFrameIndex + 1));
+    } else {
+        std::snprintf(buffer, sizeof(buffer), "F%03d %s", std::max(1, exposure.drawingFrameIndex + 1), suffix);
+    }
+    return std::string(buffer);
 }
 
 void fillSelectedCellExposures(Project& project,
@@ -914,6 +944,79 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, int acti
     ImGui::TextDisabled(u8c(u8"現在表示中: T%03d"), clampedActiveTimelineFrame + 1);
     ImGui::Separator();
 
+    ImGui::TextUnformatted(u8c(u8"縦タイムシート"));
+    const float sheetHeight = std::clamp(ImGui::GetContentRegionAvail().y * 0.48f, 220.0f, 420.0f);
+    const int sheetColumnCount = static_cast<int>(project.cells.size()) + 1;
+    if (ImGui::BeginTable("VerticalTimesheetSheet",
+                          sheetColumnCount,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY |
+                              ImGuiTableFlags_ScrollX | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingFixedFit,
+                          ImVec2(0.0f, sheetHeight))) {
+        ImGui::TableSetupScrollFreeze(1, 1);
+        ImGui::TableSetupColumn("T", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
+            ImGui::TableSetupColumn(displayNameForCell(project.cells[static_cast<std::size_t>(index)], index).c_str(),
+                                    ImGuiTableColumnFlags_WidthFixed,
+                                    86.0f);
+        }
+        ImGui::TableHeadersRow();
+
+        for (int timelineFrame = 0; timelineFrame < totalFrames; ++timelineFrame) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            const bool selectedRow = timelineFrame == editTimelineFrame;
+            char rowLabel[24]{};
+            std::snprintf(rowLabel, sizeof(rowLabel), "T%03d", timelineFrame + 1);
+            if (ImGui::Selectable(rowLabel, selectedRow, ImGuiSelectableFlags_SpanAllColumns)) {
+                editTimelineFrame = timelineFrame;
+                lastObservedActiveTimelineFrame = editTimelineFrame;
+                result.selectedTimelineFrame = editTimelineFrame;
+                result.timelineFrameChanged = true;
+            }
+
+            for (int index = 0; index < static_cast<int>(project.cells.size()); ++index) {
+                Cell& sheetCell = project.cells[static_cast<std::size_t>(index)];
+                ImGui::TableSetColumnIndex(index + 1);
+                ImGui::PushID(timelineFrame * 4096 + index);
+                TimesheetCellExposure* sheetExposure =
+                    sheetCell.id.empty() ? nullptr : ensureTimesheetExposure(project, timelineFrame, sheetCell.id);
+                if (sheetExposure == nullptr) {
+                    ImGui::TextDisabled("-");
+                    ImGui::PopID();
+                    continue;
+                }
+                sheetExposure->drawingFrameIndex =
+                    std::clamp(sheetExposure->drawingFrameIndex, 0, frameCountForCell(sheetCell) - 1);
+                const bool selectedSlot = selectedRow && index == editCellIndex;
+                if (selectedSlot) {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive));
+                }
+                const std::string label = timesheetExposureCellLabel(*sheetExposure);
+                if (ImGui::Button(label.c_str(), ImVec2(76.0f, 0.0f))) {
+                    editTimelineFrame = timelineFrame;
+                    editCellIndex = index;
+                    lastObservedActiveTimelineFrame = editTimelineFrame;
+                    result.selectedTimelineFrame = editTimelineFrame;
+                    result.timelineFrameChanged = true;
+                }
+                if (selectedSlot) {
+                    ImGui::PopStyleColor();
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("T%03d", timelineFrame + 1);
+                    ImGui::TextUnformatted(displayNameForCell(sheetCell, index).c_str());
+                    ImGui::Text("F%03d", sheetExposure->drawingFrameIndex + 1);
+                    ImGui::TextUnformatted(exposureKindLabel(sheetExposure->kind));
+                    ImGui::EndTooltip();
+                }
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndTable();
+    }
+    ImGui::Separator();
+
     int timelineFrameOneBased = editTimelineFrame + 1;
     ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::SliderInt(u8c(u8"タイムラインF##Timeline frame"), &timelineFrameOneBased, 1, totalFrames, "T%03d")) {
@@ -922,12 +1025,13 @@ void drawDetachedTimesheetWindow(Project& project, int activeCellIndex, int acti
         lastObservedActiveTimelineFrame = editTimelineFrame;
         result.timelineFrameChanged = true;
         result.selectedTimelineFrame = editTimelineFrame;
-        markTimesheetChanged(result);
     }
 
     if (ImGui::SmallButton(u8c(u8"現在表示中Fへ戻す"))) {
         editTimelineFrame = clampedActiveTimelineFrame;
+        lastObservedActiveTimelineFrame = editTimelineFrame;
         result.selectedTimelineFrame = editTimelineFrame;
+        result.timelineFrameChanged = true;
     }
     ImGui::SameLine();
     if (editTimelineFrame != clampedActiveTimelineFrame) {

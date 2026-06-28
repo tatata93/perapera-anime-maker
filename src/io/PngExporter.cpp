@@ -678,6 +678,31 @@ ImageRgba rasterizeCellsFrame(const std::vector<const Cell*>& cells,
     return image;
 }
 
+ImageRgba rasterizeCellFrameRefs(const std::vector<ExportCellFrameRef>& refs,
+                                 int width,
+                                 int height,
+                                 ExportMode mode)
+{
+    ImageRgba image;
+    image.width = std::max(1, width);
+    image.height = std::max(1, height);
+    image.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4U, 0U);
+
+    if (usesWhiteBackground(mode)) {
+        fillBackground(image, 255U, 255U, 255U, 255U);
+    }
+
+    for (const ExportCellFrameRef& ref : refs) {
+        if (ref.cell == nullptr || ref.frame == nullptr || ref.cell->opacity <= 0.0f) {
+            continue;
+        }
+        ImageRgba cellImage = rasterizeFrame(*ref.frame, width, height, mode, false);
+        blendImage(image, cellImage, ref.cell->opacity);
+    }
+
+    return image;
+}
+
 int maxFrameCount(const std::vector<const Cell*>& cells)
 {
     int frameCount = 0;
@@ -763,6 +788,16 @@ bool PngExporter::exportCellsFrame(const std::vector<const Cell*>& cells,
     return writePng(rasterizeCellsFrame(cells, frameIndex, width, height, mode), outputPath, errorMessage);
 }
 
+bool PngExporter::exportCellFrameRefs(const std::vector<ExportCellFrameRef>& refs,
+                                      const std::filesystem::path& outputPath,
+                                      int width,
+                                      int height,
+                                      ExportMode mode,
+                                      std::string* errorMessage)
+{
+    return writePng(rasterizeCellFrameRefs(refs, width, height, mode), outputPath, errorMessage);
+}
+
 bool PngExporter::exportCellsFrameSequence(const std::vector<const Cell*>& cells,
                                            const std::filesystem::path& outputFolder,
                                            int width,
@@ -788,6 +823,39 @@ bool PngExporter::exportCellsFrameSequence(const std::vector<const Cell*>& cells
     for (int index = 0; index < frameCount; ++index) {
         const std::filesystem::path outputPath = sequencePath(outputFolder, index + 1);
         ImageRgba image = rasterizeCellsFrame(cells, index, width, height, mode);
+        pendingWrites.push_back(std::async(std::launch::async, writePngTask, std::move(image), outputPath));
+        if (pendingWrites.size() >= maxPendingWrites && !waitForOldestExportTask(pendingWrites, errorMessage)) {
+            return false;
+        }
+    }
+
+    while (!pendingWrites.empty()) {
+        if (!waitForOldestExportTask(pendingWrites, errorMessage)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool PngExporter::exportCellFrameRefSequence(const std::vector<std::vector<ExportCellFrameRef>>& frames,
+                                             const std::filesystem::path& outputFolder,
+                                             int width,
+                                             int height,
+                                             ExportMode mode,
+                                             std::string* errorMessage)
+{
+    if (frames.empty()) {
+        setError(errorMessage, "no timeline frames to export");
+        return false;
+    }
+
+    const unsigned int hardwareThreads = std::max(1U, std::thread::hardware_concurrency());
+    const std::size_t maxPendingWrites = static_cast<std::size_t>(std::clamp(hardwareThreads / 2U, 1U, 3U));
+    std::deque<std::future<ExportTaskResult>> pendingWrites;
+
+    for (int index = 0; index < static_cast<int>(frames.size()); ++index) {
+        const std::filesystem::path outputPath = sequencePath(outputFolder, index + 1);
+        ImageRgba image = rasterizeCellFrameRefs(frames[static_cast<std::size_t>(index)], width, height, mode);
         pendingWrites.push_back(std::async(std::launch::async, writePngTask, std::move(image), outputPath));
         if (pendingWrites.size() >= maxPendingWrites && !waitForOldestExportTask(pendingWrites, errorMessage)) {
             return false;
