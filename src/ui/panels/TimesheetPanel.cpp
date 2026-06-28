@@ -371,6 +371,11 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
                         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, IM_COL32(90, 110, 160, 90));
                     }
 
+                    // Step 5.1:
+                    // 表示ラベルは「—」「□」「｜」など多数のマスで同じ文字になる。
+                    // PushID(cellColumn)だけだと行をまたいで同じIDになり、ドラッグ時に
+                    // Dear ImGuiのID衝突警告が出るため、T行とセル列の両方をIDに含める。
+                    ImGui::PushID(frame);
                     ImGui::PushID(cellColumn);
                     if (ImGui::Selectable(label.c_str(), selectedCell)) {
                         if (state.selectedTimelineFrame != frame) {
@@ -395,6 +400,7 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
                                 std::max(0, entry->drawingFrameNumber));
                         }
                     }
+                    ImGui::PopID();
                     ImGui::PopID();
                 }
 

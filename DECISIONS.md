@@ -375,3 +375,16 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - タイムシートウィンドウの開閉状態は `App` メンバーの `TimesheetPanelState` として保持する。
 - `static TimesheetPanelState` はやめ、Appのライフタイムに紐づける。
 - 保存接続は後続Stepで行う。
+
+## 2026-06-29 Decision: Timesheet grid item IDs must include timeline frame and cell column
+
+タイムシート表の各マスは、表示ラベルが同じでも内部IDは必ず一意にする。
+
+決定:
+- マス単位のImGui IDには、T行とセル列の両方を含める。
+- 表示ラベル `—` / `□` / `｜` / `×` などをそのままIDとして使わない。
+- 今後、範囲選択やドラッグ入力を入れる場合も、この一意ID方針を維持する。
+
+理由:
+- Dear ImGui は表示ラベルをIDに使うため、同じラベルのマスが大量にある表ではID衝突しやすい。
+- タイムシートは同種ラベルが多数並ぶUIなので、行列座標ベースのIDが必要。

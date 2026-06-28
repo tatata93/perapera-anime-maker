@@ -1227,3 +1227,42 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 ### Codex/AI handoff note
 - 今回は `Project` 直下へ正式Timesheetを戻していない。`App` 内の一時状態に限定している。
 - 次に保存接続する場合も、いきなり表示反映へ進まず、まず明示ボタンまたはデバッグ保存で往復確認すること。
+
+## 2026-06-29 Timesheet Rebuild Step 5.1: ImGui ID衝突修正
+
+### 今回やったこと
+- タイムシート表のマスで Dear ImGui ID衝突警告が出る問題を修正した。
+- `TimesheetPanel.cpp` のセルマス描画で、T行 `frame` とセル列 `cellColumn` の両方を `PushID` に入れるようにした。
+- 同じ表示ラベル `—` / `□` / `｜` などが複数マスに並んでも一意IDになるようにした。
+
+### 今回やらなかったこと
+- タイムシート保存接続は行っていない。
+- キャンバス表示反映は行っていない。
+- 再生・PNG・MP4出力反映は行っていない。
+- ドラッグ範囲入力や複数マス編集は未実装。
+
+### 触ったファイル
+- `src/ui/panels/TimesheetPanel.cpp`
+- `docs/timesheet_step5_1_imgui_id_fix_note.md`
+
+### 触っていない重要ファイル
+- `src/ui/App.h`
+- `src/ui/App.cpp`
+- `src/ui/AppDrawingMode.cpp`
+- `src/app/main.cpp`
+- `src/core/*`
+- `src/io/*`
+
+### 既知の未解決問題
+- マスをドラッグして範囲入力する機能はまだない。
+- タイムシート入力はまだ保存されない。
+- タイムシート入力はまだキャンバス表示に反映されない。
+
+### 次に推奨する作業
+- Step 5.5として、一時Timesheetを明示ボタンで `timesheet.json` に保存/読み込みできるようにする。
+
+### 理由
+- ID衝突のようなUI基礎不具合を先に潰すことで、次の保存・表示反映作業を安全に進められるため。
+
+### Codex/AI handoff note
+- Step 5.1 fixed a Dear ImGui ID conflict in the timesheet grid. The cell selectable labels are often identical across rows, so the grid now pushes both timeline frame and cell column IDs before calling Selectable.
