@@ -429,3 +429,16 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - タイムシート再生はタイムシートT専用、通常タイムライン再生は作画F専用として扱う。
 - `activeFrameIndex_` とタイムシートTは混ぜない。
 - タイムシートT表示は、通常タイムライン再生が停止しているときにキャンバスへ反映する。
+
+## 2026-06-29 Timesheet Rebuild Step 7 decisions
+
+- タイムシートTから表示セル/作画Fを解決する処理は、UIにも出力にも属さない共通境界として `core/TimesheetSceneResolver` に置く。
+- キャンバス表示側は、セルごとに `resolveTimesheetCell()` を直接呼ぶ実装から、T全体の解決結果 `ResolvedTimesheetSceneFrame` を使う実装へ寄せる。
+- Step 7ではPNG/MP4出力の挙動はまだ変えない。
+- 出力系へ接続する前に、セル非表示、空セル、ホールド、範囲外作画Fの解決をself-testで固定する。
+
+## Timesheet Rebuild Step 7.1 decisions
+
+- The canvas preview status must be visible and diagnostic enough for users to verify whether T-selection is actually affecting the display.
+- The bottom timeline should prioritize the frame strip visually; light-table and finger-playback controls are secondary and should appear below it.
+- Mouse wheel over the canvas is reserved for canvas zoom. It must not also scroll the canvas child window.

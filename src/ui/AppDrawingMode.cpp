@@ -11,6 +11,7 @@
 #include <vector>
 #include <imgui.h>
 #include "core/TimesheetResolver.h"
+#include "core/TimesheetSceneResolver.h"
 #include "io/TimesheetIO.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
@@ -606,7 +607,7 @@ void App::drawDrawingMode()
     ImGui::BeginChild("DrawingWorkspace", ImVec2(0.0f, -28.0f), true);
     const float sideWidth = 245.0f;
     const float rightWidth = 315.0f;
-    const float timelineHeight = 120.0f;
+    const float timelineHeight = 185.0f;
     const float centerHeight = std::max(160.0f,
                                         ImGui::GetContentRegionAvail().y - timelineHeight - ImGui::GetStyle().ItemSpacing.y);
     ImGui::BeginChild("DrawingUpperArea", ImVec2(0.0f, centerHeight), false);
@@ -614,8 +615,13 @@ void App::drawDrawingMode()
     drawLeftSidebar();
     ImGui::EndChild();
     ImGui::SameLine();
-    ImGui::BeginChild("DrawingCanvasHost", ImVec2(-(rightWidth + ImGui::GetStyle().ItemSpacing.x), 0.0f), true);
+    ImGui::BeginChild("DrawingCanvasHost",
+                      ImVec2(-(rightWidth + ImGui::GetStyle().ItemSpacing.x), 0.0f),
+                      true,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     drawCanvasArea(rightWidth);
+    ImGui::SetScrollX(0.0f);
+    ImGui::SetScrollY(0.0f);
     ImGui::EndChild();
     ImGui::SameLine();
     ImGui::BeginChild("DrawingRightSidebar_v5", ImVec2(rightWidth, 0.0f), true,
@@ -731,11 +737,14 @@ void App::drawTimelineArea()
     if (cell == nullptr) {
         return;
     }
-    drawFingerPlaybackControls();
-    drawLightTableControls();
-    ImGui::Separator();
-    ImGui::BeginChild("DrawingTimeline_v23_scroll", ImVec2(0.0f, 0.0f), true,
-                      ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar);
+
+    // Timesheet Rebuild Step 7.1:
+    // 下部タイムラインは、フレーム列を先に見せる。
+    // ライトテーブル/指パラ操作はその下へ移し、視線がフレーム列へ先に行くようにする。
+    ImGui::BeginChild("DrawingTimelineFrameStripHost_v25", ImVec2(0.0f, 125.0f), true,
+                      ImGuiWindowFlags_HorizontalScrollbar |
+                          ImGuiWindowFlags_AlwaysHorizontalScrollbar |
+                          ImGuiWindowFlags_NoScrollWithMouse);
     const int prevFrameIndex = activeFrameIndex_;
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);
@@ -750,6 +759,10 @@ void App::drawTimelineArea()
         deleteActiveFrame();
     }
     ImGui::EndChild();
+
+    ImGui::Separator();
+    drawFingerPlaybackControls();
+    drawLightTableControls();
 }
 void App::drawCanvasArea(float rightWidth)
 {
@@ -800,7 +813,9 @@ void App::drawCanvasArea(float rightWidth)
     // タイムシートに1件以上入力がある場合だけ、T選択をキャンバス表示へ反映する。
     // ただし指パラ/通常タイムライン再生中は activeFrameIndex_ の再生表示を優先する。
     // activeFrameIndex_ は作画F編集対象として維持し、タイムシートT表示とは混ぜない。
-    const bool useTimesheetPreview = countTimesheetEntries(workingTimesheet_) > 0 && !isPlayingFrames_;
+    const int timesheetEntryCount = countTimesheetEntries(workingTimesheet_);
+    const bool hasTimesheetEntries = timesheetEntryCount > 0;
+    const bool useTimesheetPreview = hasTimesheetEntries && !isPlayingFrames_;
     const int timesheetTimelineFrame = useTimesheetPreview
         ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
         : activeFrameIndex_ + 1;
@@ -827,47 +842,58 @@ void App::drawCanvasArea(float rightWidth)
                              drawList);
     };
 
-    auto drawResolvedCell = [&](int cellIndex, const Cell& drawCell, bool requireCellVisible) {
-        if (drawCell.frames.empty()) {
-            return false;
+    auto appendTimesheetSceneInput = [&](std::vector<TimesheetSceneCellInput>& inputs,
+                                          int cellIndex,
+                                          const Cell* cell,
+                                          bool requireCellVisible) {
+        if (cell == nullptr) {
+            return;
         }
-        if (requireCellVisible && (!drawCell.visible || drawCell.opacity <= 0.0f)) {
-            return false;
-        }
-
-        const ResolvedTimesheetCell resolved = resolveTimesheetCell(workingTimesheet_, drawCell.id, timesheetTimelineFrame);
-        if (!resolved.visible || resolved.drawingFrameNumber <= 0) {
-            return false;
-        }
-
-        const int drawFrameIndex = resolved.drawingFrameNumber - 1;
-        if (drawFrameIndex < 0 || drawFrameIndex >= static_cast<int>(drawCell.frames.size())) {
-            return false;
-        }
-
-        const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
-        drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
-        return true;
+        inputs.push_back(TimesheetSceneCellInput{cell, cellIndex, requireCellVisible});
     };
 
-    if (useTimesheetPreview) {
+    auto buildTimesheetSceneInputsForCurrentDisplay = [&]() {
+        std::vector<TimesheetSceneCellInput> inputs;
         if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
-            const Cell* cellForPreview = activeCell();
-            if (cellForPreview != nullptr) {
-                drawResolvedCell(activeCellIndex_, *cellForPreview, false);
-            }
-        } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
+            appendTimesheetSceneInput(inputs, activeCellIndex_, activeCell(), false);
+            return inputs;
+        }
+
+        if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
             const int safeSoloIndex = std::clamp(
                 soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_,
                 0,
                 static_cast<int>(project_.cells.size()) - 1);
-            const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
-            drawResolvedCell(safeSoloIndex, soloCell, false);
-        } else {
-            for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
-                const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
-                drawResolvedCell(cellIndex, drawCell, true);
+            appendTimesheetSceneInput(inputs,
+                                      safeSoloIndex,
+                                      &project_.cells[static_cast<std::size_t>(safeSoloIndex)],
+                                      false);
+            return inputs;
+        }
+
+        inputs.reserve(project_.cells.size());
+        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+            appendTimesheetSceneInput(inputs,
+                                      cellIndex,
+                                      &project_.cells[static_cast<std::size_t>(cellIndex)],
+                                      true);
+        }
+        return inputs;
+    };
+
+    int timesheetResolvedSceneCellCount = 0;
+    if (useTimesheetPreview) {
+        const ResolvedTimesheetSceneFrame resolvedScene = resolveTimesheetSceneFrame(
+            workingTimesheet_,
+            buildTimesheetSceneInputsForCurrentDisplay(),
+            timesheetTimelineFrame);
+        timesheetResolvedSceneCellCount = static_cast<int>(resolvedScene.cells.size());
+        for (const ResolvedTimesheetSceneCell& resolvedCell : resolvedScene.cells) {
+            if (resolvedCell.cell == nullptr || resolvedCell.drawingFrameIndex < 0) {
+                continue;
             }
+            const Frame& drawFrame = resolvedCell.cell->frames[static_cast<std::size_t>(resolvedCell.drawingFrameIndex)];
+            drawCellFrame(resolvedCell.cellIndex, *resolvedCell.cell, drawFrame, resolvedCell.drawingFrameIndex);
         }
     } else if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
         drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
@@ -903,24 +929,45 @@ void App::drawCanvasArea(float rightWidth)
         }
     }
 
-    if (useTimesheetPreview) {
-        const std::string previewText = std::string(u8c(u8"タイムシート表示 T")) +
+    if (hasTimesheetEntries) {
+        // Timesheet Rebuild Step 7.2:
+        // キャンバス左上の状態表示は、前段の大きい説明ボックスではなく小型バッジに戻す。
+        // 「表示セルN」は残しつつ、作画画面を邪魔しないサイズにする。
+        const std::string previewText = std::string(u8c(u8"TS ")) +
+            (useTimesheetPreview ? std::string("ON") : std::string("OFF")) +
+            std::string(u8c(u8" T")) +
             std::to_string(timesheetTimelineFrame) +
-            std::string(u8c(u8" / 編集対象 作画F")) +
-            std::to_string(activeFrameIndex_ + 1);
+            std::string(u8c(u8" 編集F")) +
+            std::to_string(activeFrameIndex_ + 1) +
+            std::string(u8c(u8" 表示セルN=")) +
+            std::to_string(timesheetResolvedSceneCellCount) +
+            std::string(u8c(u8" entries=")) +
+            std::to_string(timesheetEntryCount);
+        const char* warningText = u8c(u8"表示F≠編集F: 作画入力停止 / ズーム・移動可");
+        const ImVec2 textSize = ImGui::CalcTextSize(previewText.c_str());
+        const ImVec2 warningSize = !allowCanvasInput ? ImGui::CalcTextSize(warningText) : ImVec2(0.0f, 0.0f);
+        const float overlayWidth = std::min(areaSize.x - 16.0f,
+                                           std::max(textSize.x, warningSize.x) + 14.0f);
+        const float overlayHeight = !allowCanvasInput ? 42.0f : 24.0f;
         drawList->AddRectFilled(
             ImVec2(areaMin.x + 8.0f, areaMin.y + 8.0f),
-            ImVec2(areaMin.x + 380.0f, areaMin.y + (allowCanvasInput ? 34.0f : 54.0f)),
-            IM_COL32(255, 255, 255, 220));
+            ImVec2(areaMin.x + 8.0f + overlayWidth, areaMin.y + 8.0f + overlayHeight),
+            IM_COL32(255, 255, 255, 220),
+            4.0f);
+        drawList->AddRect(
+            ImVec2(areaMin.x + 8.0f, areaMin.y + 8.0f),
+            ImVec2(areaMin.x + 8.0f + overlayWidth, areaMin.y + 8.0f + overlayHeight),
+            IM_COL32(80, 80, 80, 180),
+            4.0f);
         drawList->AddText(
-            ImVec2(areaMin.x + 14.0f, areaMin.y + 14.0f),
-            IM_COL32(40, 40, 40, 255),
+            ImVec2(areaMin.x + 14.0f, areaMin.y + 13.0f),
+            IM_COL32(25, 25, 25, 255),
             previewText.c_str());
         if (!allowCanvasInput) {
             drawList->AddText(
-                ImVec2(areaMin.x + 14.0f, areaMin.y + 34.0f),
+                ImVec2(areaMin.x + 14.0f, areaMin.y + 31.0f),
                 IM_COL32(180, 40, 40, 255),
-                u8c(u8"表示Fと編集Fが違うため、キャンバス入力を一時停止中"));
+                warningText);
         }
     }
     warmPlaybackFrameCache();
@@ -936,9 +983,8 @@ void App::drawCanvasArea(float rightWidth)
         const float radius = std::max(2.0f, currentStroke_.radiusPx * std::clamp(canvasView_.zoom, 0.05f, 32.0f));
         drawList->AddCircle(screenPoint, radius, IM_COL32(255, 80, 70, 210), 32, 2.0f);
     }
-    if (allowCanvasInput) {
-        handleCanvasInput(areaMin, areaSize);
-    }
+    // allowCanvasInput=false は作画入力だけを止める。ズーム/中ボタン移動は常に使える。
+    handleCanvasInput(areaMin, areaSize, allowCanvasInput);
     ImGui::Dummy(areaSize);
 }
 void App::fitCanvasToArea(ImVec2 areaSize)

@@ -1485,3 +1485,44 @@ The provisional timesheet implementation was rolled back to the pre-timesheet co
 ### Codex/AI handoff note
 
 通常の指パラ/タイムライン再生中は `isPlayingFrames_` を優先し、タイムシートプレビュー表示を一時停止する方針にした。`activeFrameIndex_` とタイムシートTは引き続き混ぜない。
+
+## 2026-06-29 Timesheet Rebuild Step 7: 共通表示/出力解決境界
+
+### 目的
+
+キャンバス表示と将来のPNG/MP4出力が、同じタイムシートT解決結果を使えるようにする。
+
+### 実装内容
+
+- `TimesheetSceneResolver` を追加した。
+- `Timesheet` と `Cell` 参照一覧から、Tごとの表示セル/作画Fリストを解決できるようにした。
+- キャンバスのタイムシートプレビュー表示を `TimesheetSceneResolver` 経由へ変更した。
+- キャンバス左上のタイムシート表示に、解決された表示セル数を出すようにした。
+- `perapera_timesheet_scene_resolver_selftest` を追加した。
+
+### 触ったファイル
+
+- `CMakeLists.txt`
+- `src/core/TimesheetSceneResolver.h`
+- `src/core/TimesheetSceneResolver.cpp`
+- `src/ui/AppDrawingMode.cpp`
+- `tools/timesheet_scene_resolver_selftest.cpp`
+- `docs/timesheet_step7_scene_resolver_note.md`
+
+### まだやっていないこと
+
+- PNG/MP4出力そのものをタイムシートTへ切り替えること。
+- ExportPanelのUI変更。
+- Project保存と `timesheet.json` の自動連動。
+
+### 次に推奨する作業
+
+Step 7.5として、`PngExporter` にタイムシート解決済みシーンを書き出す入口を追加する。
+
+## Timesheet Rebuild Step 7.1: preview visibility, timeline layout, canvas wheel safety
+
+- Made the canvas timesheet preview overlay more explicit by showing `TS表示 ON/OFF`, selected T, editing F, `表示セルN`, and entry count.
+- Kept the overlay visible whenever the temporary timesheet has entries, including while normal timeline playback temporarily overrides the preview.
+- Moved the bottom timeline frame strip above finger playback and light-table controls to improve readability.
+- Prevented the canvas host from scrolling when the mouse wheel is used over the canvas; wheel input should now zoom only.
+- Did not change timesheet save/load, playback semantics, project IO, or export behavior.
