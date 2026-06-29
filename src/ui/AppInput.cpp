@@ -377,12 +377,19 @@ void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize, bool allowDrawingIn
     const bool hovered = ImGui::IsWindowHovered() && isPointInside(mouse, areaMin, areaSize);
 
     if (hovered && io.MouseWheel != 0.0f) {
+        const float wheel = io.MouseWheel;
         const ImVec2 before = canvasView_.screenToCanvas(mouse.x, mouse.y, areaMin, areaSize);
-        const float zoomFactor = io.MouseWheel > 0.0f ? 1.15f : 1.0f / 1.15f;
+        const float zoomFactor = wheel > 0.0f ? 1.15f : 1.0f / 1.15f;
         canvasView_.zoom = std::clamp(canvasView_.zoom * zoomFactor, 0.05f, 32.0f);
         const ImVec2 after = canvasView_.screenToCanvas(mouse.x, mouse.y, areaMin, areaSize);
         canvasView_.panX += (after.x - before.x) * canvasView_.zoom;
         canvasView_.panY += (after.y - before.y) * canvasView_.zoom;
+
+        // Timesheet Rebuild Step 7.3:
+        // キャンバス上のホイールはキャンバスズーム専用にする。
+        // 親Child/本体ウィンドウへホイールが伝わるとソフト全体がスクロールしてしまうため、
+        // このフレームのホイール量を消費する。
+        io.MouseWheel = 0.0f;
     }
 
     if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {

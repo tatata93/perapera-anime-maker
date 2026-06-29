@@ -604,13 +604,23 @@ void App::drawDrawingMode()
     clampSelection();
     handleFrameShortcuts();
     updateFramePlayback();
-    ImGui::BeginChild("DrawingWorkspace", ImVec2(0.0f, -28.0f), true);
+    // Timesheet Rebuild Step 7.3:
+    // キャンバス上ホイール時に親ワークスペースが縦スクロールしないようにする。
+    ImGui::BeginChild("DrawingWorkspace",
+                      ImVec2(0.0f, -28.0f),
+                      true,
+                      ImGuiWindowFlags_NoScrollWithMouse);
     const float sideWidth = 245.0f;
     const float rightWidth = 315.0f;
-    const float timelineHeight = 185.0f;
+    // Timesheet Rebuild Step 7.3:
+    // 下部タイムラインに作画Fの四角列を確実に出すため、高さを少し増やす。
+    const float timelineHeight = 215.0f;
     const float centerHeight = std::max(160.0f,
                                         ImGui::GetContentRegionAvail().y - timelineHeight - ImGui::GetStyle().ItemSpacing.y);
-    ImGui::BeginChild("DrawingUpperArea", ImVec2(0.0f, centerHeight), false);
+    ImGui::BeginChild("DrawingUpperArea",
+                      ImVec2(0.0f, centerHeight),
+                      false,
+                      ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::BeginChild("DrawingLeftSidebar", ImVec2(sideWidth, 0.0f), true);
     drawLeftSidebar();
     ImGui::EndChild();
@@ -741,10 +751,8 @@ void App::drawTimelineArea()
     // Timesheet Rebuild Step 7.1:
     // 下部タイムラインは、フレーム列を先に見せる。
     // ライトテーブル/指パラ操作はその下へ移し、視線がフレーム列へ先に行くようにする。
-    ImGui::BeginChild("DrawingTimelineFrameStripHost_v25", ImVec2(0.0f, 125.0f), true,
-                      ImGuiWindowFlags_HorizontalScrollbar |
-                          ImGuiWindowFlags_AlwaysHorizontalScrollbar |
-                          ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::BeginChild("DrawingTimelineFrameStripHost_v26", ImVec2(0.0f, 160.0f), true,
+                      ImGuiWindowFlags_NoScrollWithMouse);
     const int prevFrameIndex = activeFrameIndex_;
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);

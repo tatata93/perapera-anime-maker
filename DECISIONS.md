@@ -449,3 +449,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - Canvas zoom and pan are navigation operations and must remain available even when `表示F != 編集F`.
 - The canvas timesheet status overlay should stay compact so it does not cover the drawing area.
 - The timeline frame strip should visually represent frames as one square per drawing frame.
+
+## Timesheet terminology decision
+
+- Use `T` for timesheet time position.
+- Use `作画F` for an editable drawing-frame slot in a cell.
+- Use `コマ数` only for duration / count of time positions.
+- Avoid using bare `フレーム` in user-facing UI when the meaning is `T` or `作画F`.
+- Canvas wheel input should zoom the canvas only and must not scroll the whole application workspace.
