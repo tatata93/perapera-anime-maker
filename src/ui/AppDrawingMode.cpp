@@ -11,6 +11,7 @@
 #include <vector>
 #include <imgui.h>
 #include "core/TimesheetResolver.h"
+#include "core/TimesheetInbetweenResolver.h"
 #include "core/TimesheetSceneResolver.h"
 #include "io/TimesheetIO.h"
 #include "ui/AppProjectIOSupport.h"
@@ -719,6 +720,106 @@ void App::drawDrawingMode()
             static_cast<int>(timesheetSummaryCells.size()));
         ImGui::TextDisabled(u8c(u8"この一覧は確認用です。編集対象の作画Fはここでは変更しません。"));
         ImGui::End();
+
+        // Timesheet Rebuild Step 7.5:
+        // 選択T/セルについて、前後の原画とその間の中割を検出する。
+        // ここではまだ中割を自動配置せず、次のStep 7.6のための確認UIに留める。
+        if (!timesheetPanelData.cells.empty()) {
+            const int safeSelectedCellColumn = std::clamp(
+                timesheetPanelState_.selectedCellColumn,
+                0,
+                static_cast<int>(timesheetPanelData.cells.size()) - 1);
+            const ::perapera::ui::TimesheetPanelCellColumn& selectedColumn =
+                timesheetPanelData.cells[static_cast<std::size_t>(safeSelectedCellColumn)];
+            const ResolvedTimesheetInbetweenInterval interval = resolveTimesheetInbetweenInterval(
+                workingTimesheet_,
+                selectedColumn.cellId,
+                resolvedTimelineFrame);
+
+            ImGui::Begin(
+                u8c(u8"原画間検出##FormalTimesheetInbetweenInterval"),
+                nullptr,
+                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+            ImGui::Text(
+                u8c(u8"対象: %s / T%d"),
+                selectedColumn.displayName.empty() ? selectedColumn.cellId.c_str() : selectedColumn.displayName.c_str(),
+                interval.selectedTimelineFrame);
+            ImGui::TextDisabled(u8c(u8"原画を先に置き、その間に中割を作るための検出結果です。"));
+
+            if (!interval.previousKey.found && !interval.nextKey.found) {
+                ImGui::TextUnformatted(u8c(u8"このセルにはまだ原画がありません。まずTに原画を置いてください。"));
+            } else {
+                const std::string previousKeyLabel = interval.previousKey.found
+                    ? std::string(u8c(u8"T")) + std::to_string(interval.previousKey.timelineFrame) +
+                        std::string(u8c(u8" / 作画F")) + std::to_string(interval.previousKey.drawingFrameNumber)
+                    : std::string(u8c(u8"なし"));
+                const std::string nextKeyLabel = interval.nextKey.found
+                    ? std::string(u8c(u8"T")) + std::to_string(interval.nextKey.timelineFrame) +
+                        std::string(u8c(u8" / 作画F")) + std::to_string(interval.nextKey.drawingFrameNumber)
+                    : std::string(u8c(u8"なし"));
+
+                if (ImGui::BeginTable(
+                        "TimesheetInbetweenIntervalTable_v1",
+                        2,
+                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+                    ImGui::TableSetupColumn(u8c(u8"項目"));
+                    ImGui::TableSetupColumn(u8c(u8"内容"));
+                    ImGui::TableHeadersRow();
+
+                    auto tableRow = [](const char* label, const std::string& value) {
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::TextUnformatted(label);
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::TextUnformatted(value.c_str());
+                    };
+
+                    tableRow(u8c(u8"前原画"), previousKeyLabel);
+                    tableRow(u8c(u8"次原画"), nextKeyLabel);
+                    tableRow(
+                        u8c(u8"選択T"),
+                        interval.selectedIsKey
+                            ? std::string(u8c(u8"原画"))
+                            : (interval.selectedIsInbetween
+                                ? std::string(u8c(u8"中割"))
+                                : (interval.selectedInsideInterval
+                                    ? std::string(u8c(u8"原画間の空きT"))
+                                    : std::string(u8c(u8"原画間の外")))));
+                    tableRow(
+                        u8c(u8"原画間位置"),
+                        interval.hasClosedKeyInterval
+                            ? std::to_string(interval.selectedPositionNumerator) + "/" + std::to_string(interval.selectedPositionDenominator)
+                            : std::string(u8c(u8"未確定")));
+                    tableRow(
+                        u8c(u8"中割"),
+                        std::to_string(interval.usedInbetweenCount) +
+                            std::string(u8c(u8"枚 / 配置候補T")) +
+                            std::to_string(interval.availableTimelineSlotCount));
+                    ImGui::EndTable();
+                }
+
+                if (interval.hasClosedKeyInterval) {
+                    if (interval.inbetweens.empty()) {
+                        ImGui::TextUnformatted(u8c(u8"この原画間にはまだ中割がありません。"));
+                    } else {
+                        ImGui::TextUnformatted(u8c(u8"この原画間の中割:"));
+                        for (const TimesheetInbetweenDrawingInfo& inbetween : interval.inbetweens) {
+                            ImGui::BulletText(
+                                u8c(u8"%d/%d: T%d / 作画F%d"),
+                                inbetween.inbetweenIndex,
+                                inbetween.inbetweenCount,
+                                inbetween.timelineFrame,
+                                inbetween.drawingFrameNumber);
+                        }
+                    }
+                    ImGui::TextDisabled(u8c(u8"Step 7.6で、この区間に中割を1枚/2枚/3枚追加するボタンを入れます。"));
+                } else {
+                    ImGui::TextDisabled(u8c(u8"前後原画が両方あると、中割作成候補として扱えます。"));
+                }
+            }
+            ImGui::TextDisabled(u8c(u8"絵コンテ・レイアウト・背景参照はセル列に混ぜず、Scene Plateとして別管理します。"));
+            ImGui::End();
+        }
     }
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
     if (isColoringMode) {

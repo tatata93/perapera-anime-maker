@@ -145,6 +145,8 @@ add_executable(perapera_anime_maker
     src/core/Project.cpp
     src/core/Timesheet.cpp
     src/core/TimesheetResolver.cpp
+    src/core/TimesheetSceneResolver.cpp
+    src/core/TimesheetInbetweenResolver.cpp
 
     src/io/ProjectIO.cpp
     src/io/TimesheetIO.cpp
@@ -253,6 +255,28 @@ target_include_directories(perapera_cut_io_selftest PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+
+add_executable(perapera_timesheet_scene_resolver_selftest
+    tools/timesheet_scene_resolver_selftest.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetResolver.cpp
+    src/core/TimesheetSceneResolver.cpp
+)
+
+target_include_directories(perapera_timesheet_scene_resolver_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+add_executable(perapera_timesheet_inbetween_resolver_selftest
+    tools/timesheet_inbetween_resolver_selftest.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetInbetweenResolver.cpp
+)
+
+target_include_directories(perapera_timesheet_inbetween_resolver_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 add_executable(perapera_timesheet_panel_bridge_selftest
     tools/timesheet_panel_bridge_selftest.cpp
     src/core/Timesheet.cpp
@@ -272,12 +296,16 @@ if (MSVC)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_cut_io_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_cut_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 

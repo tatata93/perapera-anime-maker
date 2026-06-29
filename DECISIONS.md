@@ -472,3 +472,10 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - Automatic inbetween generation, AI interpolation, vector interpolation, and image morphing are explicitly out of scope for the current timesheet rebuild.
 - Storyboard images, layouts, background roughs, reference images, finished backgrounds, and camera/safe-frame guides should be modeled as scene reference/background plates, not as animation cells.
 - Scene reference/background plates must carry output policy such as `ReferenceOnly`, `PreviewOnly`, or `RenderOutput` so storyboard/layout guides can be visible while drawing but excluded from final PNG/MP4 output.
+
+## Timesheet Rebuild Step 7.5 Decisions
+
+- Inbetween workflow starts from detecting a closed key interval: previous key drawing and next key drawing on the same cell track.
+- An inbetween remains a normal drawing frame with role `Inbetween`, but UI should show its relation to the surrounding key drawings.
+- Step 7.5 is detection-only. Automatic inbetween placement belongs to Step 7.6, and automatic light table setup belongs to a later step.
+- Storyboard/layout/background reference images remain outside timesheet cell tracks and will be handled later as Scene Plates.
