@@ -370,7 +370,7 @@ void App::drawFingerPlaybackControls()
     ImGui::PopID();
 }
 
-void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize)
+void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize, bool allowDrawingInput)
 {
     ImGuiIO& io = ImGui::GetIO();
     const ImVec2 mouse = io.MousePos;
@@ -388,6 +388,16 @@ void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize)
     if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
         canvasView_.panX += io.MouseDelta.x;
         canvasView_.panY += io.MouseDelta.y;
+    }
+
+    // Timesheet Rebuild Step 7.2:
+    // タイムシートプレビュー中に表示Fと編集Fが違う場合でも、ズームと中ボタン移動は使えるようにする。
+    // allowDrawingInput=false のときだけ、左クリック作画/消しゴム/塗りつぶしを止める。
+    if (!allowDrawingInput) {
+        if (isDrawingStroke_) {
+            cancelStroke();
+        }
+        return;
     }
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

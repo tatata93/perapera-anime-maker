@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 
 #include <imgui.h>
 
@@ -66,7 +67,7 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
     activeFrameIndex = std::clamp(activeFrameIndex, 0, static_cast<int>(cell.frames.size()) - 1);
 
     ImGui::Separator();
-    ImGui::TextDisabled(u8c(u8"フレーム列: ホイール / 下のバー / << < > >> で横スクロール"));
+    ImGui::TextDisabled(u8c(u8"フレーム列: 1コマ=1つの四角。ホイール / 下のバー / << < > >> で横スクロール"));
 
     int scrollCommand = 0;
     if (ImGui::SmallButton("<<##Timeline_First_v24")) {
@@ -89,9 +90,12 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
         scrollCommand = 3;
     }
 
-    const float frameButtonWidth = 82.0f;
-    const float frameButtonHeight = 32.0f;
-    const float frameButtonGap = ImGui::GetStyle().ItemSpacing.x;
+    // Timesheet Rebuild Step 7.2:
+    // タイムラインは「1コマ=1つの四角」で見えるようにする。
+    // 3コマなら3つの四角が横に並ぶ。
+    const float frameButtonWidth = 46.0f;
+    const float frameButtonHeight = 46.0f;
+    const float frameButtonGap = std::max(5.0f, ImGui::GetStyle().ItemSpacing.x);
     const float leftPadding = 6.0f;
     const float topPadding = 6.0f;
     const float frameStep = frameButtonWidth + frameButtonGap;
@@ -154,8 +158,9 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
         if (selected) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.50f, 0.47f, 0.86f, 1.0f));
         }
-        const Frame& frame = cell.frames[static_cast<std::size_t>(index)];
-        if (ImGui::Button(frame.name.c_str(), ImVec2(frameButtonWidth, frameButtonHeight))) {
+        char label[64];
+        std::snprintf(label, sizeof(label), "F%d##Timeline_FrameBox_v25", index + 1);
+        if (ImGui::Button(label, ImVec2(frameButtonWidth, frameButtonHeight))) {
             activeFrameIndex = index;
         }
         if (selected) {

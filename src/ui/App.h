@@ -144,7 +144,7 @@ private:
     bool advancePlaybackFrame();
     void warmPlaybackFrameCache();
 
-    void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize);
+    void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize, bool allowDrawingInput);
     void beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
     void updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
     void applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);

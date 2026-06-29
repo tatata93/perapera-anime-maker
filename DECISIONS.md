@@ -442,3 +442,10 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - The canvas preview status must be visible and diagnostic enough for users to verify whether T-selection is actually affecting the display.
 - The bottom timeline should prioritize the frame strip visually; light-table and finger-playback controls are secondary and should appear below it.
 - Mouse wheel over the canvas is reserved for canvas zoom. It must not also scroll the canvas child window.
+
+## 2026-06-29 Timesheet Rebuild Step 7.2 decisions
+
+- The timesheet preview safety lock must block only destructive/editing canvas input, not viewport navigation.
+- Canvas zoom and pan are navigation operations and must remain available even when `表示F != 編集F`.
+- The canvas timesheet status overlay should stay compact so it does not cover the drawing area.
+- The timeline frame strip should visually represent frames as one square per drawing frame.
