@@ -596,6 +596,129 @@ void App::drawDrawingMode()
 
         ImGui::TextDisabled(u8c(u8"この保存は試験段階です。Project保存・キャンバス表示・再生・出力にはまだ接続していません。"));
         ImGui::End();
+
+        // Timesheet Rebuild Step 7.4:
+        // Tを選んだとき、各セルがどの作画Fとして解決されているかを小さい一覧で見せる。
+        // 「Tを選んでも何が表示されたのか分からない」を潰すための確認用UI。
+        const int resolvedTimelineFrame = clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1);
+        const ui::CellDisplayMode timesheetSummaryDisplayMode = ui::currentCellDisplayMode();
+        const int timesheetSummarySoloCellIndex = ui::currentSoloCellIndex();
+        std::vector<std::pair<int, const Cell*>> timesheetSummaryCells;
+
+        auto appendTimesheetSummaryCell = [&](int cellIndex, const Cell* cell) {
+            if (cell == nullptr) {
+                return;
+            }
+            timesheetSummaryCells.push_back(std::make_pair(cellIndex, cell));
+        };
+
+        if (timesheetSummaryDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
+            appendTimesheetSummaryCell(activeCellIndex_, activeCell());
+        } else if (timesheetSummaryDisplayMode == ui::CellDisplayMode::SoloSelected) {
+            const int safeSoloIndex = std::clamp(
+                timesheetSummarySoloCellIndex >= 0 ? timesheetSummarySoloCellIndex : activeCellIndex_,
+                0,
+                static_cast<int>(project_.cells.size()) - 1);
+            appendTimesheetSummaryCell(safeSoloIndex, &project_.cells[static_cast<std::size_t>(safeSoloIndex)]);
+        } else {
+            timesheetSummaryCells.reserve(project_.cells.size());
+            for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+                appendTimesheetSummaryCell(cellIndex, &project_.cells[static_cast<std::size_t>(cellIndex)]);
+            }
+        }
+
+        ImGui::Begin(
+            u8c(u8"タイムシート解決結果##FormalTimesheetResolvedList"),
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+        ImGui::Text(
+            u8c(u8"T%d の表示結果 / 編集対象: 作画F%d / entries=%d"),
+            resolvedTimelineFrame,
+            activeFrameIndex_ + 1,
+            countTimesheetEntries(workingTimesheet_));
+        ImGui::TextDisabled(u8c(u8"T=タイムシート位置 / 作画F=実際に描く絵の番号 / コマ数=時間の長さ"));
+
+        int resolvedVisibleCount = 0;
+        if (ImGui::BeginTable(
+                "TimesheetResolvedListTable_v27",
+                5,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn(u8c(u8"セル"));
+            ImGui::TableSetupColumn(u8c(u8"セル状態"));
+            ImGui::TableSetupColumn(u8c(u8"記入/保持"));
+            ImGui::TableSetupColumn(u8c(u8"表示"));
+            ImGui::TableSetupColumn(u8c(u8"備考"));
+            ImGui::TableHeadersRow();
+
+            for (const auto& cellPair : timesheetSummaryCells) {
+                const int cellIndex = cellPair.first;
+                const Cell* cell = cellPair.second;
+                if (cell == nullptr) {
+                    continue;
+                }
+
+                const ResolvedTimesheetCell resolved = resolveTimesheetCell(workingTimesheet_, cell->id, resolvedTimelineFrame);
+                const bool cellEnabledForAllDisplay = cell->visible && cell->opacity > 0.0f;
+                const bool displayModeKeepsHiddenCell = timesheetSummaryDisplayMode == ui::CellDisplayMode::ActiveOnly ||
+                    timesheetSummaryDisplayMode == ui::CellDisplayMode::SoloSelected;
+                const bool cellCanAppear = cellEnabledForAllDisplay || displayModeKeepsHiddenCell;
+                const bool frameExists = resolved.drawingFrameNumber > 0 &&
+                    resolved.drawingFrameNumber <= static_cast<int>(cell->frames.size());
+                const bool visibleOnCanvas = cellCanAppear && resolved.visible && frameExists;
+                if (visibleOnCanvas) {
+                    ++resolvedVisibleCount;
+                }
+
+                const char* sourceLabel = resolved.sourceEntry == nullptr
+                    ? u8c(u8"未記入")
+                    : timesheetEntryTypeJapaneseLabel(resolved.sourceType);
+                const std::string cellLabel = cell->name.empty()
+                    ? std::string(u8c(u8"セル")) + std::to_string(cellIndex + 1)
+                    : cell->name;
+                const std::string cellState = cellEnabledForAllDisplay
+                    ? std::string(u8c(u8"ON"))
+                    : std::string(u8c(u8"セルOFF/不透明度0"));
+                std::string displayLabel = u8c(u8"非表示");
+                if (visibleOnCanvas) {
+                    displayLabel = std::string(u8c(u8"作画F")) + std::to_string(resolved.drawingFrameNumber);
+                } else if (resolved.visible && !frameExists) {
+                    displayLabel = std::string(u8c(u8"作画F")) + std::to_string(resolved.drawingFrameNumber) + u8c(u8" 範囲外");
+                }
+
+                std::string note;
+                if (resolved.sourceEntry == nullptr) {
+                    note = u8c(u8"このT以前に記入なし");
+                } else if (resolved.sourceType == TimesheetEntryType::Hold) {
+                    note = u8c(u8"前の表示を保持");
+                } else if (resolved.sourceType == TimesheetEntryType::Null) {
+                    note = u8c(u8"空セルで非表示");
+                } else if (!cellCanAppear) {
+                    note = u8c(u8"セル表示OFFのため非表示");
+                } else if (resolved.visible && !frameExists) {
+                    note = u8c(u8"セル内にその作画Fがない");
+                }
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(cellLabel.c_str());
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(cellState.c_str());
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextUnformatted(sourceLabel);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextUnformatted(displayLabel.c_str());
+                ImGui::TableSetColumnIndex(4);
+                ImGui::TextUnformatted(note.c_str());
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::Text(
+            u8c(u8"表示セルN=%d / 候補セル=%d"),
+            resolvedVisibleCount,
+            static_cast<int>(timesheetSummaryCells.size()));
+        ImGui::TextDisabled(u8c(u8"この一覧は確認用です。編集対象の作画Fはここでは変更しません。"));
+        ImGui::End();
     }
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
     if (isColoringMode) {

@@ -457,3 +457,9 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - Use `コマ数` only for duration / count of time positions.
 - Avoid using bare `フレーム` in user-facing UI when the meaning is `T` or `作画F`.
 - Canvas wheel input should zoom the canvas only and must not scroll the whole application workspace.
+
+## Timesheet Rebuild Step 7.4 Decision
+
+- T選択時の表示内容を理解しやすくするため、`タイムシート解決結果` ウィンドウでセル別の解決結果を明示する。
+- Tはタイムシート上の時間位置、作画Fはセル内で描く絵の番号、コマ数は時間の長さとして扱う。
+- `フレーム` という語は内部処理・動画出力・レンダー文脈に寄せ、UIではなるべく `T` と `作画F` に分けて表示する。
