@@ -524,3 +524,8 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - Timesheet T/cell selection should optionally move the active edit target to the resolved drawing F.
 - Timeline drawing-F selection remains valid; if it differs from the timesheet preview, the active drawing F is shown over the preview and can be edited.
 - This keeps T as the time position and 作画F as the editable drawing object without forcing them to always be identical.
+
+## Timesheet Rebuild Step 7.10.5 decision
+
+When the active drawing frame selected from the timeline differs from the drawing frame resolved by the selected timesheet T, the canvas should prioritize the active editing frame by default. Showing both frames at once is confusing during manual drawing. The old overlay behavior remains optional, but the standard workflow is `timeline F selection -> show/edit that F only` until the user explicitly syncs back to the selected T.
+

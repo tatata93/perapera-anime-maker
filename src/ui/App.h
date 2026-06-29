@@ -111,9 +111,14 @@ private:
     // Timesheet Rebuild Step 7.10:
     // T選択と作画F編集対象がズレても作画できるようにする。
     // true: タイムシートのT/セル選択時に、表示される作画Fへ編集対象を寄せる。
-    // true: ズレが残る場合も、編集中作画Fをキャンバス上に重ねて作画可能にする。
     bool timesheetEditFollowsSelectedT_ = true;
-    bool timesheetDrawActiveFrameOverPreview_ = true;
+
+    // Timesheet Rebuild Step 7.10.5:
+    // タイムラインで明示的に別の作画Fを選んだ時は、タイムシート由来の表示Fを同時表示しない。
+    // true: TS表示Fと編集Fがズレたら、編集中Fだけを表示して作画を優先する。
+    // false: 旧7.10互換として、TS表示の上に編集中Fを重ねる。
+    bool timesheetPreferEditingFrameWhenMismatch_ = true;
+    bool timesheetDrawActiveFrameOverPreview_ = false;
     int previewWarmCursor_ = 0;
     CanvasDisplayMode previewReadyDisplayMode_ = CanvasDisplayMode::Drawing;
     std::vector<char> previewReadyFlags_;

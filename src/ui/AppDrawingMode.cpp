@@ -696,8 +696,11 @@ void App::drawDrawingMode()
                 lastMessage_ = "manual timesheet edit sync failed: no drawable F for selected T/cell";
             }
         }
-        ImGui::Checkbox(u8c(u8"ズレても編集中Fを上に表示して描く##TimesheetDrawActiveFrameOverPreview"), &timesheetDrawActiveFrameOverPreview_);
-        ImGui::TextDisabled(u8c(u8"タイムラインで作画Fを選んだ時は、その作画Fを優先して描けます。T選択時は必要なら編集対象を寄せます。"));
+        ImGui::Checkbox(u8c(u8"ズレたら編集中Fだけ表示##TimesheetPreferEditingFrameWhenMismatch"), &timesheetPreferEditingFrameWhenMismatch_);
+        if (!timesheetPreferEditingFrameWhenMismatch_) {
+            ImGui::Checkbox(u8c(u8"旧方式: TS表示の上に編集中Fを重ねる##TimesheetDrawActiveFrameOverPreview"), &timesheetDrawActiveFrameOverPreview_);
+        }
+        ImGui::TextDisabled(u8c(u8"タイムラインで別の作画Fを選んだ時は、TS由来の作画Fを隠して編集中Fを優先します。"));
         if (ImGui::SmallButton("|<##TimesheetPlaybackFirst")) {
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
@@ -1668,9 +1671,41 @@ void App::drawCanvasArea(float rightWidth)
         return inputs;
     };
 
+    auto drawEditingFrameDisplay = [&]() {
+        if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
+            drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
+            return;
+        }
+
+        if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
+            const int safeSoloIndex = std::clamp(
+                soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_,
+                0,
+                static_cast<int>(project_.cells.size()) - 1);
+            const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
+            if (!soloCell.frames.empty()) {
+                const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
+                const Frame& soloFrame = soloCell.frames[static_cast<std::size_t>(soloFrameIndex)];
+                drawCellFrame(safeSoloIndex, soloCell, soloFrame, soloFrameIndex);
+            }
+            return;
+        }
+
+        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+            const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
+            if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
+                continue;
+            }
+            const int drawFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(drawCell.frames.size()) - 1);
+            const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
+            drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
+        }
+    };
+
     int timesheetResolvedSceneCellCount = 0;
     bool timesheetPreviewEditMismatch = false;
     bool timesheetPreviewActiveCellDrawable = false;
+    bool timesheetPreviewHiddenForEditing = false;
     int timesheetPreviewActiveDrawingFrameNumber = 0;
     if (useTimesheetPreview) {
         const ResolvedTimesheetSceneFrame resolvedScene = resolveTimesheetSceneFrame(
@@ -1678,13 +1713,6 @@ void App::drawCanvasArea(float rightWidth)
             buildTimesheetSceneInputsForCurrentDisplay(),
             timesheetTimelineFrame);
         timesheetResolvedSceneCellCount = static_cast<int>(resolvedScene.cells.size());
-        for (const ResolvedTimesheetSceneCell& resolvedCell : resolvedScene.cells) {
-            if (resolvedCell.cell == nullptr || resolvedCell.drawingFrameIndex < 0) {
-                continue;
-            }
-            const Frame& drawFrame = resolvedCell.cell->frames[static_cast<std::size_t>(resolvedCell.drawingFrameIndex)];
-            drawCellFrame(resolvedCell.cellIndex, *resolvedCell.cell, drawFrame, resolvedCell.drawingFrameIndex);
-        }
 
         if (const Cell* editingCell = activeCell(); editingCell != nullptr && !editingCell->frames.empty()) {
             const ResolvedTimesheetCell activeResolved =
@@ -1695,41 +1723,37 @@ void App::drawCanvasArea(float rightWidth)
                 activeResolved.drawingFrameNumber <= static_cast<int>(editingCell->frames.size());
             timesheetPreviewEditMismatch = !timesheetPreviewActiveCellDrawable ||
                 activeResolved.drawingFrameNumber != activeFrameIndex_ + 1;
+        }
 
-            // Timesheet Rebuild Step 7.10:
-            // T表示と編集対象Fがズレても作画を止めない。
-            // タイムラインで選んだ作画Fを、選択Tの表示結果の上に重ねて描けるようにする。
+        // Timesheet Rebuild Step 7.10.5:
+        // タイムラインでTS表示と違う作画Fを明示選択した時は、TS由来の作画Fを同時表示しない。
+        // 作画時は「今選んでいる作画Fだけ」を見せるのを標準にする。
+        timesheetPreviewHiddenForEditing = timesheetPreviewEditMismatch && timesheetPreferEditingFrameWhenMismatch_;
+
+        if (timesheetPreviewHiddenForEditing) {
+            drawEditingFrameDisplay();
+        } else {
+            for (const ResolvedTimesheetSceneCell& resolvedCell : resolvedScene.cells) {
+                if (resolvedCell.cell == nullptr || resolvedCell.drawingFrameIndex < 0) {
+                    continue;
+                }
+                const Frame& drawFrame = resolvedCell.cell->frames[static_cast<std::size_t>(resolvedCell.drawingFrameIndex)];
+                drawCellFrame(resolvedCell.cellIndex, *resolvedCell.cell, drawFrame, resolvedCell.drawingFrameIndex);
+            }
+
             if (timesheetPreviewEditMismatch &&
                 timesheetDrawActiveFrameOverPreview_ &&
-                activeFrameIndex_ >= 0 &&
-                activeFrameIndex_ < static_cast<int>(editingCell->frames.size())) {
-                const Frame& editingFrame = editingCell->frames[static_cast<std::size_t>(activeFrameIndex_)];
-                drawCellFrame(activeCellIndex_, *editingCell, editingFrame, activeFrameIndex_);
+                activeFrameIndex_ >= 0) {
+                if (const Cell* editingCell = activeCell();
+                    editingCell != nullptr &&
+                    activeFrameIndex_ < static_cast<int>(editingCell->frames.size())) {
+                    const Frame& editingFrame = editingCell->frames[static_cast<std::size_t>(activeFrameIndex_)];
+                    drawCellFrame(activeCellIndex_, *editingCell, editingFrame, activeFrameIndex_);
+                }
             }
-        }
-    } else if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
-        drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
-    } else if (cellDisplayMode == ui::CellDisplayMode::SoloSelected) {
-        const int safeSoloIndex = std::clamp(
-            soloCellIndex >= 0 ? soloCellIndex : activeCellIndex_,
-            0,
-            static_cast<int>(project_.cells.size()) - 1);
-        const Cell& soloCell = project_.cells[static_cast<std::size_t>(safeSoloIndex)];
-        if (!soloCell.frames.empty()) {
-            const int soloFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(soloCell.frames.size()) - 1);
-            const Frame& soloFrame = soloCell.frames[static_cast<std::size_t>(soloFrameIndex)];
-            drawCellFrame(safeSoloIndex, soloCell, soloFrame, soloFrameIndex);
         }
     } else {
-        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
-            const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
-            if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
-                continue;
-            }
-            const int drawFrameIndex = std::clamp(activeFrameIndex_, 0, static_cast<int>(drawCell.frames.size()) - 1);
-            const Frame& drawFrame = drawCell.frames[static_cast<std::size_t>(drawFrameIndex)];
-            drawCellFrame(cellIndex, drawCell, drawFrame, drawFrameIndex);
-        }
+        drawEditingFrameDisplay();
     }
 
     // Timesheet Rebuild Step 7.10:
@@ -1741,19 +1765,24 @@ void App::drawCanvasArea(float rightWidth)
         // Timesheet Rebuild Step 7.2:
         // キャンバス左上の状態表示は、前段の大きい説明ボックスではなく小型バッジに戻す。
         // 「表示セルN」は残しつつ、作画画面を邪魔しないサイズにする。
+        const std::string timesheetPreviewModeText = useTimesheetPreview
+            ? (timesheetPreviewHiddenForEditing ? std::string("EDIT") : std::string("ON"))
+            : std::string("OFF");
         const std::string previewText = std::string(u8c(u8"TS ")) +
-            (useTimesheetPreview ? std::string("ON") : std::string("OFF")) +
+            timesheetPreviewModeText +
             std::string(u8c(u8" T")) +
             std::to_string(timesheetTimelineFrame) +
             std::string(u8c(u8" 編集F")) +
             std::to_string(activeFrameIndex_ + 1) +
             std::string(u8c(u8" 表示セルN=")) +
-            std::to_string(timesheetResolvedSceneCellCount) +
+            std::to_string(timesheetPreviewHiddenForEditing ? 0 : timesheetResolvedSceneCellCount) +
             std::string(u8c(u8" entries=")) +
             std::to_string(timesheetEntryCount);
-        const char* warningText = timesheetPreviewEditMismatch
-            ? u8c(u8"TS表示と編集Fが違うため、編集中Fを上に表示して作画可")
-            : u8c(u8"");
+        const char* warningText = timesheetPreviewHiddenForEditing
+            ? u8c(u8"タイムライン選択を優先: TS由来Fは非表示")
+            : (timesheetPreviewEditMismatch
+                ? u8c(u8"TS表示と編集Fが違うため、編集中Fを上に表示")
+                : u8c(u8""));
         const ImVec2 textSize = ImGui::CalcTextSize(previewText.c_str());
         const ImVec2 warningSize = timesheetPreviewEditMismatch ? ImGui::CalcTextSize(warningText) : ImVec2(0.0f, 0.0f);
         const float overlayWidth = std::min(areaSize.x - 16.0f,
