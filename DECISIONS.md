@@ -529,3 +529,16 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 
 When the active drawing frame selected from the timeline differs from the drawing frame resolved by the selected timesheet T, the canvas should prioritize the active editing frame by default. Showing both frames at once is confusing during manual drawing. The old overlay behavior remains optional, but the standard workflow is `timeline F selection -> show/edit that F only` until the user explicitly syncs back to the selected T.
 
+
+## 2026-06-29 Scene Plate model policy
+
+- Scene Plate is a separate cut-level model for storyboard, layout, reference image, temporary background, and final background data.
+- Scene Plate must not be stored as a normal animation cell track, and adding a plate must not create drawing frames or timesheet entries.
+- Plate kind and output behavior are separate. Output participation is controlled by `ScenePlateOutputMode`: `ReferenceOnly`, `PreviewOnly`, or `RenderOutput`.
+- Step 7.11 only adds the core model and self-test. Canvas display, UI, persistence, and PNG/MP4 output wiring are intentionally deferred.
+
+## Timesheet Rebuild Step 7.11.5 Decision
+
+- タイムシート関連の補助UIは、作画画面を散らかさないよう `タイムシート補助` ウィンドウへ集約する。
+- タイムシート再生、保存/読み込み、解決結果、原画間検出、中割作成、ライトテーブル補助は同じ補助ウィンドウ内のセクションとして扱う。
+- Scene Plate UIを追加する前に、既存のタイムシート補助UIを整理しておく。

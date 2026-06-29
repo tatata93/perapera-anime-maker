@@ -678,11 +678,15 @@ void App::drawDrawingMode()
             timesheetPlaybackAccumulator_ = 0.0f;
         }
 
+        // Timesheet Rebuild Step 7.11.5:
+        // 増えたタイムシート関連の小ウィンドウを1つにまとめ、作業中の画面を散らかさない。
         ImGui::Begin(
-            u8c(u8"タイムシート再生##FormalTimesheetPlayback"),
+            u8c(u8"タイムシート補助##FormalTimesheetAssistant"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 7.9: タイムシートT再生 / T範囲再生"));
+        ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
+        ImGui::TextDisabled(u8c(u8"再生 / 保存 / T解決結果 / 原画間検出 / 中割作成をここへ集約します。"));
+        ImGui::SeparatorText(u8c(u8"T再生 / 作画対象"));
         ImGui::Text(
             u8c(u8"T %d / %d   entries=%d"),
             timesheetPanelState_.selectedTimelineFrame + 1,
@@ -796,9 +800,9 @@ void App::drawDrawingMode()
             setTimesheetPlaybackRangeFromOneBased(1, std::max(1, timesheetPanelData.totalFrames), "timesheet range all");
         }
         ImGui::TextDisabled(u8c(u8"タイムシート再生はTだけを進めます。作画F編集対象は変更しません。"));
-        ImGui::TextDisabled(u8c(u8"原画間再生は、原画間検出ウィンドウからT範囲へ入れます。"));
+        ImGui::TextDisabled(u8c(u8"原画間再生は、原画間検出からT範囲へ入れます。"));
         ImGui::TextDisabled(u8c(u8"指パラ/通常タイムライン再生中は、作画F再生表示を優先します。"));
-        ImGui::End();
+        ImGui::Separator();
 
         if (isPlayingTimesheet_) {
             if (isDrawingStroke_ || timesheetPanelData.totalFrames <= 1) {
@@ -897,11 +901,8 @@ void App::drawDrawingMode()
         const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
         const std::filesystem::path timesheetPath = TimesheetIO::timesheetPathForCutFolder(projectFolder);
 
-        ImGui::Begin(
-            u8c(u8"タイムシート保存##FormalTimesheetManualIO"),
-            nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 5.5: 一時タイムシートの手動保存/読み込み"));
+        ImGui::SeparatorText(u8c(u8"保存 / 読み込み"));
+        ImGui::TextUnformatted(u8c(u8"一時タイムシートの手動保存/読み込み"));
         ImGui::TextWrapped(
             u8c(u8"保存先: %s"),
             timesheetPath.string().c_str());
@@ -944,8 +945,8 @@ void App::drawDrawingMode()
             }
         }
 
-        ImGui::TextDisabled(u8c(u8"この保存は試験段階です。Project保存・キャンバス表示・再生・出力にはまだ接続していません。"));
-        ImGui::End();
+        ImGui::TextDisabled(u8c(u8"この保存は試験段階です。Project保存・出力にはまだ正式接続していません。"));
+        ImGui::Separator();
 
         // Timesheet Rebuild Step 7.4:
         // Tを選んだとき、各セルがどの作画Fとして解決されているかを小さい一覧で見せる。
@@ -977,10 +978,7 @@ void App::drawDrawingMode()
             }
         }
 
-        ImGui::Begin(
-            u8c(u8"タイムシート解決結果##FormalTimesheetResolvedList"),
-            nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+        ImGui::SeparatorText(u8c(u8"タイムシート解決結果"));
         ImGui::Text(
             u8c(u8"T%d の表示結果 / 編集対象: 作画F%d / entries=%d"),
             resolvedTimelineFrame,
@@ -1068,7 +1066,7 @@ void App::drawDrawingMode()
             resolvedVisibleCount,
             static_cast<int>(timesheetSummaryCells.size()));
         ImGui::TextDisabled(u8c(u8"この一覧は確認用です。編集対象の作画Fはここでは変更しません。"));
-        ImGui::End();
+        ImGui::Separator();
 
         // Timesheet Rebuild Step 7.5:
         // 選択T/セルについて、前後の原画とその間の中割を検出する。
@@ -1087,10 +1085,7 @@ void App::drawDrawingMode()
                 selectedColumn.cellId,
                 resolvedTimelineFrame);
 
-            ImGui::Begin(
-                u8c(u8"原画間検出##FormalTimesheetInbetweenInterval"),
-                nullptr,
-                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
+            ImGui::SeparatorText(u8c(u8"原画間検出 / 中割 / ライトテーブル"));
             ImGui::Text(
                 u8c(u8"対象: %s / T%d"),
                 selectedColumn.displayName.empty() ? selectedColumn.cellId.c_str() : selectedColumn.displayName.c_str(),
@@ -1352,8 +1347,8 @@ void App::drawDrawingMode()
                 }
             }
             ImGui::TextDisabled(u8c(u8"絵コンテ・レイアウト・背景参照はセル列に混ぜず、Scene Plateとして別管理します。"));
-            ImGui::End();
         }
+        ImGui::End();
     }
     const bool isColoringMode = currentMode_ == AppMode::Coloring;
     if (isColoringMode) {
