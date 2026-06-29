@@ -832,6 +832,8 @@ void App::drawDrawingMode()
                 static_cast<int>(timesheetPanelData.cells.size()) - 1);
             const ::perapera::ui::TimesheetPanelCellColumn& selectedColumn =
                 timesheetPanelData.cells[static_cast<std::size_t>(safeSelectedCellColumn)];
+            int selectedProjectCellIndex = -1;
+            Cell* selectedCell = projectCellById(project_, selectedColumn.cellId, &selectedProjectCellIndex);
             const ResolvedTimesheetInbetweenInterval interval = resolveTimesheetInbetweenInterval(
                 workingTimesheet_,
                 selectedColumn.cellId,
@@ -912,6 +914,61 @@ void App::drawDrawingMode()
                                 inbetween.timelineFrame,
                                 inbetween.drawingFrameNumber);
                         }
+                    }
+
+                    ImGui::SeparatorText(u8c(u8"中割ライトテーブル"));
+                    ImGui::TextDisabled(u8c(u8"中割作画では、前原画と次原画を候補としてすぐライトテーブルに出せます。"));
+
+                    std::vector<int> keyLightTableFrameIndices;
+                    if (interval.previousKey.found) {
+                        const int previousKeyFrameIndex = interval.previousKey.drawingFrameNumber - 1;
+                        if (selectedCell != nullptr &&
+                            previousKeyFrameIndex >= 0 &&
+                            previousKeyFrameIndex < static_cast<int>(selectedCell->frames.size()) &&
+                            previousKeyFrameIndex != activeFrameIndex_) {
+                            keyLightTableFrameIndices.push_back(previousKeyFrameIndex);
+                        }
+                    }
+                    if (interval.nextKey.found) {
+                        const int nextKeyFrameIndex = interval.nextKey.drawingFrameNumber - 1;
+                        if (selectedCell != nullptr &&
+                            nextKeyFrameIndex >= 0 &&
+                            nextKeyFrameIndex < static_cast<int>(selectedCell->frames.size()) &&
+                            nextKeyFrameIndex != activeFrameIndex_ &&
+                            std::find(keyLightTableFrameIndices.begin(),
+                                      keyLightTableFrameIndices.end(),
+                                      nextKeyFrameIndex) == keyLightTableFrameIndices.end()) {
+                            keyLightTableFrameIndices.push_back(nextKeyFrameIndex);
+                        }
+                    }
+
+                    ImGui::Text(
+                        u8c(u8"候補: 前原画 作画F%d / 次原画 作画F%d"),
+                        interval.previousKey.drawingFrameNumber,
+                        interval.nextKey.drawingFrameNumber);
+                    if (keyLightTableFrameIndices.empty()) {
+                        ImGui::BeginDisabled();
+                    }
+                    if (ImGui::SmallButton(u8c(u8"前後原画をライトテーブルに反映##ApplyKeyLightTable"))) {
+                        activeCellIndex_ = selectedProjectCellIndex;
+                        lightTableFrameIndices_ = keyLightTableFrameIndices;
+                        lightTableEnabled_ = !lightTableFrameIndices_.empty();
+                        lightTableOpacity_ = std::max(lightTableOpacity_, 0.35f);
+                        canvasRenderer_.markAllDirty();
+                        lastMessage_ = "inbetween light table: key F" +
+                            std::to_string(interval.previousKey.drawingFrameNumber) +
+                            " -> F" +
+                            std::to_string(interval.nextKey.drawingFrameNumber);
+                    }
+                    if (keyLightTableFrameIndices.empty()) {
+                        ImGui::EndDisabled();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(u8c(u8"ライトテーブルを消す##ClearKeyLightTable"))) {
+                        lightTableFrameIndices_.clear();
+                        lightTableEnabled_ = false;
+                        canvasRenderer_.markAllDirty();
+                        lastMessage_ = "light table cleared";
                     }
 
                     ImGui::SeparatorText(u8c(u8"中割作成"));
@@ -1182,8 +1239,40 @@ void App::drawTimelineArea()
     ImGui::BeginChild("DrawingTimelineFrameStripHost_v26", ImVec2(0.0f, 160.0f), true,
                       ImGuiWindowFlags_NoScrollWithMouse);
     const int prevFrameIndex = activeFrameIndex_;
+    std::vector<int> playbackOrderFrameIndices;
+    if (countTimesheetEntries(workingTimesheet_) > 0) {
+        if (const TimesheetCellTrack* track = findTimesheetTrack(workingTimesheet_, cell->id); track != nullptr) {
+            std::vector<TimesheetEntry> orderedEntries = track->entries;
+            std::sort(orderedEntries.begin(),
+                      orderedEntries.end(),
+                      [](const TimesheetEntry& a, const TimesheetEntry& b) {
+                          if (a.timelineFrame != b.timelineFrame) {
+                              return a.timelineFrame < b.timelineFrame;
+                          }
+                          return static_cast<int>(a.type) < static_cast<int>(b.type);
+                      });
+
+            playbackOrderFrameIndices.reserve(orderedEntries.size());
+            std::vector<bool> used(cell->frames.size(), false);
+            for (const TimesheetEntry& entry : orderedEntries) {
+                if (!timesheetEntryTypeUsesDrawingNumber(entry.type)) {
+                    continue;
+                }
+                const int frameIndex = entry.drawingFrameNumber - 1;
+                if (frameIndex < 0 || frameIndex >= static_cast<int>(cell->frames.size())) {
+                    continue;
+                }
+                if (used[static_cast<std::size_t>(frameIndex)]) {
+                    continue;
+                }
+                used[static_cast<std::size_t>(frameIndex)] = true;
+                playbackOrderFrameIndices.push_back(frameIndex);
+            }
+        }
+    }
+
     const ui::TimelinePanelAction timelineAction =
-        ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_);
+        ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_, playbackOrderFrameIndices);
     if (activeFrameIndex_ != prevFrameIndex) {
         canvasRenderer_.markAllDirty();
     }

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 
@@ -25,15 +26,20 @@ const char* u8c(const char8_t* text)
 TimelinePanelAction drawTimelinePanel(Cell& cell,
                                       int& activeFrameIndex,
                                       bool& onionPrevious,
-                                      bool& onionNext)
+                                      bool& onionNext,
+                                      const std::vector<int>& playbackOrderFrameIndices)
 {
     TimelinePanelAction action = TimelinePanelAction::None;
 
-    ImGui::PushID("TimelinePanel_v26_drawing_frame_boxes_first");
+    ImGui::PushID("TimelinePanel_v27_playback_order_frame_boxes");
 
     ImGui::TextUnformatted(u8c(u8"作画Fタイムライン"));
     ImGui::SameLine();
     ImGui::Text(u8c(u8"作画F数: %d"), static_cast<int>(cell.frames.size()));
+    ImGui::SameLine();
+    ImGui::TextDisabled(playbackOrderFrameIndices.empty()
+        ? u8c(u8"表示順: 作画F番号順")
+        : u8c(u8"表示順: タイムシート再生順"));
 
     if (cell.frames.empty()) {
         ImGui::TextDisabled("no drawing frames");
@@ -47,47 +53,66 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
     ImGui::Text(u8c(u8"選択: 作画F%d"), activeFrameIndex + 1);
 
     int scrollCommand = 0;
-    if (ImGui::SmallButton("|<##Timeline_First_v26")) {
+    if (ImGui::SmallButton("|<##Timeline_First_v27")) {
         scrollCommand = -2;
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton("<##Timeline_Left_v26")) {
+    if (ImGui::SmallButton("<##Timeline_Left_v27")) {
         scrollCommand = -1;
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton(">##Timeline_Right_v26")) {
+    if (ImGui::SmallButton(">##Timeline_Right_v27")) {
         scrollCommand = 1;
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton(">|##Timeline_Last_v26")) {
+    if (ImGui::SmallButton(">|##Timeline_Last_v27")) {
         scrollCommand = 2;
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton(u8c(u8"選択へ##Timeline_ScrollActive_v26"))) {
+    if (ImGui::SmallButton(u8c(u8"選択へ##Timeline_ScrollActive_v27"))) {
         scrollCommand = 3;
     }
     ImGui::SameLine();
-    ImGui::Checkbox(u8c(u8"前オニオン##Timeline_OnionPrev_v26"), &onionPrevious);
+    ImGui::Checkbox(u8c(u8"前オニオン##Timeline_OnionPrev_v27"), &onionPrevious);
     ImGui::SameLine();
-    ImGui::Checkbox(u8c(u8"次オニオン##Timeline_OnionNext_v26"), &onionNext);
+    ImGui::Checkbox(u8c(u8"次オニオン##Timeline_OnionNext_v27"), &onionNext);
 
-    // Timesheet Rebuild Step 7.3:
-    // 表示順を「作画Fの四角列 → 操作ボタン」に固定する。
-    // 3つの作画Fがあれば、3つの四角が必ず先に見える。
-    const float frameButtonWidth = 58.0f;
+    // Timesheet Rebuild Step 7.8:
+    // タイムシート入力がある場合は、下部の作画Fボックスも再生される順に並べる。
+    // 指定が無い場合は従来通り作画F番号順に戻す。
+    std::vector<int> displayOrder;
+    displayOrder.reserve(cell.frames.size());
+    std::vector<bool> used(cell.frames.size(), false);
+    for (int frameIndex : playbackOrderFrameIndices) {
+        if (frameIndex < 0 || frameIndex >= static_cast<int>(cell.frames.size())) {
+            continue;
+        }
+        if (used[static_cast<std::size_t>(frameIndex)]) {
+            continue;
+        }
+        used[static_cast<std::size_t>(frameIndex)] = true;
+        displayOrder.push_back(frameIndex);
+    }
+    for (int frameIndex = 0; frameIndex < static_cast<int>(cell.frames.size()); ++frameIndex) {
+        if (!used[static_cast<std::size_t>(frameIndex)]) {
+            displayOrder.push_back(frameIndex);
+        }
+    }
+
+    const float frameButtonWidth = 68.0f;
     const float frameButtonHeight = 42.0f;
     const float frameButtonGap = std::max(5.0f, ImGui::GetStyle().ItemSpacing.x);
     const float leftPadding = 6.0f;
     const float topPadding = 6.0f;
     const float frameStep = frameButtonWidth + frameButtonGap;
-    const int frameCount = static_cast<int>(cell.frames.size());
+    const int displayCount = static_cast<int>(displayOrder.size());
     const float contentWidth = leftPadding * 2.0f
-        + static_cast<float>(frameCount) * frameStep
+        + static_cast<float>(displayCount) * frameStep
         + frameButtonGap;
     const float childHeight = frameButtonHeight + topPadding * 2.0f + ImGui::GetStyle().ScrollbarSize + 4.0f;
 
     ImGui::SetNextWindowContentSize(ImVec2(contentWidth, 0.0f));
-    ImGui::BeginChild("TimelineDrawingFrameBoxes_v26",
+    ImGui::BeginChild("TimelineDrawingFrameBoxes_v27",
                       ImVec2(0.0f, childHeight),
                       true,
                       ImGuiWindowFlags_HorizontalScrollbar |
@@ -105,7 +130,11 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
     } else if (scrollCommand == 2) {
         ImGui::SetScrollX(scrollMax);
     } else if (scrollCommand == 3) {
-        const float target = leftPadding + static_cast<float>(activeFrameIndex) * frameStep;
+        auto found = std::find(displayOrder.begin(), displayOrder.end(), activeFrameIndex);
+        const int orderIndex = found == displayOrder.end()
+            ? activeFrameIndex
+            : static_cast<int>(std::distance(displayOrder.begin(), found));
+        const float target = leftPadding + static_cast<float>(orderIndex) * frameStep;
         ImGui::SetScrollX(std::clamp(target - frameButtonGap, 0.0f, scrollMax));
     }
 
@@ -118,24 +147,28 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
     const int firstVisibleFrame = std::clamp(
         static_cast<int>(std::floor((viewMinX - leftPadding - frameButtonWidth) / frameStep)) - 2,
         0,
-        frameCount);
+        displayCount);
     const int lastVisibleFrame = std::clamp(
         static_cast<int>(std::ceil((viewMaxX - leftPadding) / frameStep)) + 3,
         firstVisibleFrame,
-        frameCount);
+        displayCount);
 
-    for (int index = firstVisibleFrame; index < lastVisibleFrame; ++index) {
-        ImGui::PushID(index);
-        const float x = leftPadding + static_cast<float>(index) * frameStep;
+    for (int orderIndex = firstVisibleFrame; orderIndex < lastVisibleFrame; ++orderIndex) {
+        const int frameIndex = displayOrder[static_cast<std::size_t>(orderIndex)];
+        ImGui::PushID(frameIndex);
+        const float x = leftPadding + static_cast<float>(orderIndex) * frameStep;
         ImGui::SetCursorPos(ImVec2(x, topPadding));
-        const bool selected = index == activeFrameIndex;
+        const bool selected = frameIndex == activeFrameIndex;
         if (selected) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.50f, 0.47f, 0.86f, 1.0f));
         }
-        const std::string label = std::string(u8c(u8"作F")) + std::to_string(index + 1) +
-            "##Timeline_DrawingFrameBox_v26";
+        std::string label = std::string(u8c(u8"作F")) + std::to_string(frameIndex + 1);
+        if (!playbackOrderFrameIndices.empty()) {
+            label += std::string(u8c(u8"\n再生")) + std::to_string(orderIndex + 1);
+        }
+        label += "##Timeline_DrawingFrameBox_v27";
         if (ImGui::Button(label.c_str(), ImVec2(frameButtonWidth, frameButtonHeight))) {
-            activeFrameIndex = index;
+            activeFrameIndex = frameIndex;
         }
         if (selected) {
             ImGui::PopStyleColor();
@@ -148,12 +181,15 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
     ImGui::EndChild();
 
     ImGui::TextDisabled(u8c(u8"用語: 作画F=描く絵の番号 / T=タイムシート位置 / コマ数=時間の長さ"));
+    if (!playbackOrderFrameIndices.empty()) {
+        ImGui::TextDisabled(u8c(u8"タイムシートに記入された作画Fを、Tで再生される順に並べています。未使用の作画Fは後ろに追加表示します。"));
+    }
 
-    if (ImGui::SmallButton(u8c(u8"作画F追加##Timeline_AddFrame_v26"))) {
+    if (ImGui::SmallButton(u8c(u8"作画F追加##Timeline_AddFrame_v27"))) {
         action = TimelinePanelAction::AddFrame;
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton(u8c(u8"作画F複製##Timeline_DuplicateFrame_v26"))) {
+    if (ImGui::SmallButton(u8c(u8"作画F複製##Timeline_DuplicateFrame_v27"))) {
         action = TimelinePanelAction::DuplicateFrame;
     }
     ImGui::SameLine();
@@ -162,7 +198,7 @@ TimelinePanelAction drawTimelinePanel(Cell& cell,
     if (!canDelete) {
         ImGui::BeginDisabled();
     }
-    if (ImGui::SmallButton(u8c(u8"作画F削除##Timeline_DeleteFrame_v26"))) {
+    if (ImGui::SmallButton(u8c(u8"作画F削除##Timeline_DeleteFrame_v27"))) {
         action = TimelinePanelAction::DeleteFrame;
     }
     if (!canDelete) {
