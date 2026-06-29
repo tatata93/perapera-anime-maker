@@ -6,12 +6,14 @@
 #include <filesystem>
 #include <iterator>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 #include <imgui.h>
 #include "core/TimesheetResolver.h"
 #include "core/TimesheetInbetweenResolver.h"
+#include "core/TimesheetInbetweenPlanner.h"
 #include "core/TimesheetSceneResolver.h"
 #include "io/TimesheetIO.h"
 #include "ui/AppProjectIOSupport.h"
@@ -39,6 +41,78 @@ int countTimesheetEntries(const Timesheet& timesheet)
         count += static_cast<int>(track.entries.size());
     }
     return count;
+}
+
+bool timesheetPanelKindUsesDrawingFrame(::perapera::ui::TimesheetPanelEntryKind kind)
+{
+    return kind == ::perapera::ui::TimesheetPanelEntryKind::Drawing ||
+        kind == ::perapera::ui::TimesheetPanelEntryKind::Key ||
+        kind == ::perapera::ui::TimesheetPanelEntryKind::Inbetween;
+}
+
+Cell* projectCellById(Project& project, const std::string& cellId, int* cellIndexOut = nullptr)
+{
+    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
+        Cell& cell = project.cells[static_cast<std::size_t>(cellIndex)];
+        if (cell.id == cellId) {
+            if (cellIndexOut != nullptr) {
+                *cellIndexOut = cellIndex;
+            }
+            return &cell;
+        }
+    }
+    return nullptr;
+}
+
+const ::perapera::ui::TimesheetPanelEditableEntry* selectedTimesheetPanelEntry(
+    const ::perapera::ui::TimesheetPanelViewModel& data,
+    const ::perapera::ui::TimesheetPanelState& state)
+{
+    if (data.cells.empty()) {
+        return nullptr;
+    }
+
+    const int safeColumn = std::clamp(
+        state.selectedCellColumn,
+        0,
+        static_cast<int>(data.cells.size()) - 1);
+    const std::string& cellId = data.cells[static_cast<std::size_t>(safeColumn)].cellId;
+    for (const ::perapera::ui::TimesheetPanelEditableEntry& entry : state.entries) {
+        if (entry.timelineFrame == state.selectedTimelineFrame && entry.cellId == cellId) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+int autoCreateMissingDrawingFramesForTimesheetEntries(
+    Project& project,
+    const ::perapera::ui::TimesheetPanelState& state)
+{
+    int createdCount = 0;
+    constexpr int kMaximumAutoCreateDrawingFrame = 240;
+
+    for (const ::perapera::ui::TimesheetPanelEditableEntry& entry : state.entries) {
+        if (!timesheetPanelKindUsesDrawingFrame(entry.kind) || entry.drawingFrameNumber <= 0) {
+            continue;
+        }
+        if (entry.drawingFrameNumber > kMaximumAutoCreateDrawingFrame) {
+            continue;
+        }
+
+        Cell* cell = projectCellById(project, entry.cellId);
+        if (cell == nullptr) {
+            continue;
+        }
+
+        while (static_cast<int>(cell->frames.size()) < entry.drawingFrameNumber) {
+            const int newFrameNumber = static_cast<int>(cell->frames.size()) + 1;
+            cell->frames.push_back(Frame::createDefault(newFrameNumber));
+            ++createdCount;
+        }
+    }
+
+    return createdCount;
 }
 float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 {
@@ -528,12 +602,39 @@ void App::drawDrawingMode()
             ::perapera::ui::drawTimesheetPanel(timesheetPanelData, timesheetPanelState_);
 
         if (timesheetPanelResult.entryChanged) {
+            const int autoCreatedFrames = autoCreateMissingDrawingFramesForTimesheetEntries(project_, timesheetPanelState_);
+
+            const ::perapera::ui::TimesheetPanelEditableEntry* selectedEntry =
+                selectedTimesheetPanelEntry(timesheetPanelData, timesheetPanelState_);
+            if (selectedEntry != nullptr && timesheetPanelKindUsesDrawingFrame(selectedEntry->kind)) {
+                const int safeSelectedCellColumn = std::clamp(
+                    timesheetPanelState_.selectedCellColumn,
+                    0,
+                    static_cast<int>(timesheetPanelData.cells.size()) - 1);
+                int selectedProjectCellIndex = -1;
+                Cell* selectedCell = projectCellById(
+                    project_,
+                    timesheetPanelData.cells[static_cast<std::size_t>(safeSelectedCellColumn)].cellId,
+                    &selectedProjectCellIndex);
+                if (selectedCell != nullptr &&
+                    selectedEntry->drawingFrameNumber >= 1 &&
+                    selectedEntry->drawingFrameNumber <= static_cast<int>(selectedCell->frames.size())) {
+                    activeCellIndex_ = selectedProjectCellIndex;
+                    activeFrameIndex_ = selectedEntry->drawingFrameNumber - 1;
+                    activeLayerIndex_ = 0;
+                }
+            }
+
             workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
             workingTimesheetDirty_ = true;
+            canvasRenderer_.clearLayerCaches();
             canvasRenderer_.markAllDirty();
 
             const int entryCount = countTimesheetEntries(workingTimesheet_);
             lastMessage_ = "timesheet temporary core data updated: entries=" + std::to_string(entryCount);
+            if (autoCreatedFrames > 0) {
+                lastMessage_ += " / auto-created 作画F=" + std::to_string(autoCreatedFrames);
+            }
         }
 
         if (timesheetPanelResult.timelineFrameChanged) {
@@ -805,14 +906,117 @@ void App::drawDrawingMode()
                         ImGui::TextUnformatted(u8c(u8"この原画間の中割:"));
                         for (const TimesheetInbetweenDrawingInfo& inbetween : interval.inbetweens) {
                             ImGui::BulletText(
-                                u8c(u8"%d/%d: T%d / 作画F%d"),
+                                u8c(u8"%d/%d: T%d / 作画F%d / 役割: 中割"),
                                 inbetween.inbetweenIndex,
                                 inbetween.inbetweenCount,
                                 inbetween.timelineFrame,
                                 inbetween.drawingFrameNumber);
                         }
                     }
-                    ImGui::TextDisabled(u8c(u8"Step 7.6で、この区間に中割を1枚/2枚/3枚追加するボタンを入れます。"));
+
+                    ImGui::SeparatorText(u8c(u8"中割作成"));
+                    ImGui::TextDisabled(u8c(u8"中割は新しい作画Fとして追加し、原画Fは上書きしません。"));
+                    ImGui::TextDisabled(u8c(u8"枚数指定ではなく、1コマ打ち/2コマ打ち/3コマ打ち/nコマ打ちで配置します。"));
+
+                    static int inbetweenKomaStep = 2;
+                    ImGui::SetNextItemWidth(96.0f);
+                    if (ImGui::InputInt(u8c(u8"nコマ打ち##InbetweenKomaStep"), &inbetweenKomaStep)) {
+                        inbetweenKomaStep = std::clamp(inbetweenKomaStep, 1, 24);
+                    }
+                    inbetweenKomaStep = std::clamp(inbetweenKomaStep, 1, 24);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(u8c(u8"例: T1→T7の2コマ打ちはT3/T5"));
+
+                    auto addInbetweensByKomaStep = [&](int komaStep) {
+                        komaStep = std::clamp(komaStep, 1, 24);
+
+                        int selectedProjectCellIndex = -1;
+                        Cell* targetCell = projectCellById(project_, selectedColumn.cellId, &selectedProjectCellIndex);
+                        if (targetCell == nullptr) {
+                            lastMessage_ = "inbetween add failed: selected cell not found";
+                            return;
+                        }
+
+                        const TimesheetInbetweenPlacementPlan plan = planTimesheetInbetweenPlacementsForKomaStep(
+                            workingTimesheet_,
+                            selectedColumn.cellId,
+                            interval.previousKey.timelineFrame,
+                            interval.nextKey.timelineFrame,
+                            komaStep);
+                        if (!plan.ok) {
+                            lastMessage_ = "inbetween " + std::to_string(komaStep) + "-koma add failed: " + plan.message;
+                            return;
+                        }
+
+                        if (targetCell->frames.empty()) {
+                            targetCell->frames.push_back(Frame::createDefault(1));
+                        }
+
+                        std::vector<int> createdDrawingFrames;
+                        createdDrawingFrames.reserve(plan.timelineFrames.size());
+                        for (int timelineFrame : plan.timelineFrames) {
+                            const int newDrawingFrameNumber = static_cast<int>(targetCell->frames.size()) + 1;
+                            targetCell->frames.push_back(Frame::createDefault(newDrawingFrameNumber));
+                            createdDrawingFrames.push_back(newDrawingFrameNumber);
+
+                            ::perapera::ui::TimesheetPanelEditableEntry entry;
+                            entry.timelineFrame = std::max(0, timelineFrame - 1);
+                            entry.cellId = selectedColumn.cellId;
+                            entry.kind = ::perapera::ui::TimesheetPanelEntryKind::Inbetween;
+                            entry.drawingFrameNumber = newDrawingFrameNumber;
+                            timesheetPanelState_.entries.push_back(std::move(entry));
+                        }
+
+                        const bool normalizedAfterAdd =
+                            ::perapera::ui::normalizeTimesheetPanelStateForViewModel(timesheetPanelData, timesheetPanelState_);
+                        (void)normalizedAfterAdd;
+                        workingTimesheet_ = ::perapera::ui::buildTimesheetFromPanelState(timesheetPanelData, timesheetPanelState_);
+                        workingTimesheetDirty_ = true;
+
+                        activeCellIndex_ = selectedProjectCellIndex;
+                        activeFrameIndex_ = std::max(0, createdDrawingFrames.front() - 1);
+                        activeLayerIndex_ = 0;
+                        timesheetPanelState_.selectedTimelineFrame = std::max(0, plan.timelineFrames.front() - 1);
+                        timesheetPanelState_.selectedCellColumn = safeSelectedCellColumn;
+                        timesheetPanelState_.editDrawingFrameNumber = createdDrawingFrames.front();
+                        isPlayingTimesheet_ = false;
+                        isPlayingFrames_ = false;
+                        timesheetPlaybackAccumulator_ = 0.0f;
+                        playbackAccumulator_ = 0.0f;
+                        canvasRenderer_.clearLayerCaches();
+                        canvasRenderer_.markAllDirty();
+
+                        std::ostringstream message;
+                        message << "inbetween " << komaStep << "-koma added: ";
+                        for (std::size_t i = 0; i < plan.timelineFrames.size(); ++i) {
+                            if (i != 0U) {
+                                message << ", ";
+                            }
+                            message << "T" << plan.timelineFrames[i]
+                                    << "=作画F" << createdDrawingFrames[i];
+                        }
+                        message << " / key F" << interval.previousKey.drawingFrameNumber
+                                << "->F" << interval.nextKey.drawingFrameNumber;
+                        lastMessage_ = message.str();
+                    };
+
+                    if (ImGui::SmallButton(u8c(u8"1コマ打ち##AddInbetweenKoma1"))) {
+                        addInbetweensByKomaStep(1);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(u8c(u8"2コマ打ち##AddInbetweenKoma2"))) {
+                        addInbetweensByKomaStep(2);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(u8c(u8"3コマ打ち##AddInbetweenKoma3"))) {
+                        addInbetweensByKomaStep(3);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(u8c(u8"指定nコマで追加##AddInbetweenKomaN"))) {
+                        addInbetweensByKomaStep(inbetweenKomaStep);
+                    }
+                    ImGui::TextDisabled(
+                        u8c(u8"追加後は最初の中割作画Fへ編集対象を切り替えます。既に埋まっているTは壊さず飛ばします。"));
                 } else {
                     ImGui::TextDisabled(u8c(u8"前後原画が両方あると、中割作成候補として扱えます。"));
                 }

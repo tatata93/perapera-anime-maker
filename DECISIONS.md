@@ -479,3 +479,25 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - An inbetween remains a normal drawing frame with role `Inbetween`, but UI should show its relation to the surrounding key drawings.
 - Step 7.5 is detection-only. Automatic inbetween placement belongs to Step 7.6, and automatic light table setup belongs to a later step.
 - Storyboard/layout/background reference images remain outside timesheet cell tracks and will be handled later as Scene Plates.
+
+## Decision: 中割Fは原画間へタイムシート上で割り込ませる
+
+- 中割は自動生成画像ではなく、手描き用の新しい作画Fとして追加する。
+- 原画Fは上書きしない。
+- 作画F番号は追加順の実体番号として扱う。
+- タイムシート上では、前後原画の間のTへ `役割: 中割` として配置し、時間順では原画間に割り込む。
+- 中割追加後は、最初に追加した中割作画Fを編集対象に切り替え、すぐ描けるようにする。
+- 前後原画の自動ライトテーブル表示は次段階で実装する。
+- 絵コンテ、レイアウト、背景参照はセル列とは混ぜず、将来の Scene Plate として別管理する。
+
+## Decision: 中割追加は枚数指定ではなくnコマ打ちを主操作にする
+
+原画間へ中割を追加するUIは、`中割を何枚追加` ではなく、`1コマ打ち / 2コマ打ち / 3コマ打ち / nコマ打ち` を主操作にする。
+
+`nコマ打ち` は、前原画Tから nT ごとに中割用の新規作画Fを置く操作とする。既に埋まっているTは壊さず飛ばす。追加できるTが無い場合は失敗メッセージを出し、既存原画・既存中割・既存作画Fを上書きしない。
+
+## Decision: タイムシート入力時に不足作画Fを自動作成する
+
+タイムシートで `作画 / 原画 / 中割` を明示的に置いたとき、指定された作画F番号が対象セルに存在しない場合は、対象セルに空の作画Fを不足分だけ自動作成する。
+
+これは作業効率のために行う。`ホールド / 空セル / 消去` では作画Fを自動作成しない。
