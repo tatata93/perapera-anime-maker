@@ -463,3 +463,12 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - T選択時の表示内容を理解しやすくするため、`タイムシート解決結果` ウィンドウでセル別の解決結果を明示する。
 - Tはタイムシート上の時間位置、作画Fはセル内で描く絵の番号、コマ数は時間の長さとして扱う。
 - `フレーム` という語は内部処理・動画出力・レンダー文脈に寄せ、UIではなるべく `T` と `作画F` に分けて表示する。
+## Timesheet / inbetween workflow decisions
+
+- Inbetween drawings are not a separate numbering system. They are ordinary drawing frames with role `Inbetween`.
+- Inbetween drawings should be created in the context of a previous key drawing and a next key drawing.
+- Display, playback, and output resolve key drawings and inbetweens the same way: show the specified drawing frame at the specified timesheet T.
+- The difference between `Key` and `Inbetween` is production metadata used for UI, light-table assistance, interval playback, and future drawing support.
+- Automatic inbetween generation, AI interpolation, vector interpolation, and image morphing are explicitly out of scope for the current timesheet rebuild.
+- Storyboard images, layouts, background roughs, reference images, finished backgrounds, and camera/safe-frame guides should be modeled as scene reference/background plates, not as animation cells.
+- Scene reference/background plates must carry output policy such as `ReferenceOnly`, `PreviewOnly`, or `RenderOutput` so storyboard/layout guides can be visible while drawing but excluded from final PNG/MP4 output.
