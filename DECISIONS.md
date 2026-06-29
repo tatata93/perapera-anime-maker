@@ -517,3 +517,10 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - タイムシートがある場合、オニオンフレームは作画F番号順ではなくT順の再生順を優先する。
 - 例: T1=F1, T3=F3, T5=F4, T7=F2 の場合、オニオン順は F1→F3→F4→F2 とする。
 - T範囲再生はactiveFrameIndex_を変更せず、タイムシートT選択だけを進める。
+
+## 2026-06-29 Timesheet Rebuild Step 7.10 decisions
+
+- A mismatch between selected timesheet T and active drawing F must not block drawing by default.
+- Timesheet T/cell selection should optionally move the active edit target to the resolved drawing F.
+- Timeline drawing-F selection remains valid; if it differs from the timesheet preview, the active drawing F is shown over the preview and can be edited.
+- This keeps T as the time position and 作画F as the editable drawing object without forcing them to always be identical.

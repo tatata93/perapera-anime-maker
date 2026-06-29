@@ -107,6 +107,13 @@ private:
     bool isPlayingTimesheetRange_ = false;
     int timesheetPlaybackRangeStartFrame_ = 0;
     int timesheetPlaybackRangeEndFrame_ = 0;
+
+    // Timesheet Rebuild Step 7.10:
+    // T選択と作画F編集対象がズレても作画できるようにする。
+    // true: タイムシートのT/セル選択時に、表示される作画Fへ編集対象を寄せる。
+    // true: ズレが残る場合も、編集中作画Fをキャンバス上に重ねて作画可能にする。
+    bool timesheetEditFollowsSelectedT_ = true;
+    bool timesheetDrawActiveFrameOverPreview_ = true;
     int previewWarmCursor_ = 0;
     CanvasDisplayMode previewReadyDisplayMode_ = CanvasDisplayMode::Drawing;
     std::vector<char> previewReadyFlags_;

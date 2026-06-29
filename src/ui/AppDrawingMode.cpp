@@ -550,6 +550,62 @@ void App::drawDrawingMode()
             }
         };
 
+        auto syncEditingTargetToSelectedTimesheetCell = [&](const char* reason, bool allowResolvedHold) -> bool {
+            if (timesheetPanelData.cells.empty() || project_.cells.empty()) {
+                return false;
+            }
+
+            const int safeSelectedCellColumn = std::clamp(
+                timesheetPanelState_.selectedCellColumn,
+                0,
+                static_cast<int>(timesheetPanelData.cells.size()) - 1);
+            const ::perapera::ui::TimesheetPanelCellColumn& selectedColumn =
+                timesheetPanelData.cells[static_cast<std::size_t>(safeSelectedCellColumn)];
+
+            int selectedProjectCellIndex = -1;
+            Cell* selectedCell = projectCellById(project_, selectedColumn.cellId, &selectedProjectCellIndex);
+            if (selectedCell == nullptr || selectedCell->frames.empty()) {
+                return false;
+            }
+
+            int desiredDrawingFrameNumber = 0;
+            const ::perapera::ui::TimesheetPanelEditableEntry* selectedEntry =
+                selectedTimesheetPanelEntry(timesheetPanelData, timesheetPanelState_);
+            if (selectedEntry != nullptr && timesheetPanelKindUsesDrawingFrame(selectedEntry->kind)) {
+                desiredDrawingFrameNumber = selectedEntry->drawingFrameNumber;
+            } else if (allowResolvedHold && countTimesheetEntries(workingTimesheet_) > 0) {
+                const int selectedT = clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1);
+                const ResolvedTimesheetCell resolved =
+                    resolveTimesheetCell(workingTimesheet_, selectedColumn.cellId, selectedT);
+                if (resolved.visible && resolved.drawingFrameNumber > 0) {
+                    desiredDrawingFrameNumber = resolved.drawingFrameNumber;
+                }
+            }
+
+            if (desiredDrawingFrameNumber < 1 ||
+                desiredDrawingFrameNumber > static_cast<int>(selectedCell->frames.size())) {
+                return false;
+            }
+
+            const int desiredFrameIndex = desiredDrawingFrameNumber - 1;
+            const bool changed = activeCellIndex_ != selectedProjectCellIndex ||
+                activeFrameIndex_ != desiredFrameIndex;
+
+            activeCellIndex_ = selectedProjectCellIndex;
+            activeFrameIndex_ = desiredFrameIndex;
+            activeLayerIndex_ = 0;
+            clampSelection();
+
+            if (changed) {
+                canvasRenderer_.markAllDirty();
+                lastMessage_ = std::string(reason) + 
+                    ": edit target follows selected T -> cell " +
+                    std::to_string(activeCellIndex_ + 1) +
+                    " / F" + std::to_string(activeFrameIndex_ + 1);
+            }
+            return true;
+        };
+
         auto stepTimesheetPreviewFrame = [&](int delta) {
             const int frameCount = std::max(1, timesheetPanelData.totalFrames);
             if (frameCount <= 1) {
@@ -632,6 +688,16 @@ void App::drawDrawingMode()
             timesheetPanelState_.selectedTimelineFrame + 1,
             std::max(1, timesheetPanelData.totalFrames),
             countTimesheetEntries(workingTimesheet_));
+        ImGui::SeparatorText(u8c(u8"作画対象"));
+        ImGui::Checkbox(u8c(u8"T選択で編集対象も追従##TimesheetEditFollowsSelectedT"), &timesheetEditFollowsSelectedT_);
+        ImGui::SameLine();
+        if (ImGui::SmallButton(u8c(u8"今のTの作画Fを編集##SyncEditToSelectedT"))) {
+            if (!syncEditingTargetToSelectedTimesheetCell("manual timesheet edit sync", true)) {
+                lastMessage_ = "manual timesheet edit sync failed: no drawable F for selected T/cell";
+            }
+        }
+        ImGui::Checkbox(u8c(u8"ズレても編集中Fを上に表示して描く##TimesheetDrawActiveFrameOverPreview"), &timesheetDrawActiveFrameOverPreview_);
+        ImGui::TextDisabled(u8c(u8"タイムラインで作画Fを選んだ時は、その作画Fを優先して描けます。T選択時は必要なら編集対象を寄せます。"));
         if (ImGui::SmallButton("|<##TimesheetPlaybackFirst")) {
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
@@ -805,10 +871,21 @@ void App::drawDrawingMode()
             }
         }
 
-        if (timesheetPanelResult.timelineFrameChanged) {
+        if (timesheetPanelResult.timelineFrameChanged || timesheetPanelResult.cellSelectionChanged) {
             canvasRenderer_.markAllDirty();
-            lastMessage_ = "timesheet preview T" + std::to_string(timesheetPanelState_.selectedTimelineFrame + 1) +
-                " / edit F" + std::to_string(activeFrameIndex_ + 1);
+            if (timesheetEditFollowsSelectedT_ &&
+                !isPlayingFrames_ &&
+                !isPlayingTimesheet_ &&
+                !isPlayingTimesheetRange_) {
+                if (!syncEditingTargetToSelectedTimesheetCell("timesheet selection", true)) {
+                    lastMessage_ = "timesheet preview T" + std::to_string(timesheetPanelState_.selectedTimelineFrame + 1) +
+                        " / edit F" + std::to_string(activeFrameIndex_ + 1) +
+                        " / no drawable F to sync";
+                }
+            } else {
+                lastMessage_ = "timesheet preview T" + std::to_string(timesheetPanelState_.selectedTimelineFrame + 1) +
+                    " / edit F" + std::to_string(activeFrameIndex_ + 1);
+            }
         }
 
         // Timesheet Rebuild Step 5.5:
@@ -1592,6 +1669,9 @@ void App::drawCanvasArea(float rightWidth)
     };
 
     int timesheetResolvedSceneCellCount = 0;
+    bool timesheetPreviewEditMismatch = false;
+    bool timesheetPreviewActiveCellDrawable = false;
+    int timesheetPreviewActiveDrawingFrameNumber = 0;
     if (useTimesheetPreview) {
         const ResolvedTimesheetSceneFrame resolvedScene = resolveTimesheetSceneFrame(
             workingTimesheet_,
@@ -1604,6 +1684,28 @@ void App::drawCanvasArea(float rightWidth)
             }
             const Frame& drawFrame = resolvedCell.cell->frames[static_cast<std::size_t>(resolvedCell.drawingFrameIndex)];
             drawCellFrame(resolvedCell.cellIndex, *resolvedCell.cell, drawFrame, resolvedCell.drawingFrameIndex);
+        }
+
+        if (const Cell* editingCell = activeCell(); editingCell != nullptr && !editingCell->frames.empty()) {
+            const ResolvedTimesheetCell activeResolved =
+                resolveTimesheetCell(workingTimesheet_, editingCell->id, timesheetTimelineFrame);
+            timesheetPreviewActiveDrawingFrameNumber = activeResolved.drawingFrameNumber;
+            timesheetPreviewActiveCellDrawable = activeResolved.visible &&
+                activeResolved.drawingFrameNumber > 0 &&
+                activeResolved.drawingFrameNumber <= static_cast<int>(editingCell->frames.size());
+            timesheetPreviewEditMismatch = !timesheetPreviewActiveCellDrawable ||
+                activeResolved.drawingFrameNumber != activeFrameIndex_ + 1;
+
+            // Timesheet Rebuild Step 7.10:
+            // T表示と編集対象Fがズレても作画を止めない。
+            // タイムラインで選んだ作画Fを、選択Tの表示結果の上に重ねて描けるようにする。
+            if (timesheetPreviewEditMismatch &&
+                timesheetDrawActiveFrameOverPreview_ &&
+                activeFrameIndex_ >= 0 &&
+                activeFrameIndex_ < static_cast<int>(editingCell->frames.size())) {
+                const Frame& editingFrame = editingCell->frames[static_cast<std::size_t>(activeFrameIndex_)];
+                drawCellFrame(activeCellIndex_, *editingCell, editingFrame, activeFrameIndex_);
+            }
         }
     } else if (cellDisplayMode == ui::CellDisplayMode::ActiveOnly || project_.cells.empty()) {
         drawCellFrame(activeCellIndex_, *activeCell(), *frame, activeFrameIndex_);
@@ -1630,14 +1732,10 @@ void App::drawCanvasArea(float rightWidth)
         }
     }
 
-    bool allowCanvasInput = true;
-    if (useTimesheetPreview) {
-        if (const Cell* editingCell = activeCell(); editingCell != nullptr) {
-            const ResolvedTimesheetCell activeResolved =
-                resolveTimesheetCell(workingTimesheet_, editingCell->id, timesheetTimelineFrame);
-            allowCanvasInput = activeResolved.visible && activeResolved.drawingFrameNumber == activeFrameIndex_ + 1;
-        }
-    }
+    // Timesheet Rebuild Step 7.10:
+    // T表示と編集対象Fがズレても、キャンバス入力は止めない。
+    // ズレがある場合は編集中作画Fを上に重ねて、作画できる状態を優先する。
+    bool allowCanvasInput = activeFrame() != nullptr;
 
     if (hasTimesheetEntries) {
         // Timesheet Rebuild Step 7.2:
@@ -1653,12 +1751,14 @@ void App::drawCanvasArea(float rightWidth)
             std::to_string(timesheetResolvedSceneCellCount) +
             std::string(u8c(u8" entries=")) +
             std::to_string(timesheetEntryCount);
-        const char* warningText = u8c(u8"表示F≠編集F: 作画入力停止 / ズーム・移動可");
+        const char* warningText = timesheetPreviewEditMismatch
+            ? u8c(u8"TS表示と編集Fが違うため、編集中Fを上に表示して作画可")
+            : u8c(u8"");
         const ImVec2 textSize = ImGui::CalcTextSize(previewText.c_str());
-        const ImVec2 warningSize = !allowCanvasInput ? ImGui::CalcTextSize(warningText) : ImVec2(0.0f, 0.0f);
+        const ImVec2 warningSize = timesheetPreviewEditMismatch ? ImGui::CalcTextSize(warningText) : ImVec2(0.0f, 0.0f);
         const float overlayWidth = std::min(areaSize.x - 16.0f,
                                            std::max(textSize.x, warningSize.x) + 14.0f);
-        const float overlayHeight = !allowCanvasInput ? 42.0f : 24.0f;
+        const float overlayHeight = timesheetPreviewEditMismatch ? 42.0f : 24.0f;
         drawList->AddRectFilled(
             ImVec2(areaMin.x + 8.0f, areaMin.y + 8.0f),
             ImVec2(areaMin.x + 8.0f + overlayWidth, areaMin.y + 8.0f + overlayHeight),
@@ -1673,10 +1773,10 @@ void App::drawCanvasArea(float rightWidth)
             ImVec2(areaMin.x + 14.0f, areaMin.y + 13.0f),
             IM_COL32(25, 25, 25, 255),
             previewText.c_str());
-        if (!allowCanvasInput) {
+        if (timesheetPreviewEditMismatch) {
             drawList->AddText(
                 ImVec2(areaMin.x + 14.0f, areaMin.y + 31.0f),
-                IM_COL32(180, 40, 40, 255),
+                IM_COL32(80, 80, 80, 255),
                 warningText);
         }
     }
