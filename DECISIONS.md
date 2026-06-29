@@ -509,3 +509,11 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 - 下部タイムラインの作画F表示は、タイムシート入力がある場合は再生されるT順を優先する。
 - 作画F番号順は内部番号確認用であり、制作時の見え方はタイムシート順を優先する。
 - タイムシートに出てこない作画Fは、消さずに後ろへ追加表示する。
+
+## 2026-06-29 Timesheet T range playback and onion order
+
+- 原画間だけの専用再生ではなく、任意のT範囲再生を標準機能にする。
+- 原画間再生は、前原画T〜次原画TをT範囲へ入れるプリセットとして扱う。
+- タイムシートがある場合、オニオンフレームは作画F番号順ではなくT順の再生順を優先する。
+- 例: T1=F1, T3=F3, T5=F4, T7=F2 の場合、オニオン順は F1→F3→F4→F2 とする。
+- T範囲再生はactiveFrameIndex_を変更せず、タイムシートT選択だけを進める。

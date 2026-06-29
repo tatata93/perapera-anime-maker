@@ -114,6 +114,76 @@ int autoCreateMissingDrawingFramesForTimesheetEntries(
 
     return createdCount;
 }
+
+std::vector<int> buildTimesheetPlaybackOrderFrameIndicesForCell(const Timesheet& timesheet, const Cell& cell)
+{
+    std::vector<int> playbackOrderFrameIndices;
+    if (countTimesheetEntries(timesheet) <= 0) {
+        return playbackOrderFrameIndices;
+    }
+
+    const TimesheetCellTrack* track = findTimesheetTrack(timesheet, cell.id);
+    if (track == nullptr) {
+        return playbackOrderFrameIndices;
+    }
+
+    std::vector<TimesheetEntry> orderedEntries = track->entries;
+    std::sort(orderedEntries.begin(),
+              orderedEntries.end(),
+              [](const TimesheetEntry& a, const TimesheetEntry& b) {
+                  if (a.timelineFrame != b.timelineFrame) {
+                      return a.timelineFrame < b.timelineFrame;
+                  }
+                  return static_cast<int>(a.type) < static_cast<int>(b.type);
+              });
+
+    std::vector<bool> used(cell.frames.size(), false);
+    playbackOrderFrameIndices.reserve(orderedEntries.size());
+    for (const TimesheetEntry& entry : orderedEntries) {
+        if (!timesheetEntryTypeUsesDrawingNumber(entry.type)) {
+            continue;
+        }
+        const int frameIndex = entry.drawingFrameNumber - 1;
+        if (frameIndex < 0 || frameIndex >= static_cast<int>(cell.frames.size())) {
+            continue;
+        }
+        if (used[static_cast<std::size_t>(frameIndex)]) {
+            continue;
+        }
+        used[static_cast<std::size_t>(frameIndex)] = true;
+        playbackOrderFrameIndices.push_back(frameIndex);
+    }
+    return playbackOrderFrameIndices;
+}
+
+int adjacentPlaybackOrderFrameIndex(const std::vector<int>& playbackOrderFrameIndices,
+                                    int activeFrameIndex,
+                                    int direction)
+{
+    if (direction == 0 || playbackOrderFrameIndices.empty()) {
+        return -1;
+    }
+
+    const auto current = std::find(playbackOrderFrameIndices.begin(),
+                                   playbackOrderFrameIndices.end(),
+                                   activeFrameIndex);
+    if (current == playbackOrderFrameIndices.end()) {
+        return -1;
+    }
+
+    if (direction < 0) {
+        if (current == playbackOrderFrameIndices.begin()) {
+            return -1;
+        }
+        return *(current - 1);
+    }
+
+    const auto next = current + 1;
+    if (next == playbackOrderFrameIndices.end()) {
+        return -1;
+    }
+    return *next;
+}
 float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 {
     const float dx = a.x - b.x;
@@ -500,8 +570,55 @@ void App::drawDrawingMode()
             setTimesheetPreviewFrame(nextFrame, "timesheet playback");
         };
 
+        auto normalizeTimesheetPlaybackRange = [&]() {
+            const int lastFrame = std::max(0, timesheetPanelData.totalFrames - 1);
+            timesheetPlaybackRangeStartFrame_ = std::clamp(timesheetPlaybackRangeStartFrame_, 0, lastFrame);
+            timesheetPlaybackRangeEndFrame_ = std::clamp(timesheetPlaybackRangeEndFrame_, 0, lastFrame);
+            if (timesheetPlaybackRangeStartFrame_ > timesheetPlaybackRangeEndFrame_) {
+                std::swap(timesheetPlaybackRangeStartFrame_, timesheetPlaybackRangeEndFrame_);
+            }
+        };
+
+        auto setTimesheetPlaybackRangeFromOneBased = [&](int startT, int endT, const char* reason) {
+            const int lastT = std::max(1, timesheetPanelData.totalFrames);
+            startT = std::clamp(startT, 1, lastT);
+            endT = std::clamp(endT, 1, lastT);
+            if (startT > endT) {
+                std::swap(startT, endT);
+            }
+            timesheetPlaybackRangeStartFrame_ = startT - 1;
+            timesheetPlaybackRangeEndFrame_ = endT - 1;
+            normalizeTimesheetPlaybackRange();
+            setTimesheetPreviewFrame(timesheetPlaybackRangeStartFrame_, reason);
+            lastMessage_ = std::string(reason) + " T" + std::to_string(timesheetPlaybackRangeStartFrame_ + 1) +
+                "-T" + std::to_string(timesheetPlaybackRangeEndFrame_ + 1);
+        };
+
+        auto stepTimesheetRangePreviewFrame = [&](int delta) {
+            normalizeTimesheetPlaybackRange();
+            const int rangeStart = timesheetPlaybackRangeStartFrame_;
+            const int rangeEnd = timesheetPlaybackRangeEndFrame_;
+            if (rangeEnd <= rangeStart) {
+                setTimesheetPreviewFrame(rangeStart, "timesheet range playback");
+                return;
+            }
+
+            int nextFrame = timesheetPanelState_.selectedTimelineFrame + delta;
+            if (nextFrame < rangeStart || nextFrame > rangeEnd) {
+                if (timesheetPlaybackPingPong_) {
+                    timesheetPlaybackDirection_ = -timesheetPlaybackDirection_;
+                    nextFrame = timesheetPanelState_.selectedTimelineFrame + timesheetPlaybackDirection_;
+                    nextFrame = std::clamp(nextFrame, rangeStart, rangeEnd);
+                } else {
+                    nextFrame = delta >= 0 ? rangeStart : rangeEnd;
+                }
+            }
+            setTimesheetPreviewFrame(nextFrame, "timesheet range playback");
+        };
+
         if (isPlayingFrames_ && isPlayingTimesheet_) {
             isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
         }
 
@@ -509,7 +626,7 @@ void App::drawDrawingMode()
             u8c(u8"タイムシート再生##FormalTimesheetPlayback"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 6.5: タイムシートT再生の試作"));
+        ImGui::TextUnformatted(u8c(u8"Step 7.9: タイムシートT再生 / T範囲再生"));
         ImGui::Text(
             u8c(u8"T %d / %d   entries=%d"),
             timesheetPanelState_.selectedTimelineFrame + 1,
@@ -517,18 +634,25 @@ void App::drawDrawingMode()
             countTimesheetEntries(workingTimesheet_));
         if (ImGui::SmallButton("|<##TimesheetPlaybackFirst")) {
             isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
             setTimesheetPreviewFrame(0, "timesheet preview");
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("<##TimesheetPlaybackPrev")) {
             isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
             stepTimesheetPreviewFrame(-1);
         }
         ImGui::SameLine();
-        if (ImGui::SmallButton(isPlayingTimesheet_ ? u8c(u8"停止##TimesheetPlaybackStop") : u8c(u8"再生##TimesheetPlaybackPlay"))) {
-            isPlayingTimesheet_ = !isPlayingTimesheet_;
+        if (ImGui::SmallButton(isPlayingTimesheet_ && !isPlayingTimesheetRange_ ? u8c(u8"停止##TimesheetPlaybackStop") : u8c(u8"全T再生##TimesheetPlaybackPlay"))) {
+            if (isPlayingTimesheet_ && !isPlayingTimesheetRange_) {
+                isPlayingTimesheet_ = false;
+            } else {
+                isPlayingTimesheet_ = true;
+                isPlayingTimesheetRange_ = false;
+            }
             isPlayingFrames_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
             lastMessage_ = isPlayingTimesheet_ ? "timesheet playback started" : "timesheet playback stopped";
@@ -536,12 +660,14 @@ void App::drawDrawingMode()
         ImGui::SameLine();
         if (ImGui::SmallButton(">##TimesheetPlaybackNext")) {
             isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
             stepTimesheetPreviewFrame(1);
         }
         ImGui::SameLine();
         if (ImGui::SmallButton(">|##TimesheetPlaybackLast")) {
             isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
             setTimesheetPreviewFrame(timesheetPanelData.totalFrames - 1, "timesheet preview");
         }
@@ -564,13 +690,51 @@ void App::drawDrawingMode()
         }
         ImGui::SameLine();
         ImGui::Checkbox(u8c(u8"ピンポン##TimesheetPlaybackPingPong"), &timesheetPlaybackPingPong_);
+
+        normalizeTimesheetPlaybackRange();
+        ImGui::SeparatorText(u8c(u8"T範囲再生"));
+        int rangeStartT = timesheetPlaybackRangeStartFrame_ + 1;
+        int rangeEndT = timesheetPlaybackRangeEndFrame_ + 1;
+        ImGui::SetNextItemWidth(82.0f);
+        if (ImGui::InputInt(u8c(u8"開始T##TimesheetRangeStartT"), &rangeStartT)) {
+            setTimesheetPlaybackRangeFromOneBased(rangeStartT, rangeEndT, "timesheet range set");
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(82.0f);
+        if (ImGui::InputInt(u8c(u8"終了T##TimesheetRangeEndT"), &rangeEndT)) {
+            setTimesheetPlaybackRangeFromOneBased(rangeStartT, rangeEndT, "timesheet range set");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(isPlayingTimesheet_ && isPlayingTimesheetRange_ ? u8c(u8"範囲停止##TimesheetRangeStop") : u8c(u8"範囲再生##TimesheetRangePlay"))) {
+            normalizeTimesheetPlaybackRange();
+            if (isPlayingTimesheet_ && isPlayingTimesheetRange_) {
+                isPlayingTimesheet_ = false;
+                isPlayingTimesheetRange_ = false;
+            } else {
+                isPlayingTimesheet_ = true;
+                isPlayingTimesheetRange_ = true;
+                isPlayingFrames_ = false;
+                if (timesheetPanelState_.selectedTimelineFrame < timesheetPlaybackRangeStartFrame_ ||
+                    timesheetPanelState_.selectedTimelineFrame > timesheetPlaybackRangeEndFrame_) {
+                    setTimesheetPreviewFrame(timesheetPlaybackRangeStartFrame_, "timesheet range playback");
+                }
+            }
+            timesheetPlaybackAccumulator_ = 0.0f;
+            lastMessage_ = isPlayingTimesheet_ && isPlayingTimesheetRange_ ? "timesheet range playback started" : "timesheet range playback stopped";
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(u8c(u8"全Tを範囲##TimesheetRangeAll"))) {
+            setTimesheetPlaybackRangeFromOneBased(1, std::max(1, timesheetPanelData.totalFrames), "timesheet range all");
+        }
         ImGui::TextDisabled(u8c(u8"タイムシート再生はTだけを進めます。作画F編集対象は変更しません。"));
+        ImGui::TextDisabled(u8c(u8"原画間再生は、原画間検出ウィンドウからT範囲へ入れます。"));
         ImGui::TextDisabled(u8c(u8"指パラ/通常タイムライン再生中は、作画F再生表示を優先します。"));
         ImGui::End();
 
         if (isPlayingTimesheet_) {
             if (isDrawingStroke_ || timesheetPanelData.totalFrames <= 1) {
                 isPlayingTimesheet_ = false;
+                isPlayingTimesheetRange_ = false;
                 timesheetPlaybackAccumulator_ = 0.0f;
             } else {
                 const float playbackFps = static_cast<float>(std::max(1, timesheetPanelData.fps));
@@ -579,7 +743,11 @@ void App::drawDrawingMode()
                 while (timesheetPlaybackAccumulator_ >= secondsPerTimelineFrame) {
                     timesheetPlaybackAccumulator_ -= secondsPerTimelineFrame;
                     const int direction = timesheetPlaybackDirection_ == 0 ? 1 : timesheetPlaybackDirection_;
-                    stepTimesheetPreviewFrame(direction);
+                    if (isPlayingTimesheetRange_) {
+                        stepTimesheetRangePreviewFrame(direction);
+                    } else {
+                        stepTimesheetPreviewFrame(direction);
+                    }
                 }
             }
         } else {
@@ -916,8 +1084,32 @@ void App::drawDrawingMode()
                         }
                     }
 
-                    ImGui::SeparatorText(u8c(u8"中割ライトテーブル"));
+                    if (ImGui::SmallButton(u8c(u8"この原画間を再生T範囲へ##SetRangeFromKeyInterval"))) {
+                        setTimesheetPlaybackRangeFromOneBased(
+                            interval.previousKey.timelineFrame,
+                            interval.nextKey.timelineFrame,
+                            "timesheet range from key interval");
+                        isPlayingTimesheet_ = false;
+                        isPlayingTimesheetRange_ = false;
+                        timesheetPlaybackAccumulator_ = 0.0f;
+                    }
+
+                    ImGui::SeparatorText(u8c(u8"中割ライトテーブル / 再生順オニオン"));
                     ImGui::TextDisabled(u8c(u8"中割作画では、前原画と次原画を候補としてすぐライトテーブルに出せます。"));
+                    ImGui::TextDisabled(u8c(u8"オニオンは作画F番号順ではなく、タイムシートT順の再生順を優先します。"));
+
+                    std::string playbackOnionLabel = u8c(u8"再生順オニオン: 未確定");
+                    if (selectedCell != nullptr) {
+                        const std::vector<int> selectedPlaybackOrder =
+                            buildTimesheetPlaybackOrderFrameIndicesForCell(workingTimesheet_, *selectedCell);
+                        const int playbackPrevious = adjacentPlaybackOrderFrameIndex(selectedPlaybackOrder, activeFrameIndex_, -1);
+                        const int playbackNext = adjacentPlaybackOrderFrameIndex(selectedPlaybackOrder, activeFrameIndex_, 1);
+                        playbackOnionLabel = std::string(u8c(u8"再生順オニオン: 前 ")) +
+                            (playbackPrevious >= 0 ? (std::string(u8c(u8"作画F")) + std::to_string(playbackPrevious + 1)) : std::string(u8c(u8"なし"))) +
+                            std::string(u8c(u8" / 次 ")) +
+                            (playbackNext >= 0 ? (std::string(u8c(u8"作画F")) + std::to_string(playbackNext + 1)) : std::string(u8c(u8"なし")));
+                    }
+                    ImGui::TextUnformatted(playbackOnionLabel.c_str());
 
                     std::vector<int> keyLightTableFrameIndices;
                     if (interval.previousKey.found) {
@@ -1037,6 +1229,7 @@ void App::drawDrawingMode()
                         timesheetPanelState_.selectedCellColumn = safeSelectedCellColumn;
                         timesheetPanelState_.editDrawingFrameNumber = createdDrawingFrames.front();
                         isPlayingTimesheet_ = false;
+                        isPlayingTimesheetRange_ = false;
                         isPlayingFrames_ = false;
                         timesheetPlaybackAccumulator_ = 0.0f;
                         playbackAccumulator_ = 0.0f;
@@ -1239,37 +1432,8 @@ void App::drawTimelineArea()
     ImGui::BeginChild("DrawingTimelineFrameStripHost_v26", ImVec2(0.0f, 160.0f), true,
                       ImGuiWindowFlags_NoScrollWithMouse);
     const int prevFrameIndex = activeFrameIndex_;
-    std::vector<int> playbackOrderFrameIndices;
-    if (countTimesheetEntries(workingTimesheet_) > 0) {
-        if (const TimesheetCellTrack* track = findTimesheetTrack(workingTimesheet_, cell->id); track != nullptr) {
-            std::vector<TimesheetEntry> orderedEntries = track->entries;
-            std::sort(orderedEntries.begin(),
-                      orderedEntries.end(),
-                      [](const TimesheetEntry& a, const TimesheetEntry& b) {
-                          if (a.timelineFrame != b.timelineFrame) {
-                              return a.timelineFrame < b.timelineFrame;
-                          }
-                          return static_cast<int>(a.type) < static_cast<int>(b.type);
-                      });
-
-            playbackOrderFrameIndices.reserve(orderedEntries.size());
-            std::vector<bool> used(cell->frames.size(), false);
-            for (const TimesheetEntry& entry : orderedEntries) {
-                if (!timesheetEntryTypeUsesDrawingNumber(entry.type)) {
-                    continue;
-                }
-                const int frameIndex = entry.drawingFrameNumber - 1;
-                if (frameIndex < 0 || frameIndex >= static_cast<int>(cell->frames.size())) {
-                    continue;
-                }
-                if (used[static_cast<std::size_t>(frameIndex)]) {
-                    continue;
-                }
-                used[static_cast<std::size_t>(frameIndex)] = true;
-                playbackOrderFrameIndices.push_back(frameIndex);
-            }
-        }
-    }
+    const std::vector<int> playbackOrderFrameIndices =
+        buildTimesheetPlaybackOrderFrameIndicesForCell(workingTimesheet_, *cell);
 
     const ui::TimelinePanelAction timelineAction =
         ui::drawTimelinePanel(*cell, activeFrameIndex_, onionPrevious_, onionNext_, playbackOrderFrameIndices);
@@ -1313,10 +1477,31 @@ void App::drawCanvasArea(float rightWidth)
     const bool drawAssistOverlays = !isPlayingFrames_ || !playbackSkipAssistOverlays_;
     if (drawAssistOverlays) {
         const Cell* onionCell = activeCell();
-        const Frame* previous = (onionCell != nullptr && activeFrameIndex_ > 0)
-            ? onionCell->frameOrNull(activeFrameIndex_ - 1)
+        int previousOnionFrameIndex = activeFrameIndex_ - 1;
+        int nextOnionFrameIndex = activeFrameIndex_ + 1;
+
+        // Timesheet Rebuild Step 7.9:
+        // タイムシート入力がある場合、オニオンも作画F番号順ではなくT順の再生順を優先する。
+        // 例: T1=F1, T3=F3, T5=F4, T7=F2 なら F1→F3→F4→F2 の前後を出す。
+        if (onionCell != nullptr && countTimesheetEntries(workingTimesheet_) > 0) {
+            const std::vector<int> onionPlaybackOrder =
+                buildTimesheetPlaybackOrderFrameIndicesForCell(workingTimesheet_, *onionCell);
+            const int previousByPlaybackOrder = adjacentPlaybackOrderFrameIndex(onionPlaybackOrder, activeFrameIndex_, -1);
+            const int nextByPlaybackOrder = adjacentPlaybackOrderFrameIndex(onionPlaybackOrder, activeFrameIndex_, 1);
+            if (previousByPlaybackOrder >= 0) {
+                previousOnionFrameIndex = previousByPlaybackOrder;
+            }
+            if (nextByPlaybackOrder >= 0) {
+                nextOnionFrameIndex = nextByPlaybackOrder;
+            }
+        }
+
+        const Frame* previous = (onionCell != nullptr && previousOnionFrameIndex >= 0)
+            ? onionCell->frameOrNull(previousOnionFrameIndex)
             : nullptr;
-        const Frame* next = (onionCell != nullptr) ? onionCell->frameOrNull(activeFrameIndex_ + 1) : nullptr;
+        const Frame* next = (onionCell != nullptr && nextOnionFrameIndex >= 0)
+            ? onionCell->frameOrNull(nextOnionFrameIndex)
+            : nullptr;
         if (onionPrevious_ && previous != nullptr) {
             drawOnionFrameDirect(*previous, true, 0.72f, canvasView_, areaMin, areaSize, drawList);
         }

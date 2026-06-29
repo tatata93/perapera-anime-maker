@@ -231,6 +231,11 @@ void App::handleFrameShortcuts()
 
     if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
         isPlayingFrames_ = !isPlayingFrames_;
+        if (isPlayingFrames_) {
+            isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
         playbackAccumulator_ = 0.0f;
         lastMessage_ = isPlayingFrames_ ? "finger preview playing" : "finger preview stopped";
     }
@@ -292,6 +297,11 @@ void App::drawFingerPlaybackControls()
     ImGui::SameLine();
     if (ImGui::Button(isPlayingFrames_ ? u8c(u8"停止 Space") : u8c(u8"再生 Space"))) {
         isPlayingFrames_ = !isPlayingFrames_;
+        if (isPlayingFrames_) {
+            isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
         playbackAccumulator_ = 0.0f;
     }
     ImGui::SameLine();

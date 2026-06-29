@@ -101,6 +101,12 @@ private:
     int timesheetPlaybackDirection_ = 1;
     float timesheetPlaybackSpeed_ = 1.0f;
     float timesheetPlaybackAccumulator_ = 0.0f;
+
+    // Timesheet Rebuild Step 7.9:
+    // 任意T範囲だけを再生する。原画間再生は、この範囲指定のプリセットとして扱う。
+    bool isPlayingTimesheetRange_ = false;
+    int timesheetPlaybackRangeStartFrame_ = 0;
+    int timesheetPlaybackRangeEndFrame_ = 0;
     int previewWarmCursor_ = 0;
     CanvasDisplayMode previewReadyDisplayMode_ = CanvasDisplayMode::Drawing;
     std::vector<char> previewReadyFlags_;
