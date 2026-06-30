@@ -574,32 +574,22 @@ Scene Plate previews are drawn below animation cells so storyboard/layout/backgr
 - Selftests passing is not enough when the main application target fails.
 - Keep Step 7.14.1 limited to the `projectFolder` scope fix before continuing to Scene Plate real image display.
 
-## Timesheet Rebuild Step 7.15 Decision
-- Scene Plate の実画像表示は、セル/タイムシート/出力処理へ混ぜず、UI側の表示キャッシュとして実装する。
-- Windows では WIC を使って PNG/JPEG/BMP 等を読み込む。環境側のデコーダがない形式はダミー矩形へフォールバックする。
-- Scene Plate の画像読み込み失敗は作画を止める致命エラーにせず、キャンバス上のラベルとステータスで知らせる。
+## Decision: final_spec_v6 Phase 2-pre cleanup removes Scene Plate real-image display
+日付: 2026-07-01
+理由: `final_spec_v6.md` の現在工程では Scene Plate 実画像ロードは必須ではなく、実画像挿入は現段階では不要と判断したため。
+影響: `ScenePlateImageCache`、WIC、SDL_Texture を使う Scene Plate 実画像表示を削除し、Scene Plate は管理UI・画像パス入力・仮矩形プレビューまでの状態に戻す。再導入する場合は、必ず `final_spec_v6.md` 上の該当工程または派生工程として明記してから行う。
 
-## Timesheet Rebuild Step 7.15.1 decision
-- Scene Plate image paths pasted with surrounding quotes should be treated as valid paths.
-- The UI must show actual image loading status, because `画像パスOK` only proves path existence and does not prove that the texture was loaded.
-- If image display is unclear, first expose the cache/decode status before adding more image features.
+## Decision: keep timesheet storage separated for future standalone use
+日付: 2026-07-01
+理由: タイムシートは重要機能であり、将来的に単体表示・単体印刷・別管理を行う可能性が高いため。
+影響: `final_spec_v6.md` の概念モデル上では Timesheet は Cut に属するが、保存実装では `timesheet.json` のような分離ファイルを許容する。Cut との所有関係は維持しつつ、物理保存は分離してよい。今後の Phase 2 移行では、CutIO / ProjectIO / TimesheetIO の役割分担をこの判断に合わせて整理する。
 
-## Timesheet Rebuild Step 7.15.2 Decision
-- Scene Plate image path input must accept common Windows Explorer paste formats, including quoted paths and pasted text with trailing newlines.
-- If the image still does not display after path normalization, the next diagnostic target is texture decoding status, not filesystem existence.
+## Decision: final_spec_v6 Phase 2-pre cleanup removes Scene Plate real-image display
+日付: 2026-07-01
+理由: `final_spec_v6.md` の現在工程では Scene Plate 実画像ロードは必須ではなく、実画像挿入は現段階では不要と判断したため。
+影響: `ScenePlateImageCache`、WIC、SDL_Texture を使う Scene Plate 実画像表示を削除し、Scene Plate は管理UI・画像パス入力・仮矩形プレビューまでの状態に戻す。再導入する場合は、必ず `final_spec_v6.md` 上の該当工程または派生工程として明記してから行う。
 
-## Timesheet Rebuild Step 7.15.3 decision
-
-Scene Plate image path diagnostics must show the cleaned path and resolved path before moving on to new Scene Plate features. Windows file existence checks should use wide-character Windows APIs where possible so absolute paths pasted from Explorer are handled reliably.
-
-## Timesheet Rebuild Step 7.15.4 Decision
-
-- Treat PowerShell `Test-Path -LiteralPath` success as evidence that app-side Scene Plate path lookup must be fixed before adding new Scene Plate features.
-- Keep manual path input for now, but add Win32-native diagnostics so file dialog work can be separated into a later step.
-
-## Timesheet Rebuild Step 7.14.1 derived rollback decision
-
-- Every future task must state which specification phase or step it belongs to before implementation begins.
-- This rollback belongs to `Timesheet Rebuild Step 7.14.1` as a derived task and cancels the later `Step 7.15` real Scene Plate image display work.
-- Real image insertion/display is not part of the current work boundary. Do not re-add WIC/SDL_Texture Scene Plate image loading until the project explicitly returns to that phase.
-- After this rollback, the next recommended work should return to the timesheet specification flow, especially output/playback integration work that maps to the formal Step 6 responsibilities.
+## Decision: keep timesheet storage separated for future standalone use
+日付: 2026-07-01
+理由: タイムシートは重要機能であり、将来的に単体表示・単体印刷・別管理を行う可能性が高いため。
+影響: `final_spec_v6.md` の概念モデル上では Timesheet は Cut に属するが、保存実装では `timesheet.json` のような分離ファイルを許容する。Cut との所有関係は維持しつつ、物理保存は分離してよい。今後の Phase 2 移行では、CutIO / ProjectIO / TimesheetIO の役割分担をこの判断に合わせて整理する。
