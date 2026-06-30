@@ -547,3 +547,19 @@ When the active drawing frame selected from the timeline differs from the drawin
 - The drawing workflow should not show a separate Scene Plate management panel, because it competes with CellPanel + TimesheetPanel and confuses where timing should be edited.
 - Cell movement, scale, rotation, opacity, and Z order apply to any cell type. These belong to a simple shooting/camera workflow in Shooting mode rather than to a Scene Plate-specific panel.
 - Timesheet may remain physically separated from `cut.json` because it is an important asset that should later support standalone display and printing. It still belongs conceptually to the Cut.
+
+## Decision: CutIO selftest must not reference Scene Plate after Phase 2-pre Step T1
+
+- 作業位置: `final_spec_v6.md Phase 2 前整理 Step T1 派生作業`。
+- 背景・レイアウト・BOOK は Scene Plate / シーン管理パネルではなく、通常セル + Timesheet 管理へ寄せる。
+- したがって、`Cut`、`CutIO`、`cut_io_selftest` は Scene Plate 系の型やメンバに依存しない。
+- `tools/cut_io_selftest.cpp` は、Cut の基本メタ情報、`cellZOrderKeys`、分離保存する `timesheet.json`、TimesheetResolver の往復確認だけを検証する。
+- Timesheet は概念上 Cut に属するが、将来の単体表示・単体印刷を見据え、物理ファイルとしては分離保存を許容する。
+
+## Decision: CutIO selftest must not reference Scene Plate after Phase 2-pre Step T1
+
+- 作業位置: `final_spec_v6.md Phase 2 前整理 Step T1 派生作業`。
+- 背景・レイアウト・BOOK は Scene Plate / シーン管理パネルではなく、通常セル + Timesheet 管理へ寄せる。
+- したがって、`Cut`、`CutIO`、`cut_io_selftest` は Scene Plate 系の型やメンバに依存しない。
+- `tools/cut_io_selftest.cpp` は、Cut の基本メタ情報、`cellZOrderKeys`、分離保存する `timesheet.json`、TimesheetResolver の往復確認だけを検証する。
+- Timesheet は概念上 Cut に属するが、将来の単体表示・単体印刷を見据え、物理ファイルとしては分離保存を許容する。
