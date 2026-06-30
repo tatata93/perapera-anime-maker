@@ -21,10 +21,10 @@ struct CategoryOption {
 constexpr std::array<CategoryOption, 6> kCategoryOptions{{
     {"Character", "character"},
     {"Background", "background"},
+    {"Layout", "layout"},
     {"Book", "book"},
     {"Effect", "effect"},
-    {"CameraGuide", "camera_guide"},
-    {"Other", "other"},
+    {"Reference", "reference"},
 }};
 
 CellDisplayMode gDisplayMode = CellDisplayMode::VisibleCells;
@@ -793,7 +793,7 @@ void drawSelectedCellControls(Project& project,
         ImGui::OpenPopup("Edit Cell");
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Edit name and category");
+        ImGui::SetTooltip("Edit cell name and final_spec_v6 category");
     }
 
     const bool canDelete = cellCount > 1;
@@ -848,7 +848,7 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
         result.projectStructureChanged = true;
     }
 
-    ImGui::TextUnformatted("CellPanel v1.8d");
+    ImGui::TextUnformatted("CellPanel Phase2-pre T2");
     drawAddCellPopup(project, result);
     ImGui::Separator();
 

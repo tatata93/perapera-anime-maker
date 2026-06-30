@@ -570,3 +570,24 @@ When the active drawing frame selected from the timeline differs from the drawin
 - Scene Plate / scene panel code remains removed to avoid confusing background/layout/BOOK management with a separate Scene Plate path.
 - Timesheet inbetween planner remains part of the app because it supports the existing timesheet assistant UI and is unrelated to Scene Plate.
 - Future rollback/removal work must search for both removed symbols and accidentally dropped kept symbols before packaging. In particular, CMake target membership must be checked against the current UI call sites and selftests.
+
+## Phase 2-pre Step T2: Cell category values
+
+`final_spec_v6.md` Phase 2 前整理として、作画モードで背景・レイアウト・BOOK・エフェクト・参考素材を Scene Plate / シーンパネルではなく通常 Cell として扱う。
+
+正式な初期 category 候補は以下とする。
+
+```text
+character
+background
+layout
+book
+effect
+reference
+```
+
+- `background`、`layout`、`book` も通常 Cell として作成・表示・選択され、タイミングは Timesheet のセル列で管理する。
+- `reference` は作画参照用途のセル種別として扱うが、正式出力対象にするかどうかは後続の出力設計で決める。
+- `camera_guide` と `other` は今回の正式候補から外す。カメラや配置は、後続の撮影モード / 簡易撮影パネルで扱う。
+- Timesheet は将来の単体表示・単体印刷を見据え、概念上は Cut に属しつつ、物理保存は分離ファイルを許容する。
+```
