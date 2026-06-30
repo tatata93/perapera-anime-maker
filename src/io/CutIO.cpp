@@ -95,30 +95,6 @@ json cutMetadataToJson(const Cut& cut)
         cellZOrderKeys.push_back(key);
     }
 
-    json scenePlates = json::array();
-    for (const ScenePlate& plate : cut.scenePlates.plates) {
-        scenePlates.push_back(json{
-            {"id", plate.id},
-            {"displayName", plate.displayName},
-            {"kind", scenePlateKindToString(plate.kind)},
-            {"outputMode", scenePlateOutputModeToString(plate.outputMode)},
-            {"imagePath", plate.imagePath},
-            {"visible", plate.visible},
-            {"locked", plate.locked},
-            {"opacity", plate.opacity},
-            {"zOrder", plate.zOrder},
-            {"startTimelineFrame", plate.startTimelineFrame},
-            {"endTimelineFrame", plate.endTimelineFrame},
-            {"transform", {
-                {"x", plate.transform.x},
-                {"y", plate.transform.y},
-                {"scaleX", plate.transform.scaleX},
-                {"scaleY", plate.transform.scaleY},
-                {"rotationDegrees", plate.transform.rotationDegrees},
-            }},
-        });
-    }
-
     return json{
         {"kind", kCutKind},
         {"formatVersion", kCutFormatVersion},
@@ -128,37 +104,7 @@ json cutMetadataToJson(const Cut& cut)
         {"totalFrames", cut.totalFrames},
         {"timesheetFile", "timesheet.json"},
         {"cellZOrderKeys", std::move(cellZOrderKeys)},
-        {"scenePlates", std::move(scenePlates)},
     };
-}
-
-ScenePlate scenePlateFromJson(const json& value)
-{
-    ScenePlate plate;
-    plate.id = value.value("id", std::string{});
-    plate.displayName = value.value("displayName", std::string{});
-    plate.kind = scenePlateKindFromString(value.value("kind", std::string{"storyboard"}));
-    plate.outputMode = scenePlateOutputModeFromString(value.value("outputMode", std::string{"referenceOnly"}));
-    plate.imagePath = value.value("imagePath", std::string{});
-    plate.visible = value.value("visible", plate.visible);
-    plate.locked = value.value("locked", plate.locked);
-    plate.opacity = value.value("opacity", plate.opacity);
-    plate.zOrder = value.value("zOrder", plate.zOrder);
-    plate.startTimelineFrame = value.value("startTimelineFrame", plate.startTimelineFrame);
-    plate.endTimelineFrame = value.value("endTimelineFrame", plate.endTimelineFrame);
-
-    if (const json* transform = value.find("transform") == value.end() ? nullptr : &value.at("transform")) {
-        if (transform->is_object()) {
-            plate.transform.x = transform->value("x", plate.transform.x);
-            plate.transform.y = transform->value("y", plate.transform.y);
-            plate.transform.scaleX = transform->value("scaleX", plate.transform.scaleX);
-            plate.transform.scaleY = transform->value("scaleY", plate.transform.scaleY);
-            plate.transform.rotationDegrees = transform->value("rotationDegrees", plate.transform.rotationDegrees);
-        }
-    }
-
-    normalizeScenePlate(plate);
-    return plate;
 }
 
 Cut cutMetadataFromJson(const json& value)
@@ -185,17 +131,6 @@ Cut cutMetadataFromJson(const json& value)
         }
     }
 
-    if (const json* scenePlates = value.find("scenePlates") == value.end() ? nullptr : &value.at("scenePlates")) {
-        if (scenePlates->is_array()) {
-            for (const json& plateJson : *scenePlates) {
-                if (plateJson.is_object()) {
-                    cut.scenePlates.plates.push_back(scenePlateFromJson(plateJson));
-                }
-            }
-        }
-    }
-    normalizeScenePlateStack(cut.scenePlates);
-
     return cut;
 }
 
@@ -221,7 +156,6 @@ bool saveCut(
     normalizedCut.frameRate = normalizedCut.frameRate <= 0 ? 24 : normalizedCut.frameRate;
     normalizedCut.timesheet.totalFrames = normalizedCut.totalFrames;
     normalizeTimesheet(normalizedCut.timesheet);
-    normalizeScenePlateStack(normalizedCut.scenePlates);
 
     if (!writeJsonFileIfChanged(cutJsonPathForCutFolder(cutFolder), cutMetadataToJson(normalizedCut), errorMessage)) {
         return false;

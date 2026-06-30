@@ -530,66 +530,20 @@ Impact: PNG sequence export now keeps a bounded queue of async PNG write tasks. 
 When the active drawing frame selected from the timeline differs from the drawing frame resolved by the selected timesheet T, the canvas should prioritize the active editing frame by default. Showing both frames at once is confusing during manual drawing. The old overlay behavior remains optional, but the standard workflow is `timeline F selection -> show/edit that F only` until the user explicitly syncs back to the selected T.
 
 
-## 2026-06-29 Scene Plate model policy
+## 2026-07-01 final_spec_v6 Phase 2-pre Step T1 decision: cells + timesheet replace Scene Plate panel
 
-- Scene Plate is a separate cut-level model for storyboard, layout, reference image, temporary background, and final background data.
-- Scene Plate must not be stored as a normal animation cell track, and adding a plate must not create drawing frames or timesheet entries.
-- Plate kind and output behavior are separate. Output participation is controlled by `ScenePlateOutputMode`: `ReferenceOnly`, `PreviewOnly`, or `RenderOutput`.
-- Step 7.11 only adds the core model and self-test. Canvas display, UI, persistence, and PNG/MP4 output wiring are intentionally deferred.
+- `final_spec_v6.md` is the top-level specification. This work is a Phase 2-pre derived cleanup before Project/Scene/Cut/Cell structure work.
+- Scene Plate / scene panel is not the main path for backgrounds, layouts, BOOK, reference images, or temporary/final backgrounds.
+- Backgrounds, layouts, BOOK, effects, and references should be represented as normal Cell records or Cell categories where possible, so their timing can be managed by the Timesheet like other animation cells.
+- The drawing workflow should not show a separate Scene Plate management panel, because it competes with CellPanel + TimesheetPanel and confuses where timing should be edited.
+- Cell movement, scale, rotation, opacity, and Z order apply to any cell type. These belong to a simple shooting/camera workflow in Shooting mode rather than to a Scene Plate-specific panel.
+- Timesheet may remain physically separated from `cut.json` because it is an important asset that should later support standalone display and printing. It still belongs conceptually to the Cut.
 
-## Timesheet Rebuild Step 7.11.5 Decision
+## 2026-07-01 final_spec_v6 Phase 2-pre Step T1 decision: cells + timesheet replace Scene Plate panel
 
-- タイムシート関連の補助UIは、作画画面を散らかさないよう `タイムシート補助` ウィンドウへ集約する。
-- タイムシート再生、保存/読み込み、解決結果、原画間検出、中割作成、ライトテーブル補助は同じ補助ウィンドウ内のセクションとして扱う。
-- Scene Plate UIを追加する前に、既存のタイムシート補助UIを整理しておく。
-
-## 2026-06-30 Timesheet Rebuild Step 7.12 decisions
-
-- Scene Plate UIは、作画セル列・タイムシート列へ混ぜず、独立した `Scene Plate管理` ウィンドウとして先に追加する。
-- `visible` と `outputMode` は別の概念として扱う。`ReferenceOnly` はキャンバス上の作画参照用であり、正式PNG/MP4出力には含めない。
-- Step 7.12では画像読み込み・キャンバス背景描画・出力反映は実装しない。
-- 通常Project保存との正式統合前なので、Scene Plateを残すための暫定操作として `CutIO` の試験保存/読み込みをUIに置く。
-
-## Decision: avoid mixed-type ImGui ID ternaries
-
-For ImGui IDs, do not pass a ternary expression that mixes `int` and `const char*`.
-Use explicit branches or a single stable string instead. This avoids MSVC type-resolution errors and keeps UI IDs stable.
-
-## Decision: Scene Plate canvas preview before image loading
-
-Before adding file picking and texture loading, Scene Plate entries should first appear on the canvas as dummy rectangles. This confirms the display contract for `visible`, `opacity`, `zOrder`, T range, and transform without mixing file I/O, texture cache, and render behavior into the same step.
-
-Scene Plate previews are drawn below animation cells so storyboard/layout/background references behave as a drawing underlay. Formal PNG/MP4 output remains controlled by `outputMode` in a later export step.
-
-## Timesheet Rebuild Step 7.14 decisions
-
-- Scene Plate image path input comes before real image drawing.
-- Relative Scene Plate image paths are resolved against the current project/export folder.
-- The UI may show path status on the canvas dummy preview, but must not pretend that the real image is already rendered.
-- Real texture loading and compositing remain a separate follow-up step.
-
-## Timesheet Rebuild Step 7.14.1 decision
-
-- Treat `build/bin/perapera_anime_maker.exe` generation as the primary success condition for UI changes.
-- Selftests passing is not enough when the main application target fails.
-- Keep Step 7.14.1 limited to the `projectFolder` scope fix before continuing to Scene Plate real image display.
-
-## Decision: final_spec_v6 Phase 2-pre cleanup removes Scene Plate real-image display
-日付: 2026-07-01
-理由: `final_spec_v6.md` の現在工程では Scene Plate 実画像ロードは必須ではなく、実画像挿入は現段階では不要と判断したため。
-影響: `ScenePlateImageCache`、WIC、SDL_Texture を使う Scene Plate 実画像表示を削除し、Scene Plate は管理UI・画像パス入力・仮矩形プレビューまでの状態に戻す。再導入する場合は、必ず `final_spec_v6.md` 上の該当工程または派生工程として明記してから行う。
-
-## Decision: keep timesheet storage separated for future standalone use
-日付: 2026-07-01
-理由: タイムシートは重要機能であり、将来的に単体表示・単体印刷・別管理を行う可能性が高いため。
-影響: `final_spec_v6.md` の概念モデル上では Timesheet は Cut に属するが、保存実装では `timesheet.json` のような分離ファイルを許容する。Cut との所有関係は維持しつつ、物理保存は分離してよい。今後の Phase 2 移行では、CutIO / ProjectIO / TimesheetIO の役割分担をこの判断に合わせて整理する。
-
-## Decision: final_spec_v6 Phase 2-pre cleanup removes Scene Plate real-image display
-日付: 2026-07-01
-理由: `final_spec_v6.md` の現在工程では Scene Plate 実画像ロードは必須ではなく、実画像挿入は現段階では不要と判断したため。
-影響: `ScenePlateImageCache`、WIC、SDL_Texture を使う Scene Plate 実画像表示を削除し、Scene Plate は管理UI・画像パス入力・仮矩形プレビューまでの状態に戻す。再導入する場合は、必ず `final_spec_v6.md` 上の該当工程または派生工程として明記してから行う。
-
-## Decision: keep timesheet storage separated for future standalone use
-日付: 2026-07-01
-理由: タイムシートは重要機能であり、将来的に単体表示・単体印刷・別管理を行う可能性が高いため。
-影響: `final_spec_v6.md` の概念モデル上では Timesheet は Cut に属するが、保存実装では `timesheet.json` のような分離ファイルを許容する。Cut との所有関係は維持しつつ、物理保存は分離してよい。今後の Phase 2 移行では、CutIO / ProjectIO / TimesheetIO の役割分担をこの判断に合わせて整理する。
+- `final_spec_v6.md` is the top-level specification. This work is a Phase 2-pre derived cleanup before Project/Scene/Cut/Cell structure work.
+- Scene Plate / scene panel is not the main path for backgrounds, layouts, BOOK, reference images, or temporary/final backgrounds.
+- Backgrounds, layouts, BOOK, effects, and references should be represented as normal Cell records or Cell categories where possible, so their timing can be managed by the Timesheet like other animation cells.
+- The drawing workflow should not show a separate Scene Plate management panel, because it competes with CellPanel + TimesheetPanel and confuses where timing should be edited.
+- Cell movement, scale, rotation, opacity, and Z order apply to any cell type. These belong to a simple shooting/camera workflow in Shooting mode rather than to a Scene Plate-specific panel.
+- Timesheet may remain physically separated from `cut.json` because it is an important asset that should later support standalone display and printing. It still belongs conceptually to the Cut.
