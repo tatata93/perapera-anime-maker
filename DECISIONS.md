@@ -573,3 +573,8 @@ Scene Plate previews are drawn below animation cells so storyboard/layout/backgr
 - Treat `build/bin/perapera_anime_maker.exe` generation as the primary success condition for UI changes.
 - Selftests passing is not enough when the main application target fails.
 - Keep Step 7.14.1 limited to the `projectFolder` scope fix before continuing to Scene Plate real image display.
+
+## Timesheet Rebuild Step 7.15 Decision
+- Scene Plate の実画像表示は、セル/タイムシート/出力処理へ混ぜず、UI側の表示キャッシュとして実装する。
+- Windows では WIC を使って PNG/JPEG/BMP 等を読み込む。環境側のデコーダがない形式はダミー矩形へフォールバックする。
+- Scene Plate の画像読み込み失敗は作画を止める致命エラーにせず、キャンバス上のラベルとステータスで知らせる。

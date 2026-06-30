@@ -399,7 +399,7 @@ std::string scenePlateImageStatusLabel(const ScenePlate& plate, const std::files
 std::string scenePlateImageDetailLabel(const ScenePlate& plate, const std::filesystem::path& projectFolder)
 {
     if (plate.imagePath.empty()) {
-        return u8c(u8"画像パスを指定すると、次Stepの実画像表示へそのまま渡せます。");
+        return u8c(u8"画像パスを指定すると、キャンバス仮表示で実画像表示を試します。");
     }
 
     const std::filesystem::path resolvedPath = scenePlateResolvedImagePath(plate, projectFolder);
@@ -484,15 +484,17 @@ ImVec2 scenePlateRotatedPoint(float x, float y, float centerX, float centerY, fl
         centerY + dx * sinTheta + dy * cosTheta);
 }
 
-void drawScenePlateDummyOnCanvas(const ScenePlate& plate,
-                                 int timelineFrame,
-                                 int canvasWidth,
-                                 int canvasHeight,
-                                 const std::filesystem::path& projectFolder,
-                                 const CanvasView& view,
-                                 ImVec2 areaMin,
-                                 ImVec2 areaSize,
-                                 ImDrawList* drawList)
+void drawScenePlatePreviewOnCanvas(const ScenePlate& plate,
+                                   int timelineFrame,
+                                   int canvasWidth,
+                                   int canvasHeight,
+                                   const std::filesystem::path& projectFolder,
+                                   SDL_Renderer* renderer,
+                                   ScenePlateImageCache& imageCache,
+                                   const CanvasView& view,
+                                   ImVec2 areaMin,
+                                   ImVec2 areaSize,
+                                   ImDrawList* drawList)
 {
     if (drawList == nullptr || canvasWidth <= 0 || canvasHeight <= 0) {
         return;
@@ -532,38 +534,73 @@ void drawScenePlateDummyOnCanvas(const ScenePlate& plate,
     }
 
     const ImVec2 screenCenter = view.canvasToScreen(centerX, centerY, areaMin, areaSize);
-    const ImU32 fillColor = scenePlateKindColor(plate.kind, scenePlateAlphaByte(opacity, 0.05f, 0.24f));
     const ImU32 borderColor = scenePlateOutputBorderColor(plate.outputMode, scenePlateAlphaByte(opacity, 0.42f, 0.95f));
     const float borderThickness = plate.outputMode == ScenePlateOutputMode::RenderOutput ? 3.0f : 2.0f;
 
-    drawList->AddQuadFilled(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], fillColor);
+    std::string imageState = scenePlateImageStatusLabel(plate, projectFolder);
+    bool drewActualImage = false;
+    const std::filesystem::path resolvedImagePath = scenePlateResolvedImagePath(plate, projectFolder);
+    if (!plate.imagePath.empty() && scenePlateImageExtensionSupported(resolvedImagePath)) {
+        const ScenePlateImageCache::TextureResult& textureResult = imageCache.textureFor(renderer, resolvedImagePath);
+        imageState = textureResult.status.empty() ? imageState : textureResult.status;
+        if (textureResult.ok && textureResult.texture != nullptr) {
+            const int alpha = scenePlateAlphaByte(opacity, 0.0f, 1.0f);
+            const ImU32 tintColor = IM_COL32(255, 255, 255, alpha);
+            drawList->AddImageQuad(
+                reinterpret_cast<ImTextureID>(textureResult.texture),
+                screenCorners[0],
+                screenCorners[1],
+                screenCorners[2],
+                screenCorners[3],
+                ImVec2(0.0f, 0.0f),
+                ImVec2(1.0f, 0.0f),
+                ImVec2(1.0f, 1.0f),
+                ImVec2(0.0f, 1.0f),
+                tintColor);
+            drewActualImage = true;
+        }
+    }
+
+    if (!drewActualImage) {
+        const ImU32 fillColor = scenePlateKindColor(plate.kind, scenePlateAlphaByte(opacity, 0.05f, 0.24f));
+        drawList->AddQuadFilled(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], fillColor);
+    }
+
     drawList->AddQuad(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], borderColor, borderThickness);
 
     const std::string title = plate.displayName.empty() ? plate.id : plate.displayName;
     const std::string label = title + "\n" +
         scenePlateKindJapaneseLabel(plate.kind) + std::string(" / ") +
         scenePlateOutputModeJapaneseLabel(plate.outputMode) + "\n" +
-        scenePlateImageStatusLabel(plate, projectFolder);
+        imageState;
     const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
     const ImVec2 textMin(screenCenter.x - textSize.x * 0.5f - 6.0f,
                          screenCenter.y - textSize.y * 0.5f - 4.0f);
     const ImVec2 textMax(textMin.x + textSize.x + 12.0f,
                          textMin.y + textSize.y + 8.0f);
 
-    drawList->AddRectFilled(textMin, textMax, IM_COL32(255, 255, 255, scenePlateAlphaByte(opacity, 0.58f, 0.86f)), 4.0f);
+    const int labelBackgroundAlpha = drewActualImage
+        ? scenePlateAlphaByte(opacity, 0.36f, 0.72f)
+        : scenePlateAlphaByte(opacity, 0.58f, 0.86f);
+    drawList->AddRectFilled(textMin, textMax, IM_COL32(255, 255, 255, labelBackgroundAlpha), 4.0f);
     drawList->AddRect(textMin, textMax, borderColor, 4.0f);
-    drawList->AddText(ImVec2(textMin.x + 6.0f, textMin.y + 4.0f), IM_COL32(25, 25, 25, scenePlateAlphaByte(opacity, 0.72f, 1.0f)), label.c_str());
+    drawList->AddText(
+        ImVec2(textMin.x + 6.0f, textMin.y + 4.0f),
+        IM_COL32(25, 25, 25, scenePlateAlphaByte(opacity, 0.72f, 1.0f)),
+        label.c_str());
 }
 
-void drawScenePlateDummyStackOnCanvas(const ScenePlateStack& stack,
-                                      int timelineFrame,
-                                      int canvasWidth,
-                                      int canvasHeight,
-                                      const std::filesystem::path& projectFolder,
-                                      const CanvasView& view,
-                                      ImVec2 areaMin,
-                                      ImVec2 areaSize,
-                                      ImDrawList* drawList)
+void drawScenePlatePreviewStackOnCanvas(const ScenePlateStack& stack,
+                                        int timelineFrame,
+                                        int canvasWidth,
+                                        int canvasHeight,
+                                        const std::filesystem::path& projectFolder,
+                                        SDL_Renderer* renderer,
+                                        ScenePlateImageCache& imageCache,
+                                        const CanvasView& view,
+                                        ImVec2 areaMin,
+                                        ImVec2 areaSize,
+                                        ImDrawList* drawList)
 {
     if (drawList == nullptr || stack.plates.empty()) {
         return;
@@ -575,7 +612,18 @@ void drawScenePlateDummyStackOnCanvas(const ScenePlateStack& stack,
     const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
     drawList->PushClipRect(areaMin, areaMax, true);
     for (const ScenePlate& plate : sortedStack.plates) {
-        drawScenePlateDummyOnCanvas(plate, timelineFrame, canvasWidth, canvasHeight, projectFolder, view, areaMin, areaSize, drawList);
+        drawScenePlatePreviewOnCanvas(
+            plate,
+            timelineFrame,
+            canvasWidth,
+            canvasHeight,
+            projectFolder,
+            renderer,
+            imageCache,
+            view,
+            areaMin,
+            areaSize,
+            drawList);
     }
     drawList->PopClipRect();
 }
@@ -1747,10 +1795,10 @@ void App::drawDrawingMode()
         ImGui::End();
     }
 
-    // Timesheet Rebuild Step 7.13:
+    // Timesheet Rebuild Step 7.15:
     // Scene Plate をセル列やタイムシート列へ混ぜず、一覧UIで操作し、
-    // 画像読み込み前のキャンバス仮表示まで接続する。
-    // 実画像読み込みとPNG/MP4出力反映は後続Stepへ分ける。
+    // 画像パスが有効な場合は実画像をキャンバス背景として表示する。
+    // PNG/MP4出力反映は後続Stepへ分ける。
     {
         const int currentT = std::max(1, timesheetPanelState_.selectedTimelineFrame + 1);
         const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
@@ -1761,9 +1809,9 @@ void App::drawDrawingMode()
             u8c(u8"Scene Plate管理##ScenePlateManager"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 7.14: Scene Plate 画像パス指定"));
+        ImGui::TextUnformatted(u8c(u8"Step 7.15: Scene Plate 実画像キャンバス表示"));
         ImGui::TextDisabled(u8c(u8"絵コンテ/レイアウト/仮背景/完成背景をセル列とは別に管理します。"));
-        ImGui::TextDisabled(u8c(u8"画像パス、存在確認、対応拡張子を管理します。実画像描画は次Stepへ分けます。"));
+        ImGui::TextDisabled(u8c(u8"画像パスが有効なら実画像をキャンバスに表示します。失敗時はダミー矩形に戻します。"));
         if (ImGui::Checkbox(u8c(u8"キャンバス仮表示##ScenePlateCanvasPreviewEnabled"), &scenePlateCanvasPreviewEnabled_)) {
             lastMessage_ = scenePlateCanvasPreviewEnabled_
                 ? "scene plate canvas preview enabled"
@@ -1985,7 +2033,7 @@ void App::drawDrawingMode()
             const std::string imageDetail = scenePlateImageDetailLabel(selectedPlate, projectFolder);
             ImGui::TextWrapped(u8c(u8"状態: %s"), imageStatus.c_str());
             ImGui::TextWrapped(u8c(u8"%s"), imageDetail.c_str());
-            ImGui::TextDisabled(u8c(u8"対応候補: .png / .jpg / .jpeg / .bmp / .webp。まだ実画像は描画せず、次Stepでこのパスを使います。"));
+            ImGui::TextDisabled(u8c(u8"対応候補: .png / .jpg / .jpeg / .bmp / .webp。Windows/WICで読めない場合はダミー表示へ戻します。"));
             if (ImGui::SmallButton(u8c(u8"画像パス確認##ScenePlateCheckImagePath"))) {
                 lastMessage_ = imageStatus;
             }
@@ -2302,20 +2350,22 @@ void App::drawCanvasArea(float rightWidth)
     const ImU32 background = IM_COL32(255, 255, 255, 255);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
 
-    // Timesheet Rebuild Step 7.14:
-    // Scene Plateの画像パス状態もダミー矩形ラベルへ表示する。
-    // 実画像描画は次Stepへ分け、ここではパス指定と存在確認までに留める。
+    // Timesheet Rebuild Step 7.15:
+    // Scene Plateの画像パスから実画像を読み込み、キャンバス背景として表示する。
+    // 読み込み失敗時は従来どおりダミー矩形へフォールバックする。
     const int scenePlateTimelineFrame = (countTimesheetEntries(workingTimesheet_) > 0 && !isPlayingFrames_)
         ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
         : activeFrameIndex_ + 1;
     if (scenePlateCanvasPreviewEnabled_) {
         const std::filesystem::path scenePlateProjectFolder = appio::absolutePath(exportState_.projectFolder);
-        drawScenePlateDummyStackOnCanvas(
+        drawScenePlatePreviewStackOnCanvas(
             workingScenePlates_,
             scenePlateTimelineFrame,
             project_.canvas.width,
             project_.canvas.height,
             scenePlateProjectFolder,
+            renderer_,
+            scenePlateImageCache_,
             canvasView_,
             areaMin,
             areaSize,

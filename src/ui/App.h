@@ -23,6 +23,7 @@
 #include "ui/panels/ColorPanel.h"
 #include "ui/panels/ExportPanel.h"
 #include "ui/panels/TimesheetPanel.h"
+#include "ui/ScenePlateImageCache.h"
 
 namespace perapera {
 
@@ -86,6 +87,11 @@ private:
     // 画像読み込み前のScene Plateをキャンバス上へダミー矩形として仮表示する。
     // 表示ON/OFF、opacity、zOrder、T範囲、transform の接続確認用。
     bool scenePlateCanvasPreviewEnabled_ = true;
+
+    // Timesheet Rebuild Step 7.15:
+    // Scene Plate実画像をキャンバスへ表示するためのSDL_Textureキャッシュ。
+    // 画像パスが変わる/ファイル更新される/rendererが変わる場合に遅延再読込する。
+    ScenePlateImageCache scenePlateImageCache_;
 
     Stroke currentStroke_;
     bool isDrawingStroke_ = false;

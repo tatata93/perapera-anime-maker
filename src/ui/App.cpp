@@ -64,6 +64,9 @@ App::App()
 
 void App::setRenderer(SDL_Renderer* renderer)
 {
+    if (renderer_ != renderer) {
+        scenePlateImageCache_.clear();
+    }
     renderer_ = renderer;
     canvasRenderer_.setRenderer(renderer);
     canvasRenderer_.setCanvasSize(project_.canvas.width, project_.canvas.height);
