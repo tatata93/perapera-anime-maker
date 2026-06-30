@@ -40,6 +40,98 @@ std::string hresultToString(long hr)
     return stream.str();
 }
 
+#if defined(_WIN32)
+bool win32RegularFileExistsW(const std::wstring& widePath)
+{
+    if (widePath.empty()) {
+        return false;
+    }
+
+    const DWORD attributes = GetFileAttributesW(widePath.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    return (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+bool win32RegularFileExistsA(const std::string& pathText)
+{
+    if (pathText.empty()) {
+        return false;
+    }
+
+    const DWORD attributes = GetFileAttributesA(pathText.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    return (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+std::wstring widePathFromUtf8OrAnsiText(const std::string& pathText)
+{
+    if (pathText.empty()) {
+        return {};
+    }
+
+    auto convert = [&](UINT codePage, DWORD flags) -> std::wstring {
+        const int wideLength = MultiByteToWideChar(
+            codePage,
+            flags,
+            pathText.c_str(),
+            static_cast<int>(pathText.size()),
+            nullptr,
+            0);
+        if (wideLength <= 0) {
+            return {};
+        }
+
+        std::wstring widePath(static_cast<std::size_t>(wideLength), L'\0');
+        const int convertedLength = MultiByteToWideChar(
+            codePage,
+            flags,
+            pathText.c_str(),
+            static_cast<int>(pathText.size()),
+            widePath.data(),
+            wideLength);
+        if (convertedLength <= 0) {
+            return {};
+        }
+        return widePath;
+    };
+
+    if (std::wstring utf8Path = convert(CP_UTF8, MB_ERR_INVALID_CHARS); !utf8Path.empty()) {
+        return utf8Path;
+    }
+    return convert(CP_ACP, 0);
+}
+#endif
+
+bool regularFileExistsForScenePlate(const std::filesystem::path& path)
+{
+    if (path.empty()) {
+        return false;
+    }
+#if defined(_WIN32)
+    const std::wstring widePath = path.wstring();
+    if (win32RegularFileExistsW(widePath)) {
+        return true;
+    }
+
+    const std::string narrowPath = path.string();
+    if (win32RegularFileExistsA(narrowPath)) {
+        return true;
+    }
+
+    if (std::wstring convertedWide = widePathFromUtf8OrAnsiText(narrowPath); !convertedWide.empty()) {
+        return win32RegularFileExistsW(convertedWide);
+    }
+    return false;
+#else
+    std::error_code ec;
+    return std::filesystem::exists(path, ec) && !ec && std::filesystem::is_regular_file(path, ec) && !ec;
+#endif
+}
+
 struct LoadedRgbaImage {
     std::vector<std::uint8_t> pixels;
     int width = 0;
@@ -237,9 +329,8 @@ const ScenePlateImageCache::TextureResult& ScenePlateImageCache::textureFor(
     }
 
     std::error_code ec;
-    const bool exists = std::filesystem::exists(imagePath, ec);
-    if (ec || !exists || !std::filesystem::is_regular_file(imagePath, ec) || ec) {
-        transientResult_ = makeTransientResult("image file not found");
+    if (!regularFileExistsForScenePlate(imagePath)) {
+        transientResult_ = makeTransientResult("image file not found: " + imagePath.string());
         return transientResult_;
     }
 
@@ -249,15 +340,15 @@ const ScenePlateImageCache::TextureResult& ScenePlateImageCache::textureFor(
     renderer_ = renderer;
 
     const std::string key = pathKey(imagePath);
-    const std::uintmax_t fileSize = std::filesystem::file_size(imagePath, ec);
+    std::uintmax_t fileSize = std::filesystem::file_size(imagePath, ec);
     if (ec) {
-        transientResult_ = makeTransientResult("image file size failed");
-        return transientResult_;
+        fileSize = 0;
+        ec.clear();
     }
-    const std::filesystem::file_time_type modifiedTime = std::filesystem::last_write_time(imagePath, ec);
+    std::filesystem::file_time_type modifiedTime = std::filesystem::last_write_time(imagePath, ec);
     if (ec) {
-        transientResult_ = makeTransientResult("image timestamp failed");
-        return transientResult_;
+        modifiedTime = std::filesystem::file_time_type{};
+        ec.clear();
     }
 
     if (CacheEntry* cached = findEntry(key, renderer, fileSize, modifiedTime)) {

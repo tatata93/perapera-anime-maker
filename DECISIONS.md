@@ -578,3 +578,21 @@ Scene Plate previews are drawn below animation cells so storyboard/layout/backgr
 - Scene Plate の実画像表示は、セル/タイムシート/出力処理へ混ぜず、UI側の表示キャッシュとして実装する。
 - Windows では WIC を使って PNG/JPEG/BMP 等を読み込む。環境側のデコーダがない形式はダミー矩形へフォールバックする。
 - Scene Plate の画像読み込み失敗は作画を止める致命エラーにせず、キャンバス上のラベルとステータスで知らせる。
+
+## Timesheet Rebuild Step 7.15.1 decision
+- Scene Plate image paths pasted with surrounding quotes should be treated as valid paths.
+- The UI must show actual image loading status, because `画像パスOK` only proves path existence and does not prove that the texture was loaded.
+- If image display is unclear, first expose the cache/decode status before adding more image features.
+
+## Timesheet Rebuild Step 7.15.2 Decision
+- Scene Plate image path input must accept common Windows Explorer paste formats, including quoted paths and pasted text with trailing newlines.
+- If the image still does not display after path normalization, the next diagnostic target is texture decoding status, not filesystem existence.
+
+## Timesheet Rebuild Step 7.15.3 decision
+
+Scene Plate image path diagnostics must show the cleaned path and resolved path before moving on to new Scene Plate features. Windows file existence checks should use wide-character Windows APIs where possible so absolute paths pasted from Explorer are handled reliably.
+
+## Timesheet Rebuild Step 7.15.4 Decision
+
+- Treat PowerShell `Test-Path -LiteralPath` success as evidence that app-side Scene Plate path lookup must be fixed before adding new Scene Plate features.
+- Keep manual path input for now, but add Win32-native diagnostics so file dialog work can be separated into a later step.
