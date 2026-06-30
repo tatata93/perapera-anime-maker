@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.26)
 
-project(perapera_anime_maker
+project(
+    perapera_anime_maker
     VERSION 0.1.0
     DESCRIPTION "Hand-drawn 2D animation tool"
     LANGUAGES CXX
@@ -25,6 +26,7 @@ include(FetchContent)
 set(SDL_SHARED ON CACHE BOOL "Build SDL3 as a shared library" FORCE)
 set(SDL_STATIC OFF CACHE BOOL "Do not build SDL3 as a static library" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "Do not build SDL3 test library" FORCE)
+
 FetchContent_Declare(
     SDL3
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
@@ -58,10 +60,11 @@ FetchContent_MakeAvailable(SDL3 imgui nlohmann_json)
 # さらにVisual Studio同梱vcpkgではpkg-config検出が環境変数に左右されやすいため、
 # 1) CMake config
 # 2) pkg-config
-# 3) vcpkg_installed/<triplet> 直下のヘッダ/ライブラリ直接検出
+# 3) vcpkg_installed/ 直下のヘッダ/ライブラリ直接検出
 # の順で安全に探す。
 find_package(libmypaint CONFIG QUIET)
 find_package(PkgConfig QUIET)
+
 if (PkgConfig_FOUND)
     pkg_check_modules(LIBMYPAINT QUIET IMPORTED_TARGET libmypaint)
     if (NOT LIBMYPAINT_FOUND)
@@ -86,7 +89,7 @@ elseif (LIBMYPAINT_FOUND)
     message(STATUS "libmypaint found by pkg-config: ${LIBMYPAINT_VERSION}")
 else()
     # vcpkg manifest modeでは、インストール先がプロジェクト直下の
-    # vcpkg_installed/<triplet> になる。pkg-configが拾えない場合でも、
+    # vcpkg_installed/ になる。pkg-configが拾えない場合でも、
     # この場所に libmypaint のヘッダと import lib があれば使える。
     if (DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
         set(PERAPERA_VCPKG_TRIPLET "${VCPKG_TARGET_TRIPLET}")
@@ -94,12 +97,9 @@ else()
         set(PERAPERA_VCPKG_TRIPLET "x64-windows")
     endif()
 
-    set(PERAPERA_VCPKG_TRIPLET_DIR
-        "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${PERAPERA_VCPKG_TRIPLET}")
-    set(PERAPERA_LIBMYPAINT_HEADER
-        "${PERAPERA_VCPKG_TRIPLET_DIR}/include/libmypaint/mypaint-brush.h")
-    set(PERAPERA_LIBMYPAINT_IMPORT_LIB
-        "${PERAPERA_VCPKG_TRIPLET_DIR}/lib/mypaint.lib")
+    set(PERAPERA_VCPKG_TRIPLET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${PERAPERA_VCPKG_TRIPLET}")
+    set(PERAPERA_LIBMYPAINT_HEADER "${PERAPERA_VCPKG_TRIPLET_DIR}/include/libmypaint/mypaint-brush.h")
+    set(PERAPERA_LIBMYPAINT_IMPORT_LIB "${PERAPERA_VCPKG_TRIPLET_DIR}/lib/mypaint.lib")
 
     if (EXISTS "${PERAPERA_LIBMYPAINT_HEADER}" AND EXISTS "${PERAPERA_LIBMYPAINT_IMPORT_LIB}")
         set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
@@ -137,7 +137,6 @@ target_link_libraries(imgui_sdl3_renderer PUBLIC SDL3::SDL3)
 
 add_executable(perapera_anime_maker
     src/app/main.cpp
-
     src/core/Stroke.cpp
     src/core/Layer.cpp
     src/core/Frame.cpp
@@ -147,24 +146,19 @@ add_executable(perapera_anime_maker
     src/core/TimesheetResolver.cpp
     src/core/TimesheetSceneResolver.cpp
     src/core/TimesheetInbetweenResolver.cpp
-
+    src/core/TimesheetInbetweenPlanner.cpp
     src/io/ProjectIO.cpp
     src/io/TimesheetIO.cpp
     src/io/CutIO.cpp
     src/io/PngExporter.cpp
     src/io/FfmpegRunner.cpp
-
     src/render/CanvasBitmap.cpp
     src/render/CanvasRenderer.cpp
-
     src/brush/SimpleBrushEngine.cpp
     src/brush/MyPaintBrushEngine.cpp
-
     src/fill/FloodFill.cpp
-
     src/camera/ShotCamera2D.cpp
     src/camera/CameraAnimation.cpp
-
     src/ui/App.cpp
     src/ui/AppDrawingMode.cpp
     src/ui/AppInput.cpp
@@ -197,6 +191,7 @@ target_link_libraries(perapera_anime_maker PRIVATE
 
 if (PERAPERA_LIBMYPAINT_AVAILABLE)
     target_compile_definitions(perapera_anime_maker PRIVATE PERAPERA_HAS_LIBMYPAINT=1)
+
     if (TARGET libmypaint::libmypaint)
         target_link_libraries(perapera_anime_maker PRIVATE libmypaint::libmypaint)
     elseif (TARGET libmypaint)
@@ -217,16 +212,12 @@ if (PERAPERA_LIBMYPAINT_AVAILABLE)
     endif()
 endif()
 
-
 add_executable(perapera_timesheet_resolver_selftest
     tools/timesheet_resolver_selftest.cpp
     src/core/Timesheet.cpp
     src/core/TimesheetResolver.cpp
 )
-
-target_include_directories(perapera_timesheet_resolver_selftest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+target_include_directories(perapera_timesheet_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(perapera_timesheet_io_selftest
     tools/timesheet_io_selftest.cpp
@@ -234,14 +225,8 @@ add_executable(perapera_timesheet_io_selftest
     src/core/TimesheetResolver.cpp
     src/io/TimesheetIO.cpp
 )
-
-target_include_directories(perapera_timesheet_io_selftest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-target_link_libraries(perapera_timesheet_io_selftest PRIVATE
-    nlohmann_json::nlohmann_json
-)
+target_include_directories(perapera_timesheet_io_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_timesheet_io_selftest PRIVATE nlohmann_json::nlohmann_json)
 
 add_executable(perapera_cut_io_selftest
     tools/cut_io_selftest.cpp
@@ -250,11 +235,8 @@ add_executable(perapera_cut_io_selftest
     src/io/TimesheetIO.cpp
     src/io/CutIO.cpp
 )
-
-target_include_directories(perapera_cut_io_selftest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
+target_include_directories(perapera_cut_io_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_cut_io_selftest PRIVATE nlohmann_json::nlohmann_json)
 
 add_executable(perapera_timesheet_scene_resolver_selftest
     tools/timesheet_scene_resolver_selftest.cpp
@@ -262,34 +244,28 @@ add_executable(perapera_timesheet_scene_resolver_selftest
     src/core/TimesheetResolver.cpp
     src/core/TimesheetSceneResolver.cpp
 )
+target_include_directories(perapera_timesheet_scene_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-target_include_directories(perapera_timesheet_scene_resolver_selftest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+add_executable(perapera_timesheet_inbetween_planner_selftest
+    tools/timesheet_inbetween_planner_selftest.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetInbetweenPlanner.cpp
 )
+target_include_directories(perapera_timesheet_inbetween_planner_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(perapera_timesheet_inbetween_resolver_selftest
     tools/timesheet_inbetween_resolver_selftest.cpp
     src/core/Timesheet.cpp
     src/core/TimesheetInbetweenResolver.cpp
 )
-
-target_include_directories(perapera_timesheet_inbetween_resolver_selftest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+target_include_directories(perapera_timesheet_inbetween_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(perapera_timesheet_panel_bridge_selftest
     tools/timesheet_panel_bridge_selftest.cpp
     src/core/Timesheet.cpp
     src/ui/panels/TimesheetPanelBridge.cpp
 )
-
-target_include_directories(perapera_timesheet_panel_bridge_selftest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-target_link_libraries(perapera_cut_io_selftest PRIVATE
-    nlohmann_json::nlohmann_json
-)
+target_include_directories(perapera_timesheet_panel_bridge_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if (MSVC)
     target_compile_options(perapera_anime_maker PRIVATE /W4 /permissive- /utf-8)
@@ -297,6 +273,7 @@ if (MSVC)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_cut_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
@@ -305,6 +282,7 @@ else()
     target_compile_options(perapera_timesheet_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_cut_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -316,7 +294,6 @@ add_custom_command(TARGET perapera_anime_maker POST_BUILD
         $<TARGET_FILE:SDL3::SDL3>
         $<TARGET_FILE_DIR:perapera_anime_maker>
 )
-
 
 # vcpkg直下からlibmypaintを直接拾った場合、実行時に必要なDLLもexe横へコピーする。
 # vcpkg_installed はgit管理しない。ローカル環境の依存物として扱う。

@@ -563,3 +563,10 @@ When the active drawing frame selected from the timeline differs from the drawin
 - したがって、`Cut`、`CutIO`、`cut_io_selftest` は Scene Plate 系の型やメンバに依存しない。
 - `tools/cut_io_selftest.cpp` は、Cut の基本メタ情報、`cellZOrderKeys`、分離保存する `timesheet.json`、TimesheetResolver の往復確認だけを検証する。
 - Timesheet は概念上 Cut に属するが、将来の単体表示・単体印刷を見据え、物理ファイルとしては分離保存を許容する。
+
+## Decision: Scene Plate removal must not roll back independent Timesheet planner work
+
+- Work position: final_spec_v6 Phase 2 前整理 Step T1 派生作業。
+- Scene Plate / scene panel code remains removed to avoid confusing background/layout/BOOK management with a separate Scene Plate path.
+- Timesheet inbetween planner remains part of the app because it supports the existing timesheet assistant UI and is unrelated to Scene Plate.
+- Future rollback/removal work must search for both removed symbols and accidentally dropped kept symbols before packaging. In particular, CMake target membership must be checked against the current UI call sites and selftests.
