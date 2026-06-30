@@ -4,6 +4,8 @@
 #include "core/Timesheet.h"
 
 #include <algorithm>
+#include <utility>
+#include <vector>
 
 namespace perapera {
 namespace {
@@ -131,6 +133,22 @@ void sortTimesheetTrackEntries(TimesheetCellTrack& track)
         });
 }
 
+void dedupeTimesheetTrackEntriesByTimelineFrame(TimesheetCellTrack& track)
+{
+    std::vector<TimesheetEntry> deduped;
+    deduped.reserve(track.entries.size());
+
+    for (const TimesheetEntry& entry : track.entries) {
+        if (!deduped.empty() && deduped.back().timelineFrame == entry.timelineFrame) {
+            deduped.back() = entry;
+            continue;
+        }
+        deduped.push_back(entry);
+    }
+
+    track.entries = std::move(deduped);
+}
+
 void normalizeTimesheet(Timesheet& timesheet)
 {
     timesheet.totalFrames = normalizeTimesheetFrameCount(timesheet.totalFrames);
@@ -147,6 +165,7 @@ void normalizeTimesheet(Timesheet& timesheet)
             }
         }
         sortTimesheetTrackEntries(track);
+        dedupeTimesheetTrackEntriesByTimelineFrame(track);
     }
 
     for (TimesheetFrameNote& note : timesheet.frameNotes) {

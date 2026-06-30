@@ -542,3 +542,15 @@ When the active drawing frame selected from the timeline differs from the drawin
 - タイムシート関連の補助UIは、作画画面を散らかさないよう `タイムシート補助` ウィンドウへ集約する。
 - タイムシート再生、保存/読み込み、解決結果、原画間検出、中割作成、ライトテーブル補助は同じ補助ウィンドウ内のセクションとして扱う。
 - Scene Plate UIを追加する前に、既存のタイムシート補助UIを整理しておく。
+
+## 2026-06-30 Timesheet Rebuild Step 7.12 decisions
+
+- Scene Plate UIは、作画セル列・タイムシート列へ混ぜず、独立した `Scene Plate管理` ウィンドウとして先に追加する。
+- `visible` と `outputMode` は別の概念として扱う。`ReferenceOnly` はキャンバス上の作画参照用であり、正式PNG/MP4出力には含めない。
+- Step 7.12では画像読み込み・キャンバス背景描画・出力反映は実装しない。
+- 通常Project保存との正式統合前なので、Scene Plateを残すための暫定操作として `CutIO` の試験保存/読み込みをUIに置く。
+
+## Decision: avoid mixed-type ImGui ID ternaries
+
+For ImGui IDs, do not pass a ternary expression that mixes `int` and `const char*`.
+Use explicit branches or a single stable string instead. This avoids MSVC type-resolution errors and keeps UI IDs stable.

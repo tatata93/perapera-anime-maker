@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cmath>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -52,6 +53,17 @@ void expectString(std::string_view actual, std::string_view expected, std::strin
     std::cerr << "[NG] " << label << " expected=" << expected << " actual=" << actual << '\n';
 }
 
+void expectFloat(float actual, float expected, std::string_view label)
+{
+    if (std::fabs(actual - expected) < 0.0001f) {
+        std::cout << "[OK] " << label << " = " << actual << '\n';
+        return;
+    }
+
+    ++gFailureCount;
+    std::cerr << "[NG] " << label << " expected=" << expected << " actual=" << actual << '\n';
+}
+
 std::string readWholeFile(const fs::path& path)
 {
     std::ifstream file(path, std::ios::binary);
@@ -68,6 +80,35 @@ perapera::Cut makeSampleCut()
     cut.frameRate = 24;
     cut.totalFrames = 18;
     cut.cellZOrderKeys = {"bg", "cell-a", "cell-b", "book"};
+
+    perapera::ScenePlate layout;
+    layout.id = "layout-main";
+    layout.displayName = "レイアウト";
+    layout.kind = perapera::ScenePlateKind::Layout;
+    layout.outputMode = perapera::ScenePlateOutputMode::PreviewOnly;
+    layout.imagePath = "plates/layout.png";
+    layout.locked = true;
+    layout.opacity = 0.75f;
+    layout.zOrder = 10;
+    layout.startTimelineFrame = 2;
+    layout.endTimelineFrame = 12;
+    layout.transform.x = 100.0f;
+    layout.transform.y = 50.0f;
+    layout.transform.scaleX = 1.25f;
+    layout.transform.scaleY = 1.25f;
+    layout.transform.rotationDegrees = 3.0f;
+
+    perapera::ScenePlate finalBackground;
+    finalBackground.id = "bg-final";
+    finalBackground.displayName = "完成背景";
+    finalBackground.kind = perapera::ScenePlateKind::FinalBackground;
+    finalBackground.outputMode = perapera::ScenePlateOutputMode::RenderOutput;
+    finalBackground.imagePath = "plates/bg_final.png";
+    finalBackground.opacity = 1.0f;
+    finalBackground.zOrder = -10;
+
+    cut.scenePlates.plates.push_back(layout);
+    cut.scenePlates.plates.push_back(finalBackground);
 
     cut.timesheet.totalFrames = cut.totalFrames;
     cut.timesheet.defaultExposure = 2;
@@ -113,6 +154,9 @@ void runCutIoSelfTest()
     expectTrue(cutJsonText.find("perapera.cut.v1") != std::string::npos, "cut kind is written");
     expectTrue(cutJsonText.find("timesheet.json") != std::string::npos, "timesheet file reference is written");
     expectTrue(cutJsonText.find("第1カット") != std::string::npos, "Japanese cut name is written as UTF-8");
+    expectTrue(cutJsonText.find("scenePlates") != std::string::npos, "scene plates are written to cut.json");
+    expectTrue(cutJsonText.find("layout-main") != std::string::npos, "scene plate id is written");
+    expectTrue(cutJsonText.find("plates/bg_final.png") != std::string::npos, "scene plate image path is written");
     expectTrue(cutJsonText.find("Aセル") == std::string::npos, "timesheet track display names are not mixed into cut.json");
     expectTrue(timesheetJsonText.find("Aセル") != std::string::npos, "timesheet track display names are written to timesheet.json");
     expectTrue(timesheetJsonText.find("透過光") != std::string::npos, "shooting instruction is written to timesheet.json");
@@ -126,6 +170,15 @@ void runCutIoSelfTest()
     expectInt(loaded.totalFrames, 18, "loaded totalFrames");
     expectInt(static_cast<int>(loaded.cellZOrderKeys.size()), 4, "loaded cellZOrderKeys count");
     expectString(loaded.cellZOrderKeys[2], "cell-b", "loaded cellZOrderKeys order");
+    expectInt(static_cast<int>(loaded.scenePlates.plates.size()), 2, "loaded scene plate count");
+    expectString(loaded.scenePlates.plates[0].id, "bg-final", "loaded scene plate z order first");
+    expectString(loaded.scenePlates.plates[1].displayName, "レイアウト", "loaded scene plate displayName");
+    expectTrue(loaded.scenePlates.plates[1].kind == perapera::ScenePlateKind::Layout, "loaded scene plate kind");
+    expectTrue(loaded.scenePlates.plates[1].outputMode == perapera::ScenePlateOutputMode::PreviewOnly, "loaded scene plate output mode");
+    expectTrue(loaded.scenePlates.plates[1].locked, "loaded scene plate locked");
+    expectFloat(loaded.scenePlates.plates[1].opacity, 0.75f, "loaded scene plate opacity");
+    expectInt(loaded.scenePlates.plates[1].startTimelineFrame, 2, "loaded scene plate start T");
+    expectFloat(loaded.scenePlates.plates[1].transform.scaleX, 1.25f, "loaded scene plate scaleX");
     expectInt(loaded.timesheet.totalFrames, 18, "loaded timesheet totalFrames follows cut");
     expectInt(static_cast<int>(loaded.timesheet.tracks.size()), 2, "loaded timesheet track count");
     expectString(loaded.timesheet.tracks[0].displayName, "Aセル", "loaded timesheet displayName");

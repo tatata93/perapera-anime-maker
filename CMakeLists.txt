@@ -147,6 +147,8 @@ add_executable(perapera_anime_maker
     src/core/TimesheetResolver.cpp
     src/core/TimesheetSceneResolver.cpp
     src/core/TimesheetInbetweenResolver.cpp
+    src/core/TimesheetInbetweenPlanner.cpp
+    src/core/ScenePlate.cpp
 
     src/io/ProjectIO.cpp
     src/io/TimesheetIO.cpp
@@ -245,6 +247,7 @@ target_link_libraries(perapera_timesheet_io_selftest PRIVATE
 
 add_executable(perapera_cut_io_selftest
     tools/cut_io_selftest.cpp
+    src/core/ScenePlate.cpp
     src/core/Timesheet.cpp
     src/core/TimesheetResolver.cpp
     src/io/TimesheetIO.cpp
@@ -267,6 +270,17 @@ target_include_directories(perapera_timesheet_scene_resolver_selftest PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+
+add_executable(perapera_timesheet_inbetween_planner_selftest
+    tools/timesheet_inbetween_planner_selftest.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetInbetweenPlanner.cpp
+)
+
+target_include_directories(perapera_timesheet_inbetween_planner_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 add_executable(perapera_timesheet_inbetween_resolver_selftest
     tools/timesheet_inbetween_resolver_selftest.cpp
     src/core/Timesheet.cpp
@@ -274,6 +288,16 @@ add_executable(perapera_timesheet_inbetween_resolver_selftest
 )
 
 target_include_directories(perapera_timesheet_inbetween_resolver_selftest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+
+add_executable(perapera_scene_plate_selftest
+    tools/scene_plate_selftest.cpp
+    src/core/ScenePlate.cpp
+)
+
+target_include_directories(perapera_scene_plate_selftest PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -298,7 +322,9 @@ if (MSVC)
     target_compile_options(perapera_cut_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_scene_plate_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
@@ -306,7 +332,9 @@ else()
     target_compile_options(perapera_cut_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_scene_plate_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # WindowsでSDL3.dllをexe横にコピーする。

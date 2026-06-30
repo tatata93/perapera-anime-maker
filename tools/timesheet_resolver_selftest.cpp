@@ -80,6 +80,7 @@ void runResolverSelfTest()
 
     expectInt(timesheet.totalFrames, 8, "totalFrames正規化");
     expectInt(static_cast<int>(timesheet.tracks.size()), 3, "track数");
+    expectInt(static_cast<int>(timesheet.tracks[1].entries.size()), 2, "同一T重複は正規化で後勝ち1件へ整理");
 
     {
         const perapera::ResolvedTimesheetCell resolved = perapera::resolveTimesheetCell(timesheet, "cell-a", 0);
