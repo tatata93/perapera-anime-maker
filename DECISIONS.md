@@ -560,3 +560,16 @@ Use explicit branches or a single stable string instead. This avoids MSVC type-r
 Before adding file picking and texture loading, Scene Plate entries should first appear on the canvas as dummy rectangles. This confirms the display contract for `visible`, `opacity`, `zOrder`, T range, and transform without mixing file I/O, texture cache, and render behavior into the same step.
 
 Scene Plate previews are drawn below animation cells so storyboard/layout/background references behave as a drawing underlay. Formal PNG/MP4 output remains controlled by `outputMode` in a later export step.
+
+## Timesheet Rebuild Step 7.14 decisions
+
+- Scene Plate image path input comes before real image drawing.
+- Relative Scene Plate image paths are resolved against the current project/export folder.
+- The UI may show path status on the canvas dummy preview, but must not pretend that the real image is already rendered.
+- Real texture loading and compositing remain a separate follow-up step.
+
+## Timesheet Rebuild Step 7.14.1 decision
+
+- Treat `build/bin/perapera_anime_maker.exe` generation as the primary success condition for UI changes.
+- Selftests passing is not enough when the main application target fails.
+- Keep Step 7.14.1 limited to the `projectFolder` scope fix before continuing to Scene Plate real image display.

@@ -2,6 +2,7 @@
 #include "ui/App.h"
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
@@ -315,7 +316,7 @@ void assignScenePlateSequentialZOrder(ScenePlateStack& stack) noexcept
 
 bool inputScenePlateText(const char* label, std::string& value)
 {
-    std::array<char, 256> buffer{};
+    std::array<char, 1024> buffer{};
     const std::size_t copyLength = std::min(value.size(), buffer.size() - 1U);
     std::copy_n(value.c_str(), copyLength, buffer.data());
     if (ImGui::InputText(label, buffer.data(), buffer.size())) {
@@ -323,6 +324,119 @@ bool inputScenePlateText(const char* label, std::string& value)
         return true;
     }
     return false;
+}
+
+std::string scenePlateImageExtensionLower(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return extension;
+}
+
+bool scenePlateImageExtensionSupported(const std::filesystem::path& path)
+{
+    const std::string extension = scenePlateImageExtensionLower(path);
+    return extension == ".png" ||
+        extension == ".jpg" ||
+        extension == ".jpeg" ||
+        extension == ".bmp" ||
+        extension == ".webp";
+}
+
+std::filesystem::path scenePlateResolvedImagePath(const ScenePlate& plate, const std::filesystem::path& projectFolder)
+{
+    if (plate.imagePath.empty()) {
+        return {};
+    }
+
+    std::filesystem::path imagePath(plate.imagePath);
+    if (imagePath.is_absolute()) {
+        return imagePath;
+    }
+    if (!projectFolder.empty()) {
+        return projectFolder / imagePath;
+    }
+    return imagePath;
+}
+
+std::string scenePlateImageFileNameLabel(const ScenePlate& plate)
+{
+    if (plate.imagePath.empty()) {
+        return u8c(u8"未指定");
+    }
+    const std::filesystem::path path(plate.imagePath);
+    const std::string filename = path.filename().string();
+    return filename.empty() ? plate.imagePath : filename;
+}
+
+std::string scenePlateImageStatusLabel(const ScenePlate& plate, const std::filesystem::path& projectFolder)
+{
+    if (plate.imagePath.empty()) {
+        return u8c(u8"画像未指定: ダミー表示");
+    }
+
+    const std::filesystem::path resolvedPath = scenePlateResolvedImagePath(plate, projectFolder);
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(resolvedPath, ec);
+    if (ec || !exists) {
+        return std::string(u8c(u8"画像未検出: ")) + scenePlateImageFileNameLabel(plate);
+    }
+
+    if (!std::filesystem::is_regular_file(resolvedPath, ec) || ec) {
+        return std::string(u8c(u8"画像ファイルではありません: ")) + scenePlateImageFileNameLabel(plate);
+    }
+
+    if (!scenePlateImageExtensionSupported(resolvedPath)) {
+        const std::string extension = scenePlateImageExtensionLower(resolvedPath);
+        return std::string(u8c(u8"未対応拡張子: ")) + (extension.empty() ? std::string(u8c(u8"なし")) : extension);
+    }
+
+    return std::string(u8c(u8"画像パスOK: ")) + scenePlateImageFileNameLabel(plate);
+}
+
+std::string scenePlateImageDetailLabel(const ScenePlate& plate, const std::filesystem::path& projectFolder)
+{
+    if (plate.imagePath.empty()) {
+        return u8c(u8"画像パスを指定すると、次Stepの実画像表示へそのまま渡せます。");
+    }
+
+    const std::filesystem::path resolvedPath = scenePlateResolvedImagePath(plate, projectFolder);
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(resolvedPath, ec);
+    if (ec || !exists || !std::filesystem::is_regular_file(resolvedPath, ec) || ec) {
+        return std::string(u8c(u8"解決パス: ")) + resolvedPath.string();
+    }
+
+    const auto fileSize = std::filesystem::file_size(resolvedPath, ec);
+    std::ostringstream stream;
+    stream << u8c(u8"解決パス: ") << resolvedPath.string();
+    if (!ec) {
+        stream << u8c(u8" / ") << fileSize << u8c(u8" bytes");
+    }
+    return stream.str();
+}
+
+bool scenePlateMakeImagePathRelativeToProject(ScenePlate& plate, const std::filesystem::path& projectFolder)
+{
+    if (plate.imagePath.empty() || projectFolder.empty()) {
+        return false;
+    }
+
+    const std::filesystem::path imagePath(plate.imagePath);
+    if (!imagePath.is_absolute()) {
+        return false;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path relativePath = std::filesystem::relative(imagePath, projectFolder, ec);
+    if (ec || relativePath.empty()) {
+        return false;
+    }
+
+    plate.imagePath = relativePath.generic_string();
+    return true;
 }
 
 int scenePlateAlphaByte(float opacity, float minimumAlpha, float maximumAlpha) noexcept
@@ -374,6 +488,7 @@ void drawScenePlateDummyOnCanvas(const ScenePlate& plate,
                                  int timelineFrame,
                                  int canvasWidth,
                                  int canvasHeight,
+                                 const std::filesystem::path& projectFolder,
                                  const CanvasView& view,
                                  ImVec2 areaMin,
                                  ImVec2 areaSize,
@@ -428,7 +543,7 @@ void drawScenePlateDummyOnCanvas(const ScenePlate& plate,
     const std::string label = title + "\n" +
         scenePlateKindJapaneseLabel(plate.kind) + std::string(" / ") +
         scenePlateOutputModeJapaneseLabel(plate.outputMode) + "\n" +
-        u8c(u8"画像未読込: 仮表示");
+        scenePlateImageStatusLabel(plate, projectFolder);
     const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
     const ImVec2 textMin(screenCenter.x - textSize.x * 0.5f - 6.0f,
                          screenCenter.y - textSize.y * 0.5f - 4.0f);
@@ -444,6 +559,7 @@ void drawScenePlateDummyStackOnCanvas(const ScenePlateStack& stack,
                                       int timelineFrame,
                                       int canvasWidth,
                                       int canvasHeight,
+                                      const std::filesystem::path& projectFolder,
                                       const CanvasView& view,
                                       ImVec2 areaMin,
                                       ImVec2 areaSize,
@@ -459,7 +575,7 @@ void drawScenePlateDummyStackOnCanvas(const ScenePlateStack& stack,
     const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
     drawList->PushClipRect(areaMin, areaMax, true);
     for (const ScenePlate& plate : sortedStack.plates) {
-        drawScenePlateDummyOnCanvas(plate, timelineFrame, canvasWidth, canvasHeight, view, areaMin, areaSize, drawList);
+        drawScenePlateDummyOnCanvas(plate, timelineFrame, canvasWidth, canvasHeight, projectFolder, view, areaMin, areaSize, drawList);
     }
     drawList->PopClipRect();
 }
@@ -1637,6 +1753,7 @@ void App::drawDrawingMode()
     // 実画像読み込みとPNG/MP4出力反映は後続Stepへ分ける。
     {
         const int currentT = std::max(1, timesheetPanelState_.selectedTimelineFrame + 1);
+        const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
         normalizeScenePlateStack(workingScenePlates_);
         clampScenePlateSelection(workingScenePlates_, selectedScenePlateIndex_);
 
@@ -1644,9 +1761,9 @@ void App::drawDrawingMode()
             u8c(u8"Scene Plate管理##ScenePlateManager"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 7.13: Scene Plate キャンバス仮表示"));
+        ImGui::TextUnformatted(u8c(u8"Step 7.14: Scene Plate 画像パス指定"));
         ImGui::TextDisabled(u8c(u8"絵コンテ/レイアウト/仮背景/完成背景をセル列とは別に管理します。"));
-        ImGui::TextDisabled(u8c(u8"画像読み込み前の段階として、キャンバスにはダミー矩形とラベルだけを表示します。"));
+        ImGui::TextDisabled(u8c(u8"画像パス、存在確認、対応拡張子を管理します。実画像描画は次Stepへ分けます。"));
         if (ImGui::Checkbox(u8c(u8"キャンバス仮表示##ScenePlateCanvasPreviewEnabled"), &scenePlateCanvasPreviewEnabled_)) {
             lastMessage_ = scenePlateCanvasPreviewEnabled_
                 ? "scene plate canvas preview enabled"
@@ -1862,10 +1979,31 @@ void App::drawDrawingMode()
                 changed = true;
             }
 
-            const std::string imagePathLabel = selectedPlate.imagePath.empty()
-                ? std::string(u8c(u8"未指定 / 画像読み込みは後続Step"))
-                : selectedPlate.imagePath;
-            ImGui::TextDisabled(u8c(u8"画像パス: %s"), imagePathLabel.c_str());
+            ImGui::SeparatorText(u8c(u8"画像パス"));
+            changed = inputScenePlateText(u8c(u8"画像パス##ScenePlateImagePath"), selectedPlate.imagePath) || changed;
+            const std::string imageStatus = scenePlateImageStatusLabel(selectedPlate, projectFolder);
+            const std::string imageDetail = scenePlateImageDetailLabel(selectedPlate, projectFolder);
+            ImGui::TextWrapped(u8c(u8"状態: %s"), imageStatus.c_str());
+            ImGui::TextWrapped(u8c(u8"%s"), imageDetail.c_str());
+            ImGui::TextDisabled(u8c(u8"対応候補: .png / .jpg / .jpeg / .bmp / .webp。まだ実画像は描画せず、次Stepでこのパスを使います。"));
+            if (ImGui::SmallButton(u8c(u8"画像パス確認##ScenePlateCheckImagePath"))) {
+                lastMessage_ = imageStatus;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton(u8c(u8"プロジェクト相対パス化##ScenePlateRelativeImagePath"))) {
+                if (scenePlateMakeImagePathRelativeToProject(selectedPlate, projectFolder)) {
+                    changed = true;
+                    lastMessage_ = "scene plate image path made relative";
+                } else {
+                    lastMessage_ = "scene plate image path was not changed";
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton(u8c(u8"画像パス消去##ScenePlateClearImagePath"))) {
+                selectedPlate.imagePath.clear();
+                changed = true;
+                lastMessage_ = "scene plate image path cleared";
+            }
 
             const bool canMoveUp = selectedScenePlateIndex_ > 0;
             const bool canMoveDown = selectedScenePlateIndex_ + 1 < static_cast<int>(workingScenePlates_.plates.size());
@@ -1924,7 +2062,6 @@ void App::drawDrawingMode()
             }
         }
 
-        const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
         ImGui::SeparatorText(u8c(u8"cut.json 試験保存 / 読み込み"));
         ImGui::TextWrapped(u8c(u8"保存先: %s"), CutIO::cutJsonPathForCutFolder(projectFolder).string().c_str());
         if (ImGui::SmallButton(u8c(u8"Scene Plateをcut.jsonへ保存##SaveScenePlatesCutJson"))) {
@@ -2165,18 +2302,20 @@ void App::drawCanvasArea(float rightWidth)
     const ImU32 background = IM_COL32(255, 255, 255, 255);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
 
-    // Timesheet Rebuild Step 7.13:
-    // 画像読み込み前でも、Scene Plateの visible / opacity / zOrder / T範囲 / transform が
-    // キャンバス表示へ反映されることを確認できるよう、ダミー矩形として仮表示する。
+    // Timesheet Rebuild Step 7.14:
+    // Scene Plateの画像パス状態もダミー矩形ラベルへ表示する。
+    // 実画像描画は次Stepへ分け、ここではパス指定と存在確認までに留める。
     const int scenePlateTimelineFrame = (countTimesheetEntries(workingTimesheet_) > 0 && !isPlayingFrames_)
         ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
         : activeFrameIndex_ + 1;
     if (scenePlateCanvasPreviewEnabled_) {
+        const std::filesystem::path scenePlateProjectFolder = appio::absolutePath(exportState_.projectFolder);
         drawScenePlateDummyStackOnCanvas(
             workingScenePlates_,
             scenePlateTimelineFrame,
             project_.canvas.width,
             project_.canvas.height,
+            scenePlateProjectFolder,
             canvasView_,
             areaMin,
             areaSize,
