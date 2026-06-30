@@ -325,6 +325,145 @@ bool inputScenePlateText(const char* label, std::string& value)
     return false;
 }
 
+int scenePlateAlphaByte(float opacity, float minimumAlpha, float maximumAlpha) noexcept
+{
+    const float alpha = std::clamp(minimumAlpha + std::clamp(opacity, 0.0f, 1.0f) * (maximumAlpha - minimumAlpha), 0.0f, 1.0f);
+    return std::clamp(static_cast<int>(alpha * 255.0f + 0.5f), 0, 255);
+}
+
+ImU32 scenePlateKindColor(ScenePlateKind kind, int alpha) noexcept
+{
+    switch (kind) {
+    case ScenePlateKind::Storyboard:
+        return IM_COL32(255, 225, 90, alpha);
+    case ScenePlateKind::Layout:
+        return IM_COL32(80, 170, 255, alpha);
+    case ScenePlateKind::ReferenceImage:
+        return IM_COL32(180, 140, 255, alpha);
+    case ScenePlateKind::TemporaryBackground:
+        return IM_COL32(80, 210, 170, alpha);
+    case ScenePlateKind::FinalBackground:
+        return IM_COL32(255, 150, 95, alpha);
+    }
+    return IM_COL32(200, 200, 200, alpha);
+}
+
+ImU32 scenePlateOutputBorderColor(ScenePlateOutputMode mode, int alpha) noexcept
+{
+    switch (mode) {
+    case ScenePlateOutputMode::ReferenceOnly:
+        return IM_COL32(80, 80, 80, alpha);
+    case ScenePlateOutputMode::PreviewOnly:
+        return IM_COL32(40, 115, 210, alpha);
+    case ScenePlateOutputMode::RenderOutput:
+        return IM_COL32(210, 80, 35, alpha);
+    }
+    return IM_COL32(80, 80, 80, alpha);
+}
+
+ImVec2 scenePlateRotatedPoint(float x, float y, float centerX, float centerY, float cosTheta, float sinTheta) noexcept
+{
+    const float dx = x - centerX;
+    const float dy = y - centerY;
+    return ImVec2(
+        centerX + dx * cosTheta - dy * sinTheta,
+        centerY + dx * sinTheta + dy * cosTheta);
+}
+
+void drawScenePlateDummyOnCanvas(const ScenePlate& plate,
+                                 int timelineFrame,
+                                 int canvasWidth,
+                                 int canvasHeight,
+                                 const CanvasView& view,
+                                 ImVec2 areaMin,
+                                 ImVec2 areaSize,
+                                 ImDrawList* drawList)
+{
+    if (drawList == nullptr || canvasWidth <= 0 || canvasHeight <= 0) {
+        return;
+    }
+    if (!scenePlateVisibleAtTimelineFrame(plate, timelineFrame)) {
+        return;
+    }
+
+    const float opacity = std::clamp(plate.opacity, 0.0f, 1.0f);
+    if (opacity <= 0.0f) {
+        return;
+    }
+
+    const float width = std::max(16.0f, static_cast<float>(canvasWidth) * std::abs(plate.transform.scaleX));
+    const float height = std::max(16.0f, static_cast<float>(canvasHeight) * std::abs(plate.transform.scaleY));
+    const float left = plate.transform.x;
+    const float top = plate.transform.y;
+    const float right = left + width;
+    const float bottom = top + height;
+    const float centerX = (left + right) * 0.5f;
+    const float centerY = (top + bottom) * 0.5f;
+    constexpr float kPi = 3.14159265358979323846f;
+    const float radians = plate.transform.rotationDegrees * kPi / 180.0f;
+    const float cosTheta = std::cos(radians);
+    const float sinTheta = std::sin(radians);
+
+    const std::array<ImVec2, 4> canvasCorners{
+        scenePlateRotatedPoint(left, top, centerX, centerY, cosTheta, sinTheta),
+        scenePlateRotatedPoint(right, top, centerX, centerY, cosTheta, sinTheta),
+        scenePlateRotatedPoint(right, bottom, centerX, centerY, cosTheta, sinTheta),
+        scenePlateRotatedPoint(left, bottom, centerX, centerY, cosTheta, sinTheta),
+    };
+
+    std::array<ImVec2, 4> screenCorners{};
+    for (std::size_t i = 0; i < canvasCorners.size(); ++i) {
+        screenCorners[i] = view.canvasToScreen(canvasCorners[i].x, canvasCorners[i].y, areaMin, areaSize);
+    }
+
+    const ImVec2 screenCenter = view.canvasToScreen(centerX, centerY, areaMin, areaSize);
+    const ImU32 fillColor = scenePlateKindColor(plate.kind, scenePlateAlphaByte(opacity, 0.05f, 0.24f));
+    const ImU32 borderColor = scenePlateOutputBorderColor(plate.outputMode, scenePlateAlphaByte(opacity, 0.42f, 0.95f));
+    const float borderThickness = plate.outputMode == ScenePlateOutputMode::RenderOutput ? 3.0f : 2.0f;
+
+    drawList->AddQuadFilled(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], fillColor);
+    drawList->AddQuad(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], borderColor, borderThickness);
+
+    const std::string title = plate.displayName.empty() ? plate.id : plate.displayName;
+    const std::string label = title + "\n" +
+        scenePlateKindJapaneseLabel(plate.kind) + std::string(" / ") +
+        scenePlateOutputModeJapaneseLabel(plate.outputMode) + "\n" +
+        u8c(u8"画像未読込: 仮表示");
+    const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
+    const ImVec2 textMin(screenCenter.x - textSize.x * 0.5f - 6.0f,
+                         screenCenter.y - textSize.y * 0.5f - 4.0f);
+    const ImVec2 textMax(textMin.x + textSize.x + 12.0f,
+                         textMin.y + textSize.y + 8.0f);
+
+    drawList->AddRectFilled(textMin, textMax, IM_COL32(255, 255, 255, scenePlateAlphaByte(opacity, 0.58f, 0.86f)), 4.0f);
+    drawList->AddRect(textMin, textMax, borderColor, 4.0f);
+    drawList->AddText(ImVec2(textMin.x + 6.0f, textMin.y + 4.0f), IM_COL32(25, 25, 25, scenePlateAlphaByte(opacity, 0.72f, 1.0f)), label.c_str());
+}
+
+void drawScenePlateDummyStackOnCanvas(const ScenePlateStack& stack,
+                                      int timelineFrame,
+                                      int canvasWidth,
+                                      int canvasHeight,
+                                      const CanvasView& view,
+                                      ImVec2 areaMin,
+                                      ImVec2 areaSize,
+                                      ImDrawList* drawList)
+{
+    if (drawList == nullptr || stack.plates.empty()) {
+        return;
+    }
+
+    ScenePlateStack sortedStack = stack;
+    normalizeScenePlateStack(sortedStack);
+
+    const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
+    drawList->PushClipRect(areaMin, areaMax, true);
+    for (const ScenePlate& plate : sortedStack.plates) {
+        drawScenePlateDummyOnCanvas(plate, timelineFrame, canvasWidth, canvasHeight, view, areaMin, areaSize, drawList);
+    }
+    drawList->PopClipRect();
+}
+
 float distanceSquared(const StrokePoint& a, const StrokePoint& b)
 {
     const float dx = a.x - b.x;
@@ -1492,9 +1631,10 @@ void App::drawDrawingMode()
         ImGui::End();
     }
 
-    // Timesheet Rebuild Step 7.12:
-    // Scene Plate をセル列やタイムシート列へ混ぜず、まず一覧UIだけで操作できるようにする。
-    // 画像読み込み、キャンバス背景描画、出力反映は後続Stepへ分ける。
+    // Timesheet Rebuild Step 7.13:
+    // Scene Plate をセル列やタイムシート列へ混ぜず、一覧UIで操作し、
+    // 画像読み込み前のキャンバス仮表示まで接続する。
+    // 実画像読み込みとPNG/MP4出力反映は後続Stepへ分ける。
     {
         const int currentT = std::max(1, timesheetPanelState_.selectedTimelineFrame + 1);
         normalizeScenePlateStack(workingScenePlates_);
@@ -1504,9 +1644,16 @@ void App::drawDrawingMode()
             u8c(u8"Scene Plate管理##ScenePlateManager"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 7.12: Scene Plate 表示UI"));
+        ImGui::TextUnformatted(u8c(u8"Step 7.13: Scene Plate キャンバス仮表示"));
         ImGui::TextDisabled(u8c(u8"絵コンテ/レイアウト/仮背景/完成背景をセル列とは別に管理します。"));
-        ImGui::TextDisabled(u8c(u8"今回は一覧操作だけです。画像読み込み、キャンバス表示、PNG/MP4出力反映はまだ行いません。"));
+        ImGui::TextDisabled(u8c(u8"画像読み込み前の段階として、キャンバスにはダミー矩形とラベルだけを表示します。"));
+        if (ImGui::Checkbox(u8c(u8"キャンバス仮表示##ScenePlateCanvasPreviewEnabled"), &scenePlateCanvasPreviewEnabled_)) {
+            lastMessage_ = scenePlateCanvasPreviewEnabled_
+                ? "scene plate canvas preview enabled"
+                : "scene plate canvas preview disabled";
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled(u8c(u8"visible / 不透明度 / zOrder / T範囲 / 位置 / 拡大率 / 回転を反映"));
 
         if (ImGui::SmallButton(u8c(u8"絵コンテ追加##AddScenePlateStoryboard"))) {
             workingScenePlates_.plates.push_back(makeDefaultScenePlate(workingScenePlates_, ScenePlateKind::Storyboard));
@@ -2017,6 +2164,25 @@ void App::drawCanvasArea(float rightWidth)
     // パネルやアプリ全体のダークテーマは維持し、描画範囲だけ白くする。
     const ImU32 background = IM_COL32(255, 255, 255, 255);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
+
+    // Timesheet Rebuild Step 7.13:
+    // 画像読み込み前でも、Scene Plateの visible / opacity / zOrder / T範囲 / transform が
+    // キャンバス表示へ反映されることを確認できるよう、ダミー矩形として仮表示する。
+    const int scenePlateTimelineFrame = (countTimesheetEntries(workingTimesheet_) > 0 && !isPlayingFrames_)
+        ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
+        : activeFrameIndex_ + 1;
+    if (scenePlateCanvasPreviewEnabled_) {
+        drawScenePlateDummyStackOnCanvas(
+            workingScenePlates_,
+            scenePlateTimelineFrame,
+            project_.canvas.width,
+            project_.canvas.height,
+            canvasView_,
+            areaMin,
+            areaSize,
+            drawList);
+    }
+
     const bool drawAssistOverlays = !isPlayingFrames_ || !playbackSkipAssistOverlays_;
     if (drawAssistOverlays) {
         const Cell* onionCell = activeCell();

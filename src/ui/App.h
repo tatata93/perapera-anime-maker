@@ -14,6 +14,7 @@
 
 #include "core/Frame.h"
 #include "core/Project.h"
+#include "core/ScenePlate.h"
 #include "core/Stroke.h"
 #include "core/Timesheet.h"
 #include "brush/MyPaintBrushEngine.h"
@@ -73,6 +74,18 @@ private:
     ui::TimesheetPanelState timesheetPanelState_;
     Timesheet workingTimesheet_;
     bool workingTimesheetDirty_ = false;
+
+    // Timesheet Rebuild Step 7.12:
+    // 絵コンテ、レイアウト、仮背景、完成背景をセル列とは別に持つScene Plateの
+    // 表示/編集UI用一時状態。Project保存との正式接続は後続Stepで行う。
+    ScenePlateStack workingScenePlates_;
+    bool workingScenePlatesDirty_ = false;
+    int selectedScenePlateIndex_ = 0;
+
+    // Timesheet Rebuild Step 7.13:
+    // 画像読み込み前のScene Plateをキャンバス上へダミー矩形として仮表示する。
+    // 表示ON/OFF、opacity、zOrder、T範囲、transform の接続確認用。
+    bool scenePlateCanvasPreviewEnabled_ = true;
 
     Stroke currentStroke_;
     bool isDrawingStroke_ = false;

@@ -554,3 +554,9 @@ When the active drawing frame selected from the timeline differs from the drawin
 
 For ImGui IDs, do not pass a ternary expression that mixes `int` and `const char*`.
 Use explicit branches or a single stable string instead. This avoids MSVC type-resolution errors and keeps UI IDs stable.
+
+## Decision: Scene Plate canvas preview before image loading
+
+Before adding file picking and texture loading, Scene Plate entries should first appear on the canvas as dummy rectangles. This confirms the display contract for `visible`, `opacity`, `zOrder`, T range, and transform without mixing file I/O, texture cache, and render behavior into the same step.
+
+Scene Plate previews are drawn below animation cells so storyboard/layout/background references behave as a drawing underlay. Formal PNG/MP4 output remains controlled by `outputMode` in a later export step.
