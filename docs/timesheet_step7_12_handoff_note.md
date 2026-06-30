@@ -7,6 +7,7 @@
 - `CutIO` は `scenePlates` を `cut.json` に保存/読み込みする。
 - タイムシートの同一セル・同一T重複は、core正規化で後勝ち1件へ整理する。
 - `perapera_cut_io_selftest.exe` と `perapera_scene_plate_selftest.exe` で Scene Plate の往復保存と判定を確認できる。
+- Step 7.15.5 で画像パス解決を共通化した。`perapera_scene_plate_image_path_selftest.exe` で、Windows絶対パスが `projectFolder` と結合されないことを確認できる。
 
 ## 次にやる Step 7.12: Scene Plate 表示UI
 
@@ -38,5 +39,6 @@ UIで扱うべき項目:
 
 - `cmake --build --preset windows-debug`
 - `build/bin/perapera_scene_plate_selftest.exe`
+- `build/bin/perapera_scene_plate_image_path_selftest.exe`
 - `build/bin/perapera_cut_io_selftest.exe`
 - `build/bin/perapera_timesheet_resolver_selftest.exe`

@@ -596,3 +596,10 @@ Scene Plate image path diagnostics must show the cleaned path and resolved path 
 
 - Treat PowerShell `Test-Path -LiteralPath` success as evidence that app-side Scene Plate path lookup must be fixed before adding new Scene Plate features.
 - Keep manual path input for now, but add Win32-native diagnostics so file dialog work can be separated into a later step.
+
+## Timesheet Rebuild Step 7.14.1 derived rollback decision
+
+- Every future task must state which specification phase or step it belongs to before implementation begins.
+- This rollback belongs to `Timesheet Rebuild Step 7.14.1` as a derived task and cancels the later `Step 7.15` real Scene Plate image display work.
+- Real image insertion/display is not part of the current work boundary. Do not re-add WIC/SDL_Texture Scene Plate image loading until the project explicitly returns to that phase.
+- After this rollback, the next recommended work should return to the timesheet specification flow, especially output/playback integration work that maps to the formal Step 6 responsibilities.

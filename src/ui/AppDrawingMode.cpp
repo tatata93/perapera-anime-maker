@@ -13,13 +13,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#if defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
-
 #include <imgui.h>
 #include "core/TimesheetResolver.h"
 #include "core/TimesheetInbetweenResolver.h"
@@ -333,156 +326,6 @@ bool inputScenePlateText(const char* label, std::string& value)
     return false;
 }
 
-
-void scenePlateReplaceAll(std::string& text, const std::string& from, const std::string& to)
-{
-    if (from.empty()) {
-        return;
-    }
-    std::size_t pos = 0;
-    while ((pos = text.find(from, pos)) != std::string::npos) {
-        text.replace(pos, from.size(), to);
-        pos += to.size();
-    }
-}
-
-std::string trimScenePlateImagePathText(std::string text)
-{
-    auto isSpace = [](unsigned char ch) {
-        return std::isspace(ch) != 0;
-    };
-
-    // Windows の「パスのコピー」は "C:\...\image.JPG" の形で貼り付く。
-    // ImGui::InputText は改行を含む貼り付けを途中で切ることがあるため、
-    // 先頭だけ/末尾だけに引用符が残るケースも安全に除去する。
-    // ここでは存在確認へ渡す前に、引用符やCR/LFをすべて取り除く。
-    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
-    text.erase(std::remove(text.begin(), text.end(), '\n'), text.end());
-    scenePlateReplaceAll(text, "\xEF\xBB\xBF", ""); // UTF-8 BOM
-    scenePlateReplaceAll(text, "\"", "");
-    scenePlateReplaceAll(text, "'", "");
-    scenePlateReplaceAll(text, u8c(u8"“"), "");
-    scenePlateReplaceAll(text, u8c(u8"”"), "");
-    scenePlateReplaceAll(text, u8c(u8"‘"), "");
-    scenePlateReplaceAll(text, u8c(u8"’"), "");
-    // 日本語Windows環境では、バックスラッシュが円記号として入力/貼り付けされることがある。
-    // GetFileAttributesW へ渡す前に、半角/全角の円記号を通常のパス区切りへ寄せる。
-    scenePlateReplaceAll(text, u8c(u8"¥"), "\\");
-    scenePlateReplaceAll(text, u8c(u8"￥"), "\\");
-
-    while (!text.empty() && isSpace(static_cast<unsigned char>(text.front()))) {
-        text.erase(text.begin());
-    }
-    while (!text.empty() && isSpace(static_cast<unsigned char>(text.back()))) {
-        text.pop_back();
-    }
-
-    return text;
-}
-
-#if defined(_WIN32)
-std::wstring scenePlateWidePathFromUtf8OrAnsi(const std::string& cleanPathText)
-{
-    if (cleanPathText.empty()) {
-        return {};
-    }
-
-    auto convert = [&](UINT codePage, DWORD flags) -> std::wstring {
-        const int wideLength = MultiByteToWideChar(
-            codePage,
-            flags,
-            cleanPathText.c_str(),
-            static_cast<int>(cleanPathText.size()),
-            nullptr,
-            0);
-        if (wideLength <= 0) {
-            return {};
-        }
-
-        std::wstring widePath(static_cast<std::size_t>(wideLength), L'\0');
-        const int convertedLength = MultiByteToWideChar(
-            codePage,
-            flags,
-            cleanPathText.c_str(),
-            static_cast<int>(cleanPathText.size()),
-            widePath.data(),
-            wideLength);
-        if (convertedLength <= 0) {
-            return {};
-        }
-        return widePath;
-    };
-
-    if (std::wstring utf8Path = convert(CP_UTF8, MB_ERR_INVALID_CHARS); !utf8Path.empty()) {
-        return utf8Path;
-    }
-
-    return convert(CP_ACP, 0);
-}
-
-bool scenePlateWin32RegularFileExistsW(const std::wstring& widePath)
-{
-    if (widePath.empty()) {
-        return false;
-    }
-
-    const DWORD attributes = GetFileAttributesW(widePath.c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES) {
-        return false;
-    }
-    return (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
-}
-
-bool scenePlateWin32RegularFileExistsA(const std::string& pathText)
-{
-    if (pathText.empty()) {
-        return false;
-    }
-
-    const DWORD attributes = GetFileAttributesA(pathText.c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES) {
-        return false;
-    }
-    return (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
-}
-#endif
-
-std::filesystem::path scenePlatePathFromUtf8Text(const std::string& cleanPathText)
-{
-#if defined(_WIN32)
-    if (std::wstring widePath = scenePlateWidePathFromUtf8OrAnsi(cleanPathText); !widePath.empty()) {
-        return std::filesystem::path(widePath);
-    }
-    return std::filesystem::path(cleanPathText);
-#else
-    return std::filesystem::u8path(cleanPathText);
-#endif
-}
-
-bool scenePlateRegularFileExists(const std::filesystem::path& path)
-{
-    if (path.empty()) {
-        return false;
-    }
-#if defined(_WIN32)
-    std::error_code ec;
-    const std::wstring widePath = path.wstring();
-    if (scenePlateWin32RegularFileExistsW(widePath)) {
-        return true;
-    }
-
-    const std::string narrowPath = path.string();
-    if (scenePlateWin32RegularFileExistsA(narrowPath)) {
-        return true;
-    }
-
-    return std::filesystem::exists(path, ec) && !ec && std::filesystem::is_regular_file(path, ec) && !ec;
-#else
-    std::error_code ec;
-    return std::filesystem::exists(path, ec) && !ec && std::filesystem::is_regular_file(path, ec) && !ec;
-#endif
-}
-
 std::string scenePlateImageExtensionLower(const std::filesystem::path& path)
 {
     std::string extension = path.extension().string();
@@ -504,12 +347,11 @@ bool scenePlateImageExtensionSupported(const std::filesystem::path& path)
 
 std::filesystem::path scenePlateResolvedImagePath(const ScenePlate& plate, const std::filesystem::path& projectFolder)
 {
-    const std::string cleanPathText = trimScenePlateImagePathText(plate.imagePath);
-    if (cleanPathText.empty()) {
+    if (plate.imagePath.empty()) {
         return {};
     }
 
-    std::filesystem::path imagePath = scenePlatePathFromUtf8Text(cleanPathText);
+    std::filesystem::path imagePath(plate.imagePath);
     if (imagePath.is_absolute()) {
         return imagePath;
     }
@@ -521,24 +363,29 @@ std::filesystem::path scenePlateResolvedImagePath(const ScenePlate& plate, const
 
 std::string scenePlateImageFileNameLabel(const ScenePlate& plate)
 {
-    const std::string cleanPathText = trimScenePlateImagePathText(plate.imagePath);
-    if (cleanPathText.empty()) {
+    if (plate.imagePath.empty()) {
         return u8c(u8"未指定");
     }
-    const std::filesystem::path path = scenePlatePathFromUtf8Text(cleanPathText);
+    const std::filesystem::path path(plate.imagePath);
     const std::string filename = path.filename().string();
-    return filename.empty() ? cleanPathText : filename;
+    return filename.empty() ? plate.imagePath : filename;
 }
 
 std::string scenePlateImageStatusLabel(const ScenePlate& plate, const std::filesystem::path& projectFolder)
 {
-    if (trimScenePlateImagePathText(plate.imagePath).empty()) {
+    if (plate.imagePath.empty()) {
         return u8c(u8"画像未指定: ダミー表示");
     }
 
     const std::filesystem::path resolvedPath = scenePlateResolvedImagePath(plate, projectFolder);
-    if (!scenePlateRegularFileExists(resolvedPath)) {
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(resolvedPath, ec);
+    if (ec || !exists) {
         return std::string(u8c(u8"画像未検出: ")) + scenePlateImageFileNameLabel(plate);
+    }
+
+    if (!std::filesystem::is_regular_file(resolvedPath, ec) || ec) {
+        return std::string(u8c(u8"画像ファイルではありません: ")) + scenePlateImageFileNameLabel(plate);
     }
 
     if (!scenePlateImageExtensionSupported(resolvedPath)) {
@@ -551,16 +398,17 @@ std::string scenePlateImageStatusLabel(const ScenePlate& plate, const std::files
 
 std::string scenePlateImageDetailLabel(const ScenePlate& plate, const std::filesystem::path& projectFolder)
 {
-    if (trimScenePlateImagePathText(plate.imagePath).empty()) {
-        return u8c(u8"画像パスを指定すると、キャンバス仮表示で実画像表示を試します。");
+    if (plate.imagePath.empty()) {
+        return u8c(u8"画像パスを指定すると、次Stepの実画像表示へそのまま渡せます。");
     }
 
     const std::filesystem::path resolvedPath = scenePlateResolvedImagePath(plate, projectFolder);
-    if (!scenePlateRegularFileExists(resolvedPath)) {
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(resolvedPath, ec);
+    if (ec || !exists || !std::filesystem::is_regular_file(resolvedPath, ec) || ec) {
         return std::string(u8c(u8"解決パス: ")) + resolvedPath.string();
     }
 
-    std::error_code ec;
     const auto fileSize = std::filesystem::file_size(resolvedPath, ec);
     std::ostringstream stream;
     stream << u8c(u8"解決パス: ") << resolvedPath.string();
@@ -572,27 +420,18 @@ std::string scenePlateImageDetailLabel(const ScenePlate& plate, const std::files
 
 bool scenePlateMakeImagePathRelativeToProject(ScenePlate& plate, const std::filesystem::path& projectFolder)
 {
-    const std::string cleanPathText = trimScenePlateImagePathText(plate.imagePath);
-    if (cleanPathText.empty() || projectFolder.empty()) {
+    if (plate.imagePath.empty() || projectFolder.empty()) {
         return false;
     }
 
-    const std::filesystem::path imagePath = scenePlatePathFromUtf8Text(cleanPathText);
+    const std::filesystem::path imagePath(plate.imagePath);
     if (!imagePath.is_absolute()) {
-        if (plate.imagePath != cleanPathText) {
-            plate.imagePath = cleanPathText;
-            return true;
-        }
         return false;
     }
 
     std::error_code ec;
     const std::filesystem::path relativePath = std::filesystem::relative(imagePath, projectFolder, ec);
     if (ec || relativePath.empty()) {
-        if (plate.imagePath != cleanPathText) {
-            plate.imagePath = cleanPathText;
-            return true;
-        }
         return false;
     }
 
@@ -645,17 +484,15 @@ ImVec2 scenePlateRotatedPoint(float x, float y, float centerX, float centerY, fl
         centerY + dx * sinTheta + dy * cosTheta);
 }
 
-void drawScenePlatePreviewOnCanvas(const ScenePlate& plate,
-                                   int timelineFrame,
-                                   int canvasWidth,
-                                   int canvasHeight,
-                                   const std::filesystem::path& projectFolder,
-                                   SDL_Renderer* renderer,
-                                   ScenePlateImageCache& imageCache,
-                                   const CanvasView& view,
-                                   ImVec2 areaMin,
-                                   ImVec2 areaSize,
-                                   ImDrawList* drawList)
+void drawScenePlateDummyOnCanvas(const ScenePlate& plate,
+                                 int timelineFrame,
+                                 int canvasWidth,
+                                 int canvasHeight,
+                                 const std::filesystem::path& projectFolder,
+                                 const CanvasView& view,
+                                 ImVec2 areaMin,
+                                 ImVec2 areaSize,
+                                 ImDrawList* drawList)
 {
     if (drawList == nullptr || canvasWidth <= 0 || canvasHeight <= 0) {
         return;
@@ -695,84 +532,38 @@ void drawScenePlatePreviewOnCanvas(const ScenePlate& plate,
     }
 
     const ImVec2 screenCenter = view.canvasToScreen(centerX, centerY, areaMin, areaSize);
+    const ImU32 fillColor = scenePlateKindColor(plate.kind, scenePlateAlphaByte(opacity, 0.05f, 0.24f));
     const ImU32 borderColor = scenePlateOutputBorderColor(plate.outputMode, scenePlateAlphaByte(opacity, 0.42f, 0.95f));
     const float borderThickness = plate.outputMode == ScenePlateOutputMode::RenderOutput ? 3.0f : 2.0f;
 
-    std::string imageState = scenePlateImageStatusLabel(plate, projectFolder);
-    bool drewActualImage = false;
-    const std::filesystem::path resolvedImagePath = scenePlateResolvedImagePath(plate, projectFolder);
-    if (!plate.imagePath.empty() && scenePlateImageExtensionSupported(resolvedImagePath)) {
-        const ScenePlateImageCache::TextureResult& textureResult = imageCache.textureFor(renderer, resolvedImagePath);
-        imageState = textureResult.status.empty() ? imageState : textureResult.status;
-        if (textureResult.ok && textureResult.texture != nullptr) {
-            const int alpha = scenePlateAlphaByte(opacity, 0.0f, 1.0f);
-            const ImU32 tintColor = IM_COL32(255, 255, 255, alpha);
-            const ImTextureID textureId = reinterpret_cast<ImTextureID>(textureResult.texture);
-            if (std::abs(plate.transform.rotationDegrees) <= 0.001f) {
-                drawList->AddImage(
-                    textureId,
-                    screenCorners[0],
-                    screenCorners[2],
-                    ImVec2(0.0f, 0.0f),
-                    ImVec2(1.0f, 1.0f),
-                    tintColor);
-            } else {
-                drawList->AddImageQuad(
-                    textureId,
-                    screenCorners[0],
-                    screenCorners[1],
-                    screenCorners[2],
-                    screenCorners[3],
-                    ImVec2(0.0f, 0.0f),
-                    ImVec2(1.0f, 0.0f),
-                    ImVec2(1.0f, 1.0f),
-                    ImVec2(0.0f, 1.0f),
-                    tintColor);
-            }
-            drewActualImage = true;
-        }
-    }
-
-    if (!drewActualImage) {
-        const ImU32 fillColor = scenePlateKindColor(plate.kind, scenePlateAlphaByte(opacity, 0.05f, 0.24f));
-        drawList->AddQuadFilled(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], fillColor);
-    }
-
+    drawList->AddQuadFilled(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], fillColor);
     drawList->AddQuad(screenCorners[0], screenCorners[1], screenCorners[2], screenCorners[3], borderColor, borderThickness);
 
     const std::string title = plate.displayName.empty() ? plate.id : plate.displayName;
     const std::string label = title + "\n" +
         scenePlateKindJapaneseLabel(plate.kind) + std::string(" / ") +
         scenePlateOutputModeJapaneseLabel(plate.outputMode) + "\n" +
-        imageState;
+        scenePlateImageStatusLabel(plate, projectFolder);
     const ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
     const ImVec2 textMin(screenCenter.x - textSize.x * 0.5f - 6.0f,
                          screenCenter.y - textSize.y * 0.5f - 4.0f);
     const ImVec2 textMax(textMin.x + textSize.x + 12.0f,
                          textMin.y + textSize.y + 8.0f);
 
-    const int labelBackgroundAlpha = drewActualImage
-        ? scenePlateAlphaByte(opacity, 0.36f, 0.72f)
-        : scenePlateAlphaByte(opacity, 0.58f, 0.86f);
-    drawList->AddRectFilled(textMin, textMax, IM_COL32(255, 255, 255, labelBackgroundAlpha), 4.0f);
+    drawList->AddRectFilled(textMin, textMax, IM_COL32(255, 255, 255, scenePlateAlphaByte(opacity, 0.58f, 0.86f)), 4.0f);
     drawList->AddRect(textMin, textMax, borderColor, 4.0f);
-    drawList->AddText(
-        ImVec2(textMin.x + 6.0f, textMin.y + 4.0f),
-        IM_COL32(25, 25, 25, scenePlateAlphaByte(opacity, 0.72f, 1.0f)),
-        label.c_str());
+    drawList->AddText(ImVec2(textMin.x + 6.0f, textMin.y + 4.0f), IM_COL32(25, 25, 25, scenePlateAlphaByte(opacity, 0.72f, 1.0f)), label.c_str());
 }
 
-void drawScenePlatePreviewStackOnCanvas(const ScenePlateStack& stack,
-                                        int timelineFrame,
-                                        int canvasWidth,
-                                        int canvasHeight,
-                                        const std::filesystem::path& projectFolder,
-                                        SDL_Renderer* renderer,
-                                        ScenePlateImageCache& imageCache,
-                                        const CanvasView& view,
-                                        ImVec2 areaMin,
-                                        ImVec2 areaSize,
-                                        ImDrawList* drawList)
+void drawScenePlateDummyStackOnCanvas(const ScenePlateStack& stack,
+                                      int timelineFrame,
+                                      int canvasWidth,
+                                      int canvasHeight,
+                                      const std::filesystem::path& projectFolder,
+                                      const CanvasView& view,
+                                      ImVec2 areaMin,
+                                      ImVec2 areaSize,
+                                      ImDrawList* drawList)
 {
     if (drawList == nullptr || stack.plates.empty()) {
         return;
@@ -784,18 +575,7 @@ void drawScenePlatePreviewStackOnCanvas(const ScenePlateStack& stack,
     const ImVec2 areaMax(areaMin.x + areaSize.x, areaMin.y + areaSize.y);
     drawList->PushClipRect(areaMin, areaMax, true);
     for (const ScenePlate& plate : sortedStack.plates) {
-        drawScenePlatePreviewOnCanvas(
-            plate,
-            timelineFrame,
-            canvasWidth,
-            canvasHeight,
-            projectFolder,
-            renderer,
-            imageCache,
-            view,
-            areaMin,
-            areaSize,
-            drawList);
+        drawScenePlateDummyOnCanvas(plate, timelineFrame, canvasWidth, canvasHeight, projectFolder, view, areaMin, areaSize, drawList);
     }
     drawList->PopClipRect();
 }
@@ -1967,10 +1747,10 @@ void App::drawDrawingMode()
         ImGui::End();
     }
 
-    // Timesheet Rebuild Step 7.15:
+    // Timesheet Rebuild Step 7.13:
     // Scene Plate をセル列やタイムシート列へ混ぜず、一覧UIで操作し、
-    // 画像パスが有効な場合は実画像をキャンバス背景として表示する。
-    // PNG/MP4出力反映は後続Stepへ分ける。
+    // 画像読み込み前のキャンバス仮表示まで接続する。
+    // 実画像読み込みとPNG/MP4出力反映は後続Stepへ分ける。
     {
         const int currentT = std::max(1, timesheetPanelState_.selectedTimelineFrame + 1);
         const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
@@ -1981,9 +1761,9 @@ void App::drawDrawingMode()
             u8c(u8"Scene Plate管理##ScenePlateManager"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 7.15: Scene Plate 実画像キャンバス表示"));
+        ImGui::TextUnformatted(u8c(u8"Step 7.14: Scene Plate 画像パス指定"));
         ImGui::TextDisabled(u8c(u8"絵コンテ/レイアウト/仮背景/完成背景をセル列とは別に管理します。"));
-        ImGui::TextDisabled(u8c(u8"画像パスが有効なら実画像をキャンバスに表示します。失敗時はダミー矩形に戻します。"));
+        ImGui::TextDisabled(u8c(u8"画像パス、存在確認、対応拡張子を管理します。実画像描画は次Stepへ分けます。"));
         if (ImGui::Checkbox(u8c(u8"キャンバス仮表示##ScenePlateCanvasPreviewEnabled"), &scenePlateCanvasPreviewEnabled_)) {
             lastMessage_ = scenePlateCanvasPreviewEnabled_
                 ? "scene plate canvas preview enabled"
@@ -2200,47 +1980,18 @@ void App::drawDrawingMode()
             }
 
             ImGui::SeparatorText(u8c(u8"画像パス"));
-            if (inputScenePlateText(u8c(u8"画像パス##ScenePlateImagePath"), selectedPlate.imagePath)) {
-                const std::string cleanPathText = trimScenePlateImagePathText(selectedPlate.imagePath);
-                if (selectedPlate.imagePath != cleanPathText) {
-                    selectedPlate.imagePath = cleanPathText;
-                }
-                scenePlateImageCache_.clear();
-                changed = true;
-            }
+            changed = inputScenePlateText(u8c(u8"画像パス##ScenePlateImagePath"), selectedPlate.imagePath) || changed;
             const std::string imageStatus = scenePlateImageStatusLabel(selectedPlate, projectFolder);
             const std::string imageDetail = scenePlateImageDetailLabel(selectedPlate, projectFolder);
-            const std::string cleanImagePathText = trimScenePlateImagePathText(selectedPlate.imagePath);
             ImGui::TextWrapped(u8c(u8"状態: %s"), imageStatus.c_str());
-            ImGui::TextWrapped(u8c(u8"正規化後: %s"), cleanImagePathText.empty() ? u8c(u8"未指定") : cleanImagePathText.c_str());
             ImGui::TextWrapped(u8c(u8"%s"), imageDetail.c_str());
-            const std::filesystem::path selectedResolvedImagePath = scenePlateResolvedImagePath(selectedPlate, projectFolder);
-#if defined(_WIN32)
-            if (!cleanImagePathText.empty()) {
-                const bool directAnsiExists = scenePlateWin32RegularFileExistsA(cleanImagePathText);
-                const bool resolvedExists = scenePlateRegularFileExists(selectedResolvedImagePath);
-                ImGui::TextDisabled(
-                    u8c(u8"Win32確認: 入力=%s / 解決=%s"),
-                    directAnsiExists ? "OK" : "NG",
-                    resolvedExists ? "OK" : "NG");
-            }
-#endif
-            if (!selectedPlate.imagePath.empty() && scenePlateImageExtensionSupported(selectedResolvedImagePath)) {
-                const ScenePlateImageCache::TextureResult& textureResult = scenePlateImageCache_.textureFor(renderer_, selectedResolvedImagePath);
-                ImGui::TextWrapped(u8c(u8"読込: %s"), textureResult.status.empty() ? u8c(u8"未実行") : textureResult.status.c_str());
-                if (textureResult.ok) {
-                    ImGui::Text(u8c(u8"画像サイズ: %d x %d"), textureResult.width, textureResult.height);
-                }
-            }
-            ImGui::TextDisabled(u8c(u8"対応候補: .png / .jpg / .jpeg / .bmp。WebPはWindows環境のWIC対応に依存します。"));
+            ImGui::TextDisabled(u8c(u8"対応候補: .png / .jpg / .jpeg / .bmp / .webp。まだ実画像は描画せず、次Stepでこのパスを使います。"));
             if (ImGui::SmallButton(u8c(u8"画像パス確認##ScenePlateCheckImagePath"))) {
-                scenePlateImageCache_.clear();
                 lastMessage_ = imageStatus;
             }
             ImGui::SameLine();
             if (ImGui::SmallButton(u8c(u8"プロジェクト相対パス化##ScenePlateRelativeImagePath"))) {
                 if (scenePlateMakeImagePathRelativeToProject(selectedPlate, projectFolder)) {
-                    scenePlateImageCache_.clear();
                     changed = true;
                     lastMessage_ = "scene plate image path made relative";
                 } else {
@@ -2250,15 +2001,8 @@ void App::drawDrawingMode()
             ImGui::SameLine();
             if (ImGui::SmallButton(u8c(u8"画像パス消去##ScenePlateClearImagePath"))) {
                 selectedPlate.imagePath.clear();
-                scenePlateImageCache_.clear();
                 changed = true;
                 lastMessage_ = "scene plate image path cleared";
-            }
-
-            ImGui::SameLine();
-            if (ImGui::SmallButton(u8c(u8"画像キャッシュ再読込##ScenePlateReloadImageCache"))) {
-                scenePlateImageCache_.clear();
-                lastMessage_ = "scene plate image cache cleared";
             }
 
             const bool canMoveUp = selectedScenePlateIndex_ > 0;
@@ -2558,22 +2302,20 @@ void App::drawCanvasArea(float rightWidth)
     const ImU32 background = IM_COL32(255, 255, 255, 255);
     drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, areaMin.y + areaSize.y), background);
 
-    // Timesheet Rebuild Step 7.15:
-    // Scene Plateの画像パスから実画像を読み込み、キャンバス背景として表示する。
-    // 読み込み失敗時は従来どおりダミー矩形へフォールバックする。
+    // Timesheet Rebuild Step 7.14:
+    // Scene Plateの画像パス状態もダミー矩形ラベルへ表示する。
+    // 実画像描画は次Stepへ分け、ここではパス指定と存在確認までに留める。
     const int scenePlateTimelineFrame = (countTimesheetEntries(workingTimesheet_) > 0 && !isPlayingFrames_)
         ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
         : activeFrameIndex_ + 1;
     if (scenePlateCanvasPreviewEnabled_) {
         const std::filesystem::path scenePlateProjectFolder = appio::absolutePath(exportState_.projectFolder);
-        drawScenePlatePreviewStackOnCanvas(
+        drawScenePlateDummyStackOnCanvas(
             workingScenePlates_,
             scenePlateTimelineFrame,
             project_.canvas.width,
             project_.canvas.height,
             scenePlateProjectFolder,
-            renderer_,
-            scenePlateImageCache_,
             canvasView_,
             areaMin,
             areaSize,

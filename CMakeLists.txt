@@ -175,7 +175,6 @@ add_executable(perapera_anime_maker
     src/ui/AppProjectIO.cpp
     src/ui/AppPaletteIO.cpp
     src/ui/AppProjectIOSupport.cpp
-    src/ui/ScenePlateImageCache.cpp
     src/ui/CanvasView.cpp
     src/ui/panels/BrushPanel.cpp
     src/ui/panels/CellPanel.cpp
@@ -197,10 +196,6 @@ target_link_libraries(perapera_anime_maker PRIVATE
     imgui_sdl3_renderer
     nlohmann_json::nlohmann_json
 )
-
-if (WIN32)
-    target_link_libraries(perapera_anime_maker PRIVATE ole32 windowscodecs)
-endif()
 
 if (PERAPERA_LIBMYPAINT_AVAILABLE)
     target_compile_definitions(perapera_anime_maker PRIVATE PERAPERA_HAS_LIBMYPAINT=1)
