@@ -172,6 +172,7 @@ add_executable(perapera_anime_maker
     src/ui/panels/CellPanel.cpp
     src/ui/panels/TimesheetPanel.cpp
     src/ui/panels/TimesheetPanelBridge.cpp
+  src/ui/panels/ProjectStructureStatusPanel.cpp
     src/ui/panels/ColorPanel.cpp
     src/ui/panels/LayerPanel.cpp
     src/ui/panels/FramePanel.cpp
@@ -260,10 +261,16 @@ add_executable(perapera_timesheet_inbetween_resolver_selftest
 )
 target_include_directories(perapera_timesheet_inbetween_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+
+add_executable(perapera_project_active_cut_bridge_selftest
+    tools/project_active_cut_bridge_selftest.cpp
+)
+target_include_directories(perapera_project_active_cut_bridge_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_executable(perapera_timesheet_panel_bridge_selftest
     tools/timesheet_panel_bridge_selftest.cpp
     src/core/Timesheet.cpp
     src/ui/panels/TimesheetPanelBridge.cpp
+  src/ui/panels/ProjectStructureStatusPanel.cpp
 )
 target_include_directories(perapera_timesheet_panel_bridge_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -296,6 +303,7 @@ if (MSVC)
     target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_project_active_cut_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
 
  target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
@@ -307,6 +315,7 @@ else()
     target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_project_active_cut_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
 
  target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -329,4 +338,14 @@ if (PERAPERA_LIBMYPAINT_DIRECT AND EXISTS "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}")
     )
 endif()
 
+# final_spec_v6 Phase 2 Step 1-c: Project / Scene / Cut status selftest.
+add_executable(perapera_project_structure_status_selftest
+  tools/project_structure_status_selftest.cpp
+)
+target_include_directories(perapera_project_structure_status_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if (MSVC)
+  target_compile_options(perapera_project_structure_status_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+  target_compile_options(perapera_project_structure_status_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 

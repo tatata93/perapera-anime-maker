@@ -1818,3 +1818,50 @@ final_spec_v6.md
 
 ### 次にやること
 - Phase 2 Step 1-b として、既存 `Project.cells` を active Cut 相当として扱う互換ブリッジを追加する。
+
+## 2026-07-01 - final_spec_v6 Phase 2 Step 1-b: Project active Cut bridge
+
+- Added `src/core/ProjectActiveCutBridge.h` as a migration bridge.
+- Existing `Project.cells` and `Project.cellOrder` are treated as the temporary active Cut cell set.
+- Added `tools/project_active_cut_bridge_selftest.cpp` to verify the bridge.
+- Did not change Project save/load format.
+- Did not revive Scene Plate / scene panel code.
+## 2026-07-02 - final_spec_v6 Phase 2 Step 1-c: Project structure status UI
+
+### 作業位置
+- 最上位仕様書: `final_spec_v6.md`
+- フェーズ: Phase 2
+- 作業: Step 1-c
+- 名称: 既存UIを壊さず current Scene / current Cut 表示を足す
+
+### 作業ツリー
+```text
+final_spec_v6.md
+└─ Phase 2: ファイル構成改定 + セル概念の整理
+   ├─ Phase 2-pre: 通常セル + Timesheet 管理方針を実装へ接続する（完了）
+   ├─ Phase 2 Step 1: Project -> Scene -> Cut -> Cell 構造の最小導入
+   │  ├─ Step 1-a: Scene / active Cut モデルの最小定義（完了）
+   │  ├─ Step 1-b: 既存 Project.cells を active Cut 相当として扱うブリッジ（完了）
+   │  ├─ Step 1-c: 既存UIを壊さず current Scene / current Cut 表示を足す（今回）
+   │  └─ Step 1-d: Cut 所属 Timesheet と通常 Cell category の関係確認
+   ├─ Phase 2 Step 2: scenes/scene_NNN/cuts/cut_NNN/cells 保存移行
+   ├─ Phase 2 Step 3: Cut単位の Timesheet / Cell / Camera 接続
+   └─ Phase 3-pre: 簡易撮影 / セル配置ウィンドウ
+```
+
+### 実施内容
+- `src/core/ProjectStructureStatus.h` を追加した。
+- `src/ui/panels/ProjectStructureStatusPanel.h/.cpp` を追加した。
+- 既存のタイムシート補助UI内に Project / Scene / Cut ステータス表示を最小追加する適用処理を用意した。
+- `tools/project_structure_status_selftest.cpp` を追加した。
+- `perapera_project_structure_status_selftest` CMake target を追加する適用処理を用意した。
+
+### 800行超ファイルへの対応
+- `src/ui/AppDrawingMode.cpp` は 800 行を大きく超えるため、新しい表示ロジックは追加せず、include と 1 回の呼び出しだけに留めた。
+- 実処理は小さい新規ファイルへ分割した。
+
+### 未完了
+- Project保存形式変更はまだ行っていない。
+- `Project.h` へ `scenes` はまだ追加していない。
+- Cut選択UIはまだ追加していない。
+- シーン管理パネルは追加しない。

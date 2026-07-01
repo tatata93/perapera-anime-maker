@@ -624,3 +624,16 @@ reference
 - Backgrounds, layouts, BOOK, effects, and references remain normal Cells/categories timed by the Timesheet.
 - The current step adds only a core model and selftest. It does not add UI, project-save migration, or a scene-management panel.
 - Existing `Project.cells` remains untouched until Phase 2 Step 1-b bridge work.
+
+## 2026-07-01 - final_spec_v6 Phase 2 Step 1-b decision
+
+- Phase 2 migration will proceed through small compatibility bridges before changing the save layout.
+- `Project.cells` remains the current storage in this step, but code can now access it through an active Cut bridge.
+- This avoids a large ProjectIO/UI rewrite while keeping the project aligned with the future `Project -> Scene -> Cut -> Cell` model.
+## 2026-07-02 - final_spec_v6 Phase 2 Step 1-c decision
+
+- Phase 2 Step 1-c adds only a small current Project / Scene / Cut status block inside the existing drawing workflow UI.
+- This is not a scene-management panel.
+- The current compatibility Scene/Cut are displayed as `scene_001` / `cut_001` until real Project -> Scene -> Cut ownership is introduced.
+- Existing `Project.cells` remains the current active Cut cell set through the Phase 2 Step 1-b bridge.
+- Files over 800 lines should not receive new feature bulk by default. For this step, `AppDrawingMode.cpp` is intentionally limited to an include and a function call; the real logic is split into `ProjectStructureStatus` and `ProjectStructureStatusPanel`.

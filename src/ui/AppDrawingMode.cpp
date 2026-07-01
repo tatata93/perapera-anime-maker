@@ -1,4 +1,4 @@
-// このファイルの役割:
+﻿// このファイルの役割:
 #include "ui/App.h"
 #include <algorithm>
 #include <cmath>
@@ -26,6 +26,7 @@
 #include "ui/panels/LayerPanel.h"
 #include "ui/panels/TimelinePanel.h"
 #include "ui/panels/TimesheetPanel.h"
+#include "ui/panels/ProjectStructureStatusPanel.h"
 #include "ui/panels/TimesheetPanelBridge.h"
 namespace perapera {
 namespace {
@@ -684,7 +685,12 @@ void App::drawDrawingMode()
             u8c(u8"タイムシート補助##FormalTimesheetAssistant"),
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse);
-        ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
+        
+  // final_spec_v6 Phase 2 Step 1-c: show current compatibility Scene/Cut position without a scene-management panel.
+  ::perapera::ui::drawProjectStructureStatusPanel(project_, workingTimesheet_);
+  ImGui::Separator();
+
+ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
         ImGui::TextDisabled(u8c(u8"再生 / 保存 / T解決結果 / 原画間検出 / 中割作成をここへ集約します。"));
         ImGui::SeparatorText(u8c(u8"T再生 / 作画対象"));
         ImGui::Text(
@@ -1914,4 +1920,5 @@ void App::removeIntersectingStrokes(const Stroke& eraserStroke)
     }
 }
 } // namespace perapera
+
 
