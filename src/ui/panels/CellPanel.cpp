@@ -1,4 +1,4 @@
-// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.8d fixes opacity percent editing while keeping compact selected-cell controls.
+﻿// This file's role: compact Cell management UI for selecting, creating, duplicating, editing, deleting, ordering, and displaying cells. v1.8d fixes opacity percent editing while keeping compact selected-cell controls.
 #include "ui/panels/CellPanel.h"
 
 #include <algorithm>
@@ -553,6 +553,47 @@ void drawAddCellPopup(Project& project, CellPanelResult& result)
     static char nameBuffer[128] = "";
     static int categoryIndex = 0;
 
+  // Phase2Pre Step T2-c presets: create common cell categories without opening the generic Add Cell dialog.
+  auto createPresetCell = [&](const char* defaultNamePrefix, const char* categoryValue) {
+    const int optionIndex = categoryIndexFromValue(categoryValue);
+    const std::string defaultName = std::string(defaultNamePrefix) + " " + std::to_string(static_cast<int>(project.cells.size()) + 1);
+    Cell cell = makeNewCell(project, defaultName.c_str(), optionIndex);
+    const std::string newCellId = cell.id;
+    project.cells.push_back(std::move(cell));
+    syncCellOrder(project, newCellId);
+    rebuildCellOrderAndZ(project);
+    result.selectedCellIndex = static_cast<int>(project.cells.size()) - 1;
+    result.selectionChanged = true;
+    result.displayChanged = true;
+    result.projectStructureChanged = true;
+    gSoloCellIndex = result.selectedCellIndex;
+  };
+
+  auto presetButton = [&](const char* buttonLabel, const char* defaultNamePrefix, const char* categoryValue, const ImVec2& size) {
+    if (ImGui::Button(buttonLabel, size)) {
+      createPresetCell(defaultNamePrefix, categoryValue);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Create %s cell", categoryValue);
+    }
+  };
+
+  ImGui::TextDisabled("Preset Cells");
+  const float presetGap = ImGui::GetStyle().ItemSpacing.x;
+  const float presetWidth = ImGui::GetContentRegionAvail().x;
+  const float presetThird = std::max(72.0f, (presetWidth - presetGap * 2.0f) / 3.0f);
+  presetButton("+ Char", "Character", "character", ImVec2(presetThird, 0.0f));
+  ImGui::SameLine();
+  presetButton("+ BG", "Background", "background", ImVec2(presetThird, 0.0f));
+  ImGui::SameLine();
+  presetButton("+ Layout", "Layout", "layout", ImVec2(presetThird, 0.0f));
+  presetButton("+ BOOK", "BOOK", "book", ImVec2(presetThird, 0.0f));
+  ImGui::SameLine();
+  presetButton("+ FX", "Effect", "effect", ImVec2(presetThird, 0.0f));
+  ImGui::SameLine();
+  presetButton("+ Ref", "Reference", "reference", ImVec2(presetThird, 0.0f));
+  ImGui::Separator();
+
     if (ImGui::Button("+ Add Cell", ImVec2(-1.0f, 0.0f))) {
         const std::string defaultName = "Cell " + std::to_string(static_cast<int>(project.cells.size()) + 1);
         std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", defaultName.c_str());
@@ -907,3 +948,4 @@ CellPanelResult drawCellPanel(Project& project, int activeCellIndex)
 }
 
 } // namespace perapera::ui
+

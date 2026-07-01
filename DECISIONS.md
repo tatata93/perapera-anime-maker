@@ -591,3 +591,25 @@ reference
 - `camera_guide` と `other` は今回の正式候補から外す。カメラや配置は、後続の撮影モード / 簡易撮影パネルで扱う。
 - Timesheet は将来の単体表示・単体印刷を見据え、概念上は Cut に属しつつ、物理保存は分離ファイルを許容する。
 ```
+## Phase 2-pre Step T2-c: preset cell creation buttons
+
+`final_spec_v6.md` Phase 2 前整理として、背景・レイアウト・BOOK・エフェクト・参考素材を Scene Plate / シーンパネルではなく通常 Cell として作る導線を CellPanel に追加する。
+
+決定:
+- `+ Add Cell` は汎用作成として残す。
+- 追加で `+ Char`, `+ BG`, `+ Layout`, `+ BOOK`, `+ FX`, `+ Ref` のプリセットボタンを置く。
+- これらは通常 Cell を作成し、category だけを自動設定する。
+- 背景・レイアウト・BOOK は今後 Timesheet のセル列としてタイミング管理する。
+- Timesheet列への自動追加・同期は Step T2-d で別作業として扱う。
+- セルの移動・拡大・回転・透明度・Z順は、Scene Plate 専用ではなく、後続の撮影モード / 簡易撮影UIで扱う。
+## Phase 2-pre Step T2-c: preset cell creation buttons
+
+`final_spec_v6.md` Phase 2 前整理として、背景・レイアウト・BOOK・エフェクト・参考素材を Scene Plate / シーンパネルではなく通常 Cell として作る導線を CellPanel に追加する。
+
+決定:
+- `+ Add Cell` は汎用作成として残す。
+- 追加で `+ Char`, `+ BG`, `+ Layout`, `+ BOOK`, `+ FX`, `+ Ref` のプリセットボタンを置く。
+- これらは通常 Cell を作成し、category だけを自動設定する。
+- 背景・レイアウト・BOOK は今後 Timesheet のセル列としてタイミング管理する。
+- Timesheet列への自動追加・同期は Step T2-d で別作業として扱う。
+- セルの移動・拡大・回転・透明度・Z順は、Scene Plate 専用ではなく、後続の撮影モード / 簡易撮影UIで扱う。
