@@ -1779,3 +1779,42 @@ final_spec_v6.md
 - CellPanel から Timesheet編集UIを直接持たせない。
 - Timesheet列の自動追加UIはまだ行わない。
 - Project -> Scene -> Cut -> Cell の保存移行は Phase 2 Step 1 以降で扱う。
+## 2026-07-01 - Phase 2 Step 1-a: Scene / active Cut minimal model
+
+### 作業位置
+- 最上位仕様書: `final_spec_v6.md`
+- フェーズ: Phase 2
+- 作業: Step 1-a
+- 名称: Scene / active Cut モデルの最小定義
+
+### 作業ツリー
+```text
+final_spec_v6.md
+└─ Phase 2: ファイル構成改定 + セル概念の整理
+   ├─ Phase 2-pre: 本格移行前の整理
+   │  └─ Step T2: 通常セル + Timesheet 管理方針を実装へ接続する（完了）
+   ├─ Phase 2 Step 1: Project -> Scene -> Cut -> Cell 構造の最小導入
+   │  ├─ Step 1-a: Scene / active Cut モデルの最小定義（今回）
+   │  ├─ Step 1-b: 既存 Project.cells を active Cut 相当として扱うブリッジ
+   │  ├─ Step 1-c: 既存UIを壊さず current Scene / current Cut 表示を足す
+   │  └─ Step 1-d: Cut 所属 Timesheet と通常 Cell category の関係を確認する
+   ├─ Phase 2 Step 2: scenes/scene_NNN/cuts/cut_NNN/cells 保存移行
+   ├─ Phase 2 Step 3: Cut単位の Timesheet / Cell / Camera 接続
+   └─ Phase 3-pre: 簡易撮影 / セル配置ウィンドウ
+```
+
+### 実施内容
+- `src/core/Scene.h` を追加した。
+- `perapera::Scene` に `id`, `name`, `memo`, `cuts`, `cutOrder` を定義した。
+- `activeCut(scene, index)` と `resolvedCutOrder(scene)` を追加した。
+- `tools/scene_cut_model_selftest.cpp` を追加した。
+- `perapera_scene_cut_model_selftest` CMake target を追加する適用処理を用意した。
+
+### 未完了
+- `Project` 直下 `cells` の移動はまだ行っていない。
+- `ProjectIO.cpp` の保存形式変更はまだ行っていない。
+- UIのシーン管理パネルは追加しない。
+- `scenes/scene_NNN/cuts/cut_NNN/cells/` 保存移行は Phase 2 Step 2 で扱う。
+
+### 次にやること
+- Phase 2 Step 1-b として、既存 `Project.cells` を active Cut 相当として扱う互換ブリッジを追加する。

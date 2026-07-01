@@ -617,3 +617,10 @@ reference
 日付: 2026-07-01
 理由: 背景、レイアウト、BOOK、エフェクト、参考素材を通常 Cell として扱い、タイミングを Timesheet で管理する方針を崩さないため。
 影響: `character / background / layout / book / effect / reference` はすべて Timesheet のセル列対象であり、category によって Timesheet track から除外しない。CellPanel はセル管理だけを担当し、Timesheet編集UIは TimesheetPanel / TimesheetPanelBridge 側に残す。Phase 2 Step 1 以降の Project -> Scene -> Cut -> Cell 移行でもこの関係を維持する。
+## 2026-07-01 final_spec_v6 Phase 2 Step 1-a decision: Scene is data model, not Scene Plate panel
+
+- `Scene` is introduced as a Phase 2 data model for `Project -> Scene -> Cut -> Cell`.
+- This does not restore the removed Scene Plate / scene panel path.
+- Backgrounds, layouts, BOOK, effects, and references remain normal Cells/categories timed by the Timesheet.
+- The current step adds only a core model and selftest. It does not add UI, project-save migration, or a scene-management panel.
+- Existing `Project.cells` remains untouched until Phase 2 Step 1-b bridge work.

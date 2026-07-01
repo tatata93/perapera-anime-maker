@@ -274,6 +274,19 @@ add_executable(perapera_cell_timesheet_alignment_selftest
 )
 
 target_include_directories(perapera_cell_timesheet_alignment_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# final_spec_v6 Phase 2 Step 1-a: Scene / active Cut minimal model selftest.
+add_executable(perapera_scene_cut_model_selftest
+    tools/scene_cut_model_selftest.cpp
+    src/core/Timesheet.cpp
+)
+target_include_directories(perapera_scene_cut_model_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if (MSVC)
+    target_compile_options(perapera_scene_cut_model_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_scene_cut_model_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 if (MSVC)
     target_compile_options(perapera_anime_maker PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
@@ -315,4 +328,5 @@ if (PERAPERA_LIBMYPAINT_DIRECT AND EXISTS "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}")
             $<TARGET_FILE_DIR:perapera_anime_maker>
     )
 endif()
+
 
