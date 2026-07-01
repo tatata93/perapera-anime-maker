@@ -1744,3 +1744,38 @@ final_spec_v6.md
 - Timesheet列との自動同期は今回まだ行わない。次の Step T2-d で扱う。
 - Project -> Scene -> Cut -> Cell の保存構造移行はまだ行わない。
 - セルの移動・拡大・回転UIは撮影モード側の後続作業で扱う。
+## 2026-07-01 - Phase 2-pre Step T2-d: Cell category and Timesheet track alignment selftest
+
+### 作業位置
+- 最上位仕様書: `final_spec_v6.md`
+- フェーズ: Phase 2 前整理
+- 作業: Step T2-d 派生作業
+- 名称: Timesheet列と Cell category の関係を崩さない selftest 追加
+
+### 作業ツリー
+```text
+final_spec_v6.md
+└─ Phase 2: ファイル構成改定 + セル概念の整理
+   ├─ Phase 2-pre: 本格移行前の整理
+   │  └─ Step T2: 通常セル + Timesheet 管理方針を実装へ接続する
+   │     ├─ T2-a: Cell category の正式値を決める（完了）
+   │     ├─ T2-b: CellPanel に種別表示・種別変更UIを入れる（完了）
+   │     ├─ T2-c: 背景 / レイアウト / BOOK セル作成導線を入れる（完了）
+   │     └─ T2-d: Timesheet列と Cell category の関係を崩さない（今回）
+   ├─ Phase 2 Step 1: Project -> Scene -> Cut -> Cell 構造の最小導入
+   ├─ Phase 2 Step 2: scenes/scene_NNN/cuts/cut_NNN/cells 保存移行
+   ├─ Phase 2 Step 3: Cut単位の Timesheet / Cell / Camera 接続
+   └─ Phase 3-pre: 簡易撮影 / セル配置ウィンドウ
+```
+
+### 実施内容
+- `tools/cell_timesheet_alignment_selftest.cpp` を追加した。
+- `perapera_cell_timesheet_alignment_selftest` CMake target を追加する適用処理を用意した。
+- `character / background / layout / book / effect / reference` の 6種類がすべて通常 Cell として Timesheet track に入ることを検査する。
+- `ensureTimesheetTrack` が既存 BG track を重複作成しないことを検査する。
+- `docs/final_spec_v6_phase2pre_step_t2d_cell_timesheet_alignment_policy.md` を追加した。
+
+### 注意
+- CellPanel から Timesheet編集UIを直接持たせない。
+- Timesheet列の自動追加UIはまだ行わない。
+- Project -> Scene -> Cut -> Cell の保存移行は Phase 2 Step 1 以降で扱う。

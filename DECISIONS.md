@@ -613,3 +613,7 @@ reference
 - 背景・レイアウト・BOOK は今後 Timesheet のセル列としてタイミング管理する。
 - Timesheet列への自動追加・同期は Step T2-d で別作業として扱う。
 - セルの移動・拡大・回転・透明度・Z順は、Scene Plate 専用ではなく、後続の撮影モード / 簡易撮影UIで扱う。
+## Decision: final_spec_v6 Phase 2-pre Step T2-d keeps all cell categories as Timesheet-track eligible
+日付: 2026-07-01
+理由: 背景、レイアウト、BOOK、エフェクト、参考素材を通常 Cell として扱い、タイミングを Timesheet で管理する方針を崩さないため。
+影響: `character / background / layout / book / effect / reference` はすべて Timesheet のセル列対象であり、category によって Timesheet track から除外しない。CellPanel はセル管理だけを担当し、Timesheet編集UIは TimesheetPanel / TimesheetPanelBridge 側に残す。Phase 2 Step 1 以降の Project -> Scene -> Cut -> Cell 移行でもこの関係を維持する。

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26)
+﻿cmake_minimum_required(VERSION 3.26)
 
 project(
     perapera_anime_maker
@@ -267,6 +267,13 @@ add_executable(perapera_timesheet_panel_bridge_selftest
 )
 target_include_directories(perapera_timesheet_panel_bridge_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+
+add_executable(perapera_cell_timesheet_alignment_selftest
+    tools/cell_timesheet_alignment_selftest.cpp
+    src/core/Timesheet.cpp
+)
+
+target_include_directories(perapera_cell_timesheet_alignment_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if (MSVC)
     target_compile_options(perapera_anime_maker PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
@@ -276,6 +283,8 @@ if (MSVC)
     target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
+
+ target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
@@ -285,6 +294,8 @@ else()
     target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
+
+ target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # WindowsでSDL3.dllをexe横にコピーする。
@@ -304,3 +315,4 @@ if (PERAPERA_LIBMYPAINT_DIRECT AND EXISTS "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}")
             $<TARGET_FILE_DIR:perapera_anime_maker>
     )
 endif()
+
