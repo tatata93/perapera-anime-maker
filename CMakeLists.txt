@@ -363,3 +363,40 @@ else()
     target_compile_options(perapera_project_layout_paths_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# final_spec_v6 Phase 2 Step 2-b: scene.json / cut.json minimal save selftest.
+add_executable(perapera_scene_cut_layout_io_selftest
+    tools/scene_cut_layout_io_selftest.cpp
+    src/io/SceneCutLayoutIO.cpp
+    src/io/CutIO.cpp
+    src/io/TimesheetIO.cpp
+    src/core/Timesheet.cpp
+)
+target_include_directories(perapera_scene_cut_layout_io_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_scene_cut_layout_io_selftest PRIVATE nlohmann_json::nlohmann_json)
+if (MSVC)
+    target_compile_options(perapera_scene_cut_layout_io_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_scene_cut_layout_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+
+# PERAPERA_PHASE2_STEP2C_BEGIN
+# final_spec_v6 Phase 2 Step 2-c: cell layout minimal save.
+target_sources(perapera_anime_maker PRIVATE
+    src/io/CellLayoutIO.cpp
+)
+
+add_executable(perapera_cell_layout_io_selftest
+    tools/cell_layout_io_selftest.cpp
+    src/io/CellLayoutIO.cpp
+)
+target_include_directories(perapera_cell_layout_io_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_cell_layout_io_selftest PRIVATE nlohmann_json::nlohmann_json)
+if (MSVC)
+    target_compile_options(perapera_cell_layout_io_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_cell_layout_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+# PERAPERA_PHASE2_STEP2C_END
+
+

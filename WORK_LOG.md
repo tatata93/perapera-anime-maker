@@ -1926,3 +1926,28 @@ final_spec_v6.md
 - Added `docs/final_spec_v6_phase2_step2a_project_layout_paths_policy.md`.
 - This step does not change `ProjectIO`, `CutIO`, existing project save/load, or UI.
 - The goal is to fix the future storage paths before wiring save/load into them.
+
+## final_spec_v6 Phase 2 Step 2-b: scene/cut minimal save
+
+- Added `src/io/SceneCutLayoutIO.h` and `src/io/SceneCutLayoutIO.cpp`.
+- Added `tools/scene_cut_layout_io_selftest.cpp`.
+- Added a minimal writer for `scenes/scene_001/scene.json` plus `cuts/cut_001/cut.json` / `timesheet.json`.
+- Reused `CutIO::saveCut` for Cut metadata and Timesheet persistence.
+- Did not replace current ProjectIO.
+- Did not touch UI or `AppDrawingMode.cpp`.
+- Kept all newly added files under 800 lines.
+
+## final_spec_v6 Phase 2 Step 2-c: Cell layout minimal save
+
+Added the first cell-level writer for the new layout:
+
+- `src/io/CellLayoutIO.h`
+- `src/io/CellLayoutIO.cpp`
+- `tools/cell_layout_io_selftest.cpp`
+- `docs/final_spec_v6_phase2_step2c_cell_layout_min_save_policy.md`
+
+The writer creates `cells/cell_ID/cell.json` and `frames/frame_NNN/frame.json` under the new final_spec_v6 scene/cut layout.
+
+No UI files were changed.
+No legacy ProjectIO compatibility layer was added because the project is still in development and the new final_spec_v6 layout is the priority.
+

@@ -665,3 +665,17 @@ Existing save/load remains unchanged until later Step 2-b/2-c work.
 Timesheet remains physically separable as `timesheet.json` under the cut folder because it is important as a standalone production artifact and should later support standalone display/printing.
 
 Scene Plate / scene-panel code must not be reintroduced for this storage work.
+
+## Decision: Phase 2 Step 2-b minimal save remains side-by-side
+
+For Phase 2 Step 2-b, the new scene/cut folder writer is added as a side-by-side IO layer.
+Current `ProjectIO` remains unchanged until compatibility save/load tests are ready.
+`timesheet.json` remains a separate physical file under the Cut folder.
+
+## Decision: prioritize new final_spec_v6 save layout over legacy compatibility
+
+For Phase 2 Step 2-c, legacy ProjectIO compatibility is not treated as a blocker.
+The project is still in development, so the new final_spec_v6 layout can become the main path.
+
+Cell-level IO is split into `CellLayoutIO` instead of adding save code to large UI/application files.
+
