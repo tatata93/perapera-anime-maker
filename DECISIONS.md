@@ -637,3 +637,22 @@ reference
 - The current compatibility Scene/Cut are displayed as `scene_001` / `cut_001` until real Project -> Scene -> Cut ownership is introduced.
 - Existing `Project.cells` remains the current active Cut cell set through the Phase 2 Step 1-b bridge.
 - Files over 800 lines should not receive new feature bulk by default. For this step, `AppDrawingMode.cpp` is intentionally limited to an include and a function call; the real logic is split into `ProjectStructureStatus` and `ProjectStructureStatusPanel`.
+
+
+## Decision: Step 1-c status UI is deferred until exe generation is stable
+
+- `final_spec_v6.md` remains the top-level specification.
+- Phase 2 Step 1-c is not allowed to block `build\bin\perapera_anime_maker.exe` generation.
+- The failed UI/build hook is rolled back.
+- Future Step 1-c retry must inspect the concrete compiler/linker log first and should avoid adding code to files over 800 lines.
+- PowerShell apply scripts must remain ASCII-only and must not use localized source text as anchors.
+
+## Decision: final_spec_v6 Phase 2 Step 1-d keeps all normal Cell categories Timesheet-managed
+Date: 2026-07-02
+
+All normal Cell categories remain eligible for Timesheet tracks: `character`, `background`, `layout`, `book`, `effect`, and `reference`.
+During migration, `Project.cells` and `Project.cellOrder` are treated as active Cut cells through `ProjectActiveCutBridge`.
+The Timesheet is conceptually Cut-owned, while physical `timesheet.json` separation remains allowed for future standalone display and printing.
+
+This step adds a small core bridge and selftest only. It does not add UI, change save format, or revive Scene Plate.
+

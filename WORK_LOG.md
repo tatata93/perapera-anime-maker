@@ -1865,3 +1865,55 @@ final_spec_v6.md
 - `Project.h` へ `scenes` はまだ追加していない。
 - Cut選択UIはまだ追加していない。
 - シーン管理パネルは追加しない。
+
+
+## final_spec_v6 Phase 2 Step 1-c rollback: restore exe generation
+
+- Work tree: Phase 2 -> Step 1 -> Step 1-c-restore.
+- Rolled back the Step 1-c Project / Scene / Cut status UI hook from `AppDrawingMode.cpp`.
+- Removed Step 1-c status UI build entries from `CMakeLists.txt`.
+- Removed the Step 1-c added status files from the working tree.
+- Kept Phase 2 Step 1-a / Step 1-b model and bridge work intact.
+- Kept Scene Plate / scene-management panel removed.
+- Reason: `build\bin\perapera_anime_maker.exe` must be restored before attempting more UI work.
+
+## 2026-07-02 - final_spec_v6 Phase 2 Step 1-d: Cut Cell Timesheet bridge
+
+### Work position
+- Master spec: `final_spec_v6.md`
+- Phase: Phase 2
+- Step: Step 1-d
+- Name: confirm active Cut cells and Cut-owned Timesheet relationship
+
+### Work tree
+```text
+final_spec_v6.md
+└─ Phase 2: file structure revision and Cell concept organization
+   ├─ Phase 2-pre: normal Cell + Timesheet path cleanup (complete)
+   ├─ Phase 2 Step 1: minimal Project -> Scene -> Cut -> Cell introduction
+   │  ├─ Step 1-a: Scene / active Cut minimal model (complete)
+   │  ├─ Step 1-b: Project.cells as active Cut bridge (complete)
+   │  ├─ Step 1-c: current Scene/Cut UI status (held back until exe generation is stable)
+   │  └─ Step 1-d: Cut Cell Timesheet bridge (this step)
+   ├─ Phase 2 Step 2: scene/cut/cell save folder migration
+   ├─ Phase 2 Step 3: Cut-level Timesheet / Cell / Camera connection
+   └─ Phase 3-pre: simple shooting/cell placement window
+```
+
+### Changes
+- Added `src/core/CutCellTimesheetBridge.h`.
+- Added `tools/cut_cell_timesheet_bridge_selftest.cpp`.
+- Added `perapera_cut_cell_timesheet_bridge_selftest` CMake target.
+- Added `docs/final_spec_v6_phase2_step1d_cut_cell_timesheet_bridge_policy.md`.
+- The helper keeps normal active Cut cells aligned with Timesheet tracks without filtering by category.
+
+### 800-line file rule
+- No existing large UI file is modified in this step.
+- The migration bridge is a small header-only core file plus a selftest.
+
+### Not done
+- Project save format is unchanged.
+- UI is unchanged.
+- Scene Plate is not restored.
+- Shooting/cell placement UI is not added yet.
+

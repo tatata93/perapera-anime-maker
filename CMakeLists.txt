@@ -172,7 +172,6 @@ add_executable(perapera_anime_maker
     src/ui/panels/CellPanel.cpp
     src/ui/panels/TimesheetPanel.cpp
     src/ui/panels/TimesheetPanelBridge.cpp
-  src/ui/panels/ProjectStructureStatusPanel.cpp
     src/ui/panels/ColorPanel.cpp
     src/ui/panels/LayerPanel.cpp
     src/ui/panels/FramePanel.cpp
@@ -270,7 +269,6 @@ add_executable(perapera_timesheet_panel_bridge_selftest
     tools/timesheet_panel_bridge_selftest.cpp
     src/core/Timesheet.cpp
     src/ui/panels/TimesheetPanelBridge.cpp
-  src/ui/panels/ProjectStructureStatusPanel.cpp
 )
 target_include_directories(perapera_timesheet_panel_bridge_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -338,14 +336,19 @@ if (PERAPERA_LIBMYPAINT_DIRECT AND EXISTS "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}")
     )
 endif()
 
-# final_spec_v6 Phase 2 Step 1-c: Project / Scene / Cut status selftest.
-add_executable(perapera_project_structure_status_selftest
-  tools/project_structure_status_selftest.cpp
-)
-target_include_directories(perapera_project_structure_status_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-if (MSVC)
-  target_compile_options(perapera_project_structure_status_selftest PRIVATE /W4 /permissive- /utf-8)
-else()
-  target_compile_options(perapera_project_structure_status_selftest PRIVATE -Wall -Wextra -Wpedantic)
+
+
+# final_spec_v6 Phase 2 Step 1-d: Cut Cell Timesheet bridge selftest.
+if (NOT TARGET perapera_cut_cell_timesheet_bridge_selftest)
+    add_executable(perapera_cut_cell_timesheet_bridge_selftest
+        tools/cut_cell_timesheet_bridge_selftest.cpp
+        src/core/Timesheet.cpp
+    )
+    target_include_directories(perapera_cut_cell_timesheet_bridge_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    if (MSVC)
+        target_compile_options(perapera_cut_cell_timesheet_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(perapera_cut_cell_timesheet_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
 endif()
 
