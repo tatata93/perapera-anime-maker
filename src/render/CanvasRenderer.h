@@ -8,12 +8,14 @@
 // Phase 1.5 Step 19n: 旧markAllDirty呼び出しでも既存Textureを保持し、ストローク確定時の全線消えを防ぐ。
 // Phase 1.5 Step 19o: Simple確定直後の旧markAllDirtyを吸収し、必要なdirtyだけrevision無効化する。
 // Phase 1.5 Step 19p / Step 20: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
+// Phase 1.5 Step 21b: 再生中に次フレームを少量ずつ先読みし、初回表示時の重さを逃がす。
 // 通常レイヤーはピクセルキャッシュを使い、描画中のストロークだけDrawListで軽く描く。
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -54,6 +56,7 @@ public:
     // ストローク変更の通知。既存Textureは保持し、O(1) revision stampで必要なレイヤーだけ再構築する。
     void markDirty(int layerIndex);
     void markAllDirty();
+    void clearLayerCaches();
 
     // 旧Step互換入口。現在はProject内のストローク点列を正本にし、次回drawで再構築する。
     void bakeStroke(int layerIndex, const Stroke& stroke, float opacity);
@@ -106,6 +109,16 @@ public:
                        ImVec2 areaSize,
                        ImDrawList* drawList);
 
+    // 再生中の先読み用。現在フレーム描画後に、次フレームの未構築レイヤーを少しだけ焼く。
+    void warmFrameCache(const Frame& frame,
+                        int frameIndex,
+                        CanvasDisplayMode displayMode,
+                        int layerBudget,
+                        int strokeBudgetPerLayer);
+    bool frameCacheReady(const Frame& frame,
+                         int frameIndex,
+                         CanvasDisplayMode displayMode) const;
+
 private:
     struct LayerCacheKey {
         std::string frameId;
@@ -150,14 +163,22 @@ private:
     std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerRevisions_;
     std::unordered_map<LayerCacheKey, std::size_t, LayerCacheKeyHash> layerCachedStrokeCounts_;
     std::unordered_map<LayerCacheKey, LayerRebuildState, LayerCacheKeyHash> layerRebuildStates_;
+    std::unordered_map<LayerCacheKey, std::uint64_t, LayerCacheKeyHash> layerLastUsed_;
     std::unordered_map<OnionCacheKey, CanvasBitmap, OnionCacheKeyHash> onionBitmaps_;
     std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionRevisions_;
+    std::unordered_map<OnionCacheKey, std::uint64_t, OnionCacheKeyHash> onionLastUsed_;
+    std::vector<int> displayLayerIndicesScratch_;
+    std::uint64_t cacheUseClock_ = 0U;
 
     CanvasBitmap& bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex);
-    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer);
+    const std::vector<int>& displayLayerIndices(const Frame& frame);
+    bool layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const;
+    void rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw = 16);
     bool appendMissingStrokesIfPossible(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
-    bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision);
+    bool rebuildLayerBitmapProgressively(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, std::uint64_t revision, int strokeBudgetPerDraw);
     void rebuildOnionBitmapIfNeeded(const Frame& frame, int frameIndex, bool isPrevious, float opacity);
+    void pruneLayerCache(const std::string& protectedFrameId);
+    void pruneOnionCache(const OnionCacheKey& protectedKey);
 
     std::uint64_t frameRevisionHash(const Frame& frame) const;
 

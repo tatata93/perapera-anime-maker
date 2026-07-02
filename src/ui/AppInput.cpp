@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <imgui.h>
 
 #include "fill/FloodFill.h"
+#include "ui/panels/CellPanel.h"
 
 namespace perapera {
 namespace {
@@ -31,6 +33,20 @@ bool isPointInside(ImVec2 point, ImVec2 min, ImVec2 size)
 {
     return point.x >= min.x && point.y >= min.y &&
            point.x <= min.x + size.x && point.y <= min.y + size.y;
+}
+
+void appendFrameIfValid(const Cell& cell, int frameIndex, std::vector<const Frame*>& frames)
+{
+    if (cell.frames.empty()) {
+        return;
+    }
+
+    const int safeFrameIndex = std::clamp(frameIndex, 0, static_cast<int>(cell.frames.size()) - 1);
+    const Frame* frame = cell.frameOrNull(safeFrameIndex);
+    if (frame == nullptr || std::find(frames.begin(), frames.end(), frame) != frames.end()) {
+        return;
+    }
+    frames.push_back(frame);
 }
 
 } // namespace
@@ -118,6 +134,81 @@ void App::updateFramePlayback()
     }
 }
 
+void App::warmPlaybackFrameCache()
+{
+    if (isDrawingStroke_) {
+        return;
+    }
+
+    const Cell* cell = activeCell();
+    if (cell == nullptr || cell->frames.size() <= 1U) {
+        return;
+    }
+
+    const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
+        ? CanvasDisplayMode::Coloring
+        : CanvasDisplayMode::Drawing;
+
+    const int lastIndex = static_cast<int>(cell->frames.size()) - 1;
+
+    if (!isPlayingFrames_) {
+        const int frameCount = static_cast<int>(cell->frames.size());
+        previewWarmCursor_ = std::clamp(previewWarmCursor_, 0, std::max(0, frameCount - 1));
+
+        constexpr int kIdleFramesPerDraw = 2;
+        constexpr int kIdleLayerBudget = 3;
+        constexpr int kIdleStrokeBudgetPerLayer = 16;
+        for (int warmed = 0; warmed < kIdleFramesPerDraw; ++warmed) {
+            const int frameIndex = previewWarmCursor_;
+            const Frame* frame = cell->frameOrNull(frameIndex);
+            if (frame != nullptr) {
+                canvasRenderer_.warmFrameCache(*frame,
+                                               frameIndex,
+                                               displayMode,
+                                               kIdleLayerBudget,
+                                               kIdleStrokeBudgetPerLayer);
+            }
+            previewWarmCursor_ = (previewWarmCursor_ + 1) % frameCount;
+        }
+        return;
+    }
+
+    int direction = playbackDirection_ == 0 ? 1 : playbackDirection_;
+    int cursor = activeFrameIndex_;
+    previewWarmCursor_ = activeFrameIndex_;
+
+    constexpr int kPlaybackLookAheadFrames = 8;
+    constexpr int kPlaybackLayerBudget = 4;
+    constexpr int kPlaybackStrokeBudgetPerLayer = 24;
+
+    for (int step = 0; step < kPlaybackLookAheadFrames; ++step) {
+        int nextIndex = cursor + direction;
+        if (nextIndex < 0 || nextIndex > lastIndex) {
+            if (playbackPingPong_) {
+                direction = -direction;
+                nextIndex = cursor + direction;
+            } else {
+                nextIndex = nextIndex > lastIndex ? 0 : lastIndex;
+            }
+        }
+
+        nextIndex = std::clamp(nextIndex, 0, lastIndex);
+        if (nextIndex == activeFrameIndex_) {
+            break;
+        }
+
+        const Frame* frame = cell->frameOrNull(nextIndex);
+        if (frame != nullptr) {
+            canvasRenderer_.warmFrameCache(*frame,
+                                           nextIndex,
+                                           displayMode,
+                                           kPlaybackLayerBudget,
+                                           kPlaybackStrokeBudgetPerLayer);
+        }
+        cursor = nextIndex;
+    }
+}
+
 void App::handleFrameShortcuts()
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -140,6 +231,11 @@ void App::handleFrameShortcuts()
 
     if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
         isPlayingFrames_ = !isPlayingFrames_;
+        if (isPlayingFrames_) {
+            isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
         playbackAccumulator_ = 0.0f;
         lastMessage_ = isPlayingFrames_ ? "finger preview playing" : "finger preview stopped";
     }
@@ -201,6 +297,11 @@ void App::drawFingerPlaybackControls()
     ImGui::SameLine();
     if (ImGui::Button(isPlayingFrames_ ? u8c(u8"停止 Space") : u8c(u8"再生 Space"))) {
         isPlayingFrames_ = !isPlayingFrames_;
+        if (isPlayingFrames_) {
+            isPlayingTimesheet_ = false;
+            isPlayingTimesheetRange_ = false;
+            timesheetPlaybackAccumulator_ = 0.0f;
+        }
         playbackAccumulator_ = 0.0f;
     }
     ImGui::SameLine();
@@ -241,28 +342,79 @@ void App::drawFingerPlaybackControls()
     ImGui::Checkbox(u8c(u8"再生中は補助非表示"), &playbackSkipAssistOverlays_);
     ImGui::SameLine();
     ImGui::Text("%d/%d", frameCount > 0 ? activeFrameIndex_ + 1 : 0, frameCount);
+    if (cell != nullptr && frameCount > 0) {
+        const CanvasDisplayMode displayMode = currentMode_ == AppMode::Coloring
+            ? CanvasDisplayMode::Coloring
+            : CanvasDisplayMode::Drawing;
+        if (static_cast<int>(previewReadyFlags_.size()) != frameCount ||
+            previewReadyDisplayMode_ != displayMode) {
+            previewReadyDisplayMode_ = displayMode;
+            previewReadyFlags_.assign(static_cast<std::size_t>(frameCount), 0);
+            previewReadyCount_ = 0;
+            previewReadyScanCursor_ = std::clamp(activeFrameIndex_, 0, frameCount - 1);
+        }
+
+        constexpr int kPreviewReadyChecksPerDraw = 32;
+        const int checks = std::min(frameCount, kPreviewReadyChecksPerDraw);
+        for (int checked = 0; checked < checks; ++checked) {
+            const int frameIndex = previewReadyScanCursor_;
+            const Frame* frame = cell->frameOrNull(frameIndex);
+            const char ready = frame != nullptr && canvasRenderer_.frameCacheReady(*frame, frameIndex, displayMode)
+                ? 1
+                : 0;
+            char& previous = previewReadyFlags_[static_cast<std::size_t>(frameIndex)];
+            if (previous != ready) {
+                previewReadyCount_ += ready != 0 ? 1 : -1;
+                previous = ready;
+            }
+            previewReadyScanCursor_ = (previewReadyScanCursor_ + 1) % frameCount;
+        }
+        previewReadyCount_ = std::clamp(previewReadyCount_, 0, frameCount);
+        ImGui::TextDisabled("%s %d/%d", u8c(u8"プレビュー準備"), previewReadyCount_, frameCount);
+    } else {
+        previewReadyFlags_.clear();
+        previewReadyCount_ = 0;
+        previewReadyScanCursor_ = 0;
+    }
     ImGui::TextDisabled(u8c(u8"Shift+←/→: 前後   Home/End: 先頭/末尾"));
     ImGui::PopID();
 }
 
-void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize)
+void App::handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize, bool allowDrawingInput)
 {
     ImGuiIO& io = ImGui::GetIO();
     const ImVec2 mouse = io.MousePos;
     const bool hovered = ImGui::IsWindowHovered() && isPointInside(mouse, areaMin, areaSize);
 
     if (hovered && io.MouseWheel != 0.0f) {
+        const float wheel = io.MouseWheel;
         const ImVec2 before = canvasView_.screenToCanvas(mouse.x, mouse.y, areaMin, areaSize);
-        const float zoomFactor = io.MouseWheel > 0.0f ? 1.15f : 1.0f / 1.15f;
+        const float zoomFactor = wheel > 0.0f ? 1.15f : 1.0f / 1.15f;
         canvasView_.zoom = std::clamp(canvasView_.zoom * zoomFactor, 0.05f, 32.0f);
         const ImVec2 after = canvasView_.screenToCanvas(mouse.x, mouse.y, areaMin, areaSize);
         canvasView_.panX += (after.x - before.x) * canvasView_.zoom;
         canvasView_.panY += (after.y - before.y) * canvasView_.zoom;
+
+        // Timesheet Rebuild Step 7.3:
+        // キャンバス上のホイールはキャンバスズーム専用にする。
+        // 親Child/本体ウィンドウへホイールが伝わるとソフト全体がスクロールしてしまうため、
+        // このフレームのホイール量を消費する。
+        io.MouseWheel = 0.0f;
     }
 
     if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
         canvasView_.panX += io.MouseDelta.x;
         canvasView_.panY += io.MouseDelta.y;
+    }
+
+    // Timesheet Rebuild Step 7.2:
+    // タイムシートプレビュー中に表示Fと編集Fが違う場合でも、ズームと中ボタン移動は使えるようにする。
+    // allowDrawingInput=false のときだけ、左クリック作画/消しゴム/塗りつぶしを止める。
+    if (!allowDrawingInput) {
+        if (isDrawingStroke_) {
+            cancelStroke();
+        }
+        return;
     }
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -301,8 +453,31 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     settings.insetPx = brushSettings_.fillInsetPx;
     settings.leakGuardPercent = brushSettings_.fillLeakGuardPercent;
 
+    std::vector<const Frame*> wallFrames;
+    if (brushSettings_.fillWallSource == ui::FloodFillWallSource::VisibleCells) {
+        wallFrames.reserve(project_.cells.size());
+        for (const Cell& cell : project_.cells) {
+            if (!cell.visible || cell.opacity <= 0.0f) {
+                continue;
+            }
+            appendFrameIfValid(cell, activeFrameIndex_, wallFrames);
+        }
+    } else if (brushSettings_.fillWallSource == ui::FloodFillWallSource::SoloCell && !project_.cells.empty()) {
+        const int soloIndex = ui::currentSoloCellIndex();
+        const int safeSoloIndex = std::clamp(soloIndex >= 0 ? soloIndex : activeCellIndex_,
+                                             0,
+                                             static_cast<int>(project_.cells.size()) - 1);
+        appendFrameIfValid(project_.cells[static_cast<std::size_t>(safeSoloIndex)],
+                           activeFrameIndex_,
+                           wallFrames);
+    }
+    if (std::find(wallFrames.begin(), wallFrames.end(), frame) == wallFrames.end()) {
+        wallFrames.push_back(frame);
+    }
+
     const fill::FloodFillResult result = fill::makeFloodFillStrokes(*frame,
                                                                     activeLayerIndex_,
+                                                                    wallFrames,
                                                                     project_.canvas.width,
                                                                     project_.canvas.height,
                                                                     static_cast<int>(std::lround(canvas.x)),
@@ -321,7 +496,7 @@ void App::applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize)
     }
     targetLayer->strokes.insert(targetLayer->strokes.end(), result.strokes.begin(), result.strokes.end());
     targetLayer->touchRevision();
-    canvasRenderer_.markDirty(activeLayerIndex_);
+    canvasRenderer_.clearLayerCaches();
     lastMessage_ = "flood fill: " + std::to_string(result.filledPixelCount) +
                    " px / " + std::to_string(result.strokes.size()) + " fills";
 }

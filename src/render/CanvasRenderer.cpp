@@ -12,6 +12,7 @@
 // Phase 1.5 Step 19o: 旧App dirty通知を吸収し、Simple確定後の全レイヤー再ベイクを避ける。
 // Phase 1.5 Step 19p: markAllDirtyを通常キャッシュ破棄に使わず、append-only追い焼きと段階的再ベイクでUI停止を避ける。
 // Phase 1.5 Step 20: hashからvectorポインタアドレスを外し、フレームコピー/移動での不要な再ベイクを防ぐ。
+// Phase 1.5 Step 21b: 再生中に次フレームを少量ずつ先読みし、初回表示時の重さを逃がす。
 
 #include "render/CanvasRenderer.h"
 
@@ -22,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -31,6 +33,8 @@ namespace {
 constexpr float kMinZoom = 0.05f;
 constexpr float kMaxZoom = 32.0f;
 constexpr float kCanvasBorderThickness = 1.0f;
+constexpr std::size_t kMaxCachedLayerBitmaps = 128U;
+constexpr std::size_t kMaxCachedOnionBitmaps = 24U;
 
 float clamp01(float value)
 {
@@ -159,6 +163,8 @@ void hashStrokeO1(std::uint64_t& seed, const Stroke& stroke)
     // 同じ内容でもdata()の住所が変わり、キャッシュミスと再ベイクを誘発するため。
     hashCombine(seed, static_cast<std::uint64_t>(stroke.brushEngine));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapX));
+    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapY));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
     hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmap.size()));
@@ -301,8 +307,11 @@ void CanvasRenderer::setRenderer(SDL_Renderer* renderer)
     layerRevisions_.clear();
     layerCachedStrokeCounts_.clear();
     layerRebuildStates_.clear();
+    layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    onionLastUsed_.clear();
+    cacheUseClock_ = 0U;
 }
 
 void CanvasRenderer::setCanvasSize(int width, int height)
@@ -321,8 +330,11 @@ void CanvasRenderer::setCanvasSize(int width, int height)
     layerRevisions_.clear();
     layerCachedStrokeCounts_.clear();
     layerRebuildStates_.clear();
+    layerLastUsed_.clear();
     onionBitmaps_.clear();
     onionRevisions_.clear();
+    onionLastUsed_.clear();
+    cacheUseClock_ = 0U;
 }
 
 void CanvasRenderer::markDirty(int layerIndex)
@@ -340,6 +352,7 @@ void CanvasRenderer::markDirty(int layerIndex)
         layerRevisions_.erase(key);
         layerCachedStrokeCounts_.erase(key);
         layerRebuildStates_.erase(key);
+        layerLastUsed_.erase(key);
     }
 
     // 変更された通常フレームがオニオンスキン参照にも使われる可能性があるため、
@@ -365,6 +378,19 @@ void CanvasRenderer::markAllDirty()
     // 通常レイヤーは layerRevisionValue() で実データ差分を検知できるため、ここではTexture/通常revisionを保持する。
     // Undo/Redoやロードのように実データが差し替わった場合も、strokes.size/data/capacity/代表点のO(1) stampで検知する。
     onionRevisions_.clear();
+}
+
+void CanvasRenderer::clearLayerCaches()
+{
+    layerBitmaps_.clear();
+    layerRevisions_.clear();
+    layerCachedStrokeCounts_.clear();
+    layerRebuildStates_.clear();
+    layerLastUsed_.clear();
+    onionBitmaps_.clear();
+    onionRevisions_.clear();
+    onionLastUsed_.clear();
+    cacheUseClock_ = 0U;
 }
 
 void CanvasRenderer::bakeStroke(int layerIndex, const Stroke& stroke, float opacity)
@@ -510,24 +536,11 @@ void CanvasRenderer::draw(const Frame& frame,
     // 背景はApp側で先に塗る。ここで再度塗ると、先に描いたオニオンスキンが隠れる。
 
     if (renderer_ != nullptr && canvasWidth_ > 0 && canvasHeight_ > 0) {
-        std::vector<int> layerIndices;
-        layerIndices.reserve(frame.layers.size());
-        for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
-            layerIndices.push_back(layerIndex);
-        }
-
-        // Project のレイヤー配列自体は変更せず、表示順だけを変える。
-        // Paintは面塗りなので、Drawing/ColoringのどちらでもNormal/ColorTraceより先に描く。
-        // これで線画確定後にPaintレイヤーへ隠れて「線が消えた」ように見える問題を防ぐ。
-        std::stable_sort(layerIndices.begin(), layerIndices.end(), [&frame](int a, int b) {
-            const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
-            const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
-            return displayLayerRank(typeA) < displayLayerRank(typeB);
-        });
-
+        const std::vector<int>& layerIndices = displayLayerIndices(frame);
         for (int layerIndex : layerIndices) {
             const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
-            const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+            const float displayOpacity =
+                displayOpacityForLayer(layer, displayMode) * std::clamp(currentStrokeOpacity, 0.0f, 1.0f);
             if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
                 continue;
             }
@@ -558,6 +571,7 @@ void CanvasRenderer::draw(const Frame& frame,
 
     (void)activeLayerIndex;
     drawList->PopClipRect();
+    pruneLayerCache(activeFrameCacheId_);
 }
 
 void CanvasRenderer::drawOnionSkin(const Frame& frame,
@@ -584,24 +598,117 @@ void CanvasRenderer::drawOnionSkin(const Frame& frame,
 
     (void)opacity;
     drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, 255));
+    pruneOnionCache(OnionCacheKey{frameIndex, isPrevious});
+}
+
+void CanvasRenderer::warmFrameCache(const Frame& frame,
+                                    int frameIndex,
+                                    CanvasDisplayMode displayMode,
+                                    int layerBudget,
+                                    int strokeBudgetPerLayer)
+{
+    if (renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0 || layerBudget <= 0 || strokeBudgetPerLayer <= 0) {
+        return;
+    }
+
+    const std::string frameId = frameCacheId(frame, frameIndex);
+    const std::vector<int>& layerIndices = displayLayerIndices(frame);
+
+    int warmedLayers = 0;
+    for (int layerIndex : layerIndices) {
+        const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+        const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+        if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
+            continue;
+        }
+        if (!layerNeedsBitmapWork(frameId, frame, layerIndex, layer)) {
+            continue;
+        }
+
+        rebuildLayerBitmapIfNeeded(frameId, frame, layerIndex, layer, strokeBudgetPerLayer);
+        CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+        bitmap.uploadIfDirty(renderer_);
+        ++warmedLayers;
+        if (warmedLayers >= layerBudget) {
+            break;
+        }
+    }
+    pruneLayerCache(frameId);
+}
+
+bool CanvasRenderer::frameCacheReady(const Frame& frame,
+                                     int frameIndex,
+                                     CanvasDisplayMode displayMode) const
+{
+    if (renderer_ == nullptr || canvasWidth_ <= 0 || canvasHeight_ <= 0) {
+        return false;
+    }
+
+    const std::string frameId = frameCacheId(frame, frameIndex);
+    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+        const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
+        const float displayOpacity = displayOpacityForLayer(layer, displayMode);
+        if (!layer.visible || layer.opacity <= 0.0f || displayOpacity <= 0.0f) {
+            continue;
+        }
+        if (layerNeedsBitmapWork(frameId, frame, layerIndex, layer)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 CanvasBitmap& CanvasRenderer::bitmapForLayer(const std::string& frameId, const Frame& frame, int layerIndex)
 {
-    return layerBitmaps_.try_emplace(LayerCacheKey{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)}).first->second;
+    const LayerCacheKey key{frameId, layerCacheId(frame.layers[static_cast<std::size_t>(layerIndex)], layerIndex)};
+    layerLastUsed_[key] = ++cacheUseClock_;
+    return layerBitmaps_.try_emplace(key).first->second;
 }
 
-void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer)
+const std::vector<int>& CanvasRenderer::displayLayerIndices(const Frame& frame)
 {
-    CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
+    displayLayerIndicesScratch_.clear();
+    displayLayerIndicesScratch_.reserve(frame.layers.size());
+    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
+        displayLayerIndicesScratch_.push_back(layerIndex);
+    }
+
+    // Project のレイヤー配列自体は変更せず、表示順だけを変える。
+    // Paintは面塗りなので、Drawing/ColoringのどちらでもNormal/ColorTraceより先に描く。
+    std::stable_sort(displayLayerIndicesScratch_.begin(), displayLayerIndicesScratch_.end(), [&frame](int a, int b) {
+        const LayerType typeA = frame.layers[static_cast<std::size_t>(a)].type;
+        const LayerType typeB = frame.layers[static_cast<std::size_t>(b)].type;
+        return displayLayerRank(typeA) < displayLayerRank(typeB);
+    });
+
+    return displayLayerIndicesScratch_;
+}
+
+bool CanvasRenderer::layerNeedsBitmapWork(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer) const
+{
+    (void)frame;
     const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
-    const std::uint64_t revision = layerRevisionValue(layer);
+    const auto bitmapIt = layerBitmaps_.find(key);
+    if (bitmapIt == layerBitmaps_.end()) {
+        return true;
+    }
+
+    const CanvasBitmap& bitmap = bitmapIt->second;
     const auto revisionIt = layerRevisions_.find(key);
-    const bool needsRebuild = revisionIt == layerRevisions_.end()
+    const std::uint64_t revision = layerRevisionValue(layer);
+    return revisionIt == layerRevisions_.end()
         || revisionIt->second != revision
         || !bitmap.hasTexture()
         || bitmap.width() != canvasWidth_
         || bitmap.height() != canvasHeight_;
+}
+
+void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, const Frame& frame, int layerIndex, const Layer& layer, int strokeBudgetPerDraw)
+{
+    bitmapForLayer(frameId, frame, layerIndex);
+    const std::uint64_t revision = layerRevisionValue(layer);
+    const bool needsRebuild = layerNeedsBitmapWork(frameId, frame, layerIndex, layer);
 
     if (!needsRebuild) {
         return;
@@ -615,7 +722,7 @@ void CanvasRenderer::rebuildLayerBitmapIfNeeded(const std::string& frameId, cons
 
     // Undo/Redo、消しゴム、レイヤー丸ごと変更、未キャッシュフレームの初回表示などは全再構築が必要。
     // ただし一度のdrawで全レイヤー/全ストロークをまとめて焼くとUIが固まるため、レイヤー単位で段階的に進める。
-    rebuildLayerBitmapProgressively(frameId, frame, layerIndex, layer, revision);
+    rebuildLayerBitmapProgressively(frameId, frame, layerIndex, layer, revision, strokeBudgetPerDraw);
 }
 
 bool CanvasRenderer::appendMissingStrokesIfPossible(const std::string& frameId,
@@ -659,7 +766,8 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
                                                      const Frame& frame,
                                                      int layerIndex,
                                                      const Layer& layer,
-                                                     std::uint64_t revision)
+                                                     std::uint64_t revision,
+                                                     int strokeBudgetPerDraw)
 {
     CanvasBitmap& bitmap = bitmapForLayer(frameId, frame, layerIndex);
     const LayerCacheKey key{frameId, layerCacheId(layer, layerIndex)};
@@ -676,7 +784,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
 
     // 1 draw あたりの焼き込み量。大きすぎるとフレーム移動で固まり、小さすぎると表示完了が遅い。
     // FillStrokeは1本でも大きいので、この予算でもFillは1本ずつになる。
-    constexpr int kStrokeBakeBudgetPerDraw = 4;
+    const int strokeBakeBudget = std::max(1, strokeBudgetPerDraw);
     int bakedThisCall = 0;
 
     auto bakeNextMatchingStroke = [&](bool wantFill) -> bool {
@@ -694,7 +802,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
     };
 
     if (layer.type == LayerType::Paint) {
-        while (bakedThisCall < kStrokeBakeBudgetPerDraw) {
+        while (bakedThisCall < strokeBakeBudget) {
             if (state.pass == 0) {
                 if (bakeNextMatchingStroke(true)) {
                     continue;
@@ -710,7 +818,7 @@ bool CanvasRenderer::rebuildLayerBitmapProgressively(const std::string& frameId,
             }
         }
     } else {
-        while (bakedThisCall < kStrokeBakeBudgetPerDraw && state.nextStrokeIndex < layer.strokes.size()) {
+        while (bakedThisCall < strokeBakeBudget && state.nextStrokeIndex < layer.strokes.size()) {
             bakeStrokeByEngine(bitmap, layer.strokes[state.nextStrokeIndex], 1.0f);
             ++state.nextStrokeIndex;
             ++bakedThisCall;
@@ -736,6 +844,7 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
 {
     const OnionCacheKey key{frameIndex, isPrevious};
     CanvasBitmap& bitmap = onionBitmaps_.try_emplace(key).first->second;
+    onionLastUsed_[key] = ++cacheUseClock_;
     std::uint64_t revision = frameRevisionHash(frame);
     hashCombine(revision, isPrevious ? 1ULL : 0ULL);
     hashCombine(revision, hashFloat(opacity));
@@ -770,6 +879,88 @@ void CanvasRenderer::rebuildOnionBitmapIfNeeded(const Frame& frame, int frameInd
         }
     }
     onionRevisions_[key] = revision;
+}
+
+void CanvasRenderer::pruneLayerCache(const std::string& protectedFrameId)
+{
+    for (auto usedIt = layerLastUsed_.begin(); usedIt != layerLastUsed_.end();) {
+        if (layerBitmaps_.find(usedIt->first) == layerBitmaps_.end()) {
+            usedIt = layerLastUsed_.erase(usedIt);
+        } else {
+            ++usedIt;
+        }
+    }
+
+    while (layerBitmaps_.size() > kMaxCachedLayerBitmaps) {
+        bool foundVictim = false;
+        LayerCacheKey victim;
+        std::uint64_t oldestUse = std::numeric_limits<std::uint64_t>::max();
+
+        for (const auto& entry : layerBitmaps_) {
+            const LayerCacheKey& key = entry.first;
+            if (key.frameId == protectedFrameId) {
+                continue;
+            }
+
+            const auto usedIt = layerLastUsed_.find(key);
+            const std::uint64_t lastUsed = usedIt == layerLastUsed_.end() ? 0U : usedIt->second;
+            if (!foundVictim || lastUsed < oldestUse) {
+                foundVictim = true;
+                oldestUse = lastUsed;
+                victim = key;
+            }
+        }
+
+        if (!foundVictim) {
+            break;
+        }
+
+        layerBitmaps_.erase(victim);
+        layerRevisions_.erase(victim);
+        layerCachedStrokeCounts_.erase(victim);
+        layerRebuildStates_.erase(victim);
+        layerLastUsed_.erase(victim);
+    }
+}
+
+void CanvasRenderer::pruneOnionCache(const OnionCacheKey& protectedKey)
+{
+    for (auto usedIt = onionLastUsed_.begin(); usedIt != onionLastUsed_.end();) {
+        if (onionBitmaps_.find(usedIt->first) == onionBitmaps_.end()) {
+            usedIt = onionLastUsed_.erase(usedIt);
+        } else {
+            ++usedIt;
+        }
+    }
+
+    while (onionBitmaps_.size() > kMaxCachedOnionBitmaps) {
+        bool foundVictim = false;
+        OnionCacheKey victim;
+        std::uint64_t oldestUse = std::numeric_limits<std::uint64_t>::max();
+
+        for (const auto& entry : onionBitmaps_) {
+            const OnionCacheKey& key = entry.first;
+            if (key == protectedKey) {
+                continue;
+            }
+
+            const auto usedIt = onionLastUsed_.find(key);
+            const std::uint64_t lastUsed = usedIt == onionLastUsed_.end() ? 0U : usedIt->second;
+            if (!foundVictim || lastUsed < oldestUse) {
+                foundVictim = true;
+                oldestUse = lastUsed;
+                victim = key;
+            }
+        }
+
+        if (!foundVictim) {
+            break;
+        }
+
+        onionBitmaps_.erase(victim);
+        onionRevisions_.erase(victim);
+        onionLastUsed_.erase(victim);
+    }
 }
 
 void CanvasRenderer::drawBitmap(CanvasBitmap& bitmap,

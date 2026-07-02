@@ -4,6 +4,7 @@
 // Phase 1.5 Step 19では、バケツ塗り専用FillStrokeの1chマスクを保存する。
 // Phase 1.5 Step 19k: FillStrokeのbitmapはJSONへBase64埋め込みせず、layer_NNN_fills.binへ分離して保存する。
 // Phase 1.5 Step 19l: fills.binを width*height 生バイト形式へ整理し、Base64保存経路を使わない。
+// Phase 1.5 Step 21: FillStrokeをbitmapX/Y付きのクロップマスクとして保存する。
 
 #include "io/ProjectIO.h"
 
@@ -29,6 +30,7 @@ namespace fs = std::filesystem;
 using nlohmann::json;
 
 constexpr int kProjectFormatVersion = 1;
+constexpr std::uint32_t kFillBinMagicV2 = 0x32464650U; // "PFF2" little-endian marker.
 
 void setError(std::string* errorMessage, const std::string& message)
 {
@@ -44,14 +46,16 @@ std::string numberedName(const char* prefix, int number)
     return stream.str();
 }
 
-void writeUint32(std::ofstream& file, std::uint32_t value)
+void appendUint32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
 {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    const auto* raw = reinterpret_cast<const std::uint8_t*>(&value);
+    bytes.insert(bytes.end(), raw, raw + sizeof(value));
 }
 
-void writeFloat32(std::ofstream& file, float value)
+void appendFloat32(std::vector<std::uint8_t>& bytes, float value)
 {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    const auto* raw = reinterpret_cast<const std::uint8_t*>(&value);
+    bytes.insert(bytes.end(), raw, raw + sizeof(value));
 }
 
 bool readUint32(std::ifstream& file, std::uint32_t& value)
@@ -68,14 +72,53 @@ bool readFloat32(std::ifstream& file, float& value)
 
 bool writeJsonFile(const fs::path& path, const json& value, std::string* errorMessage)
 {
-    std::ofstream file(path);
+    const std::string text = value.dump(4) + '\n';
+
+    std::ifstream existing(path, std::ios::binary);
+    if (existing) {
+        std::ostringstream buffer;
+        buffer << existing.rdbuf();
+        if (buffer.str() == text) {
+            return true;
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
     if (!file) {
         setError(errorMessage, "failed to open for write: " + path.string());
         return false;
     }
-    file << std::setw(4) << value << '\n';
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
     if (!file) {
         setError(errorMessage, "failed to write json: " + path.string());
+        return false;
+    }
+    return true;
+}
+
+bool writeBinaryFileIfChanged(const fs::path& path, const std::vector<std::uint8_t>& bytes, std::string* errorMessage)
+{
+    std::error_code errorCode;
+    const auto existingSize = fs::file_size(path, errorCode);
+    if (!errorCode && existingSize == bytes.size()) {
+        std::ifstream existing(path, std::ios::binary);
+        if (existing) {
+            std::vector<std::uint8_t> existingBytes(bytes.size());
+            existing.read(reinterpret_cast<char*>(existingBytes.data()), static_cast<std::streamsize>(existingBytes.size()));
+            if (existing && existingBytes == bytes) {
+                return true;
+            }
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        setError(errorMessage, "failed to open binary for write: " + path.string());
+        return false;
+    }
+    file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (!file) {
+        setError(errorMessage, "failed to write binary: " + path.string());
         return false;
     }
     return true;
@@ -136,6 +179,82 @@ std::vector<fs::path> sortedLayerFiles(const fs::path& frameFolder)
 bool containsName(const std::set<std::string>& names, const std::string& name)
 {
     return names.find(name) != names.end();
+}
+
+bool fillStrokeBitmapSizeIsValid(const Stroke& stroke)
+{
+    if (stroke.brushEngine != StrokeBrushEngine::Fill || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0) {
+        return false;
+    }
+    const std::uint64_t expectedSize = static_cast<std::uint64_t>(stroke.bitmapWidth) *
+                                       static_cast<std::uint64_t>(stroke.bitmapHeight);
+    return expectedSize == static_cast<std::uint64_t>(stroke.bitmap.size());
+}
+
+bool fillStrokeHasPaint(const Stroke& stroke)
+{
+    return fillStrokeBitmapSizeIsValid(stroke) &&
+        std::any_of(stroke.bitmap.begin(), stroke.bitmap.end(), [](std::uint8_t value) {
+            return value != 0U;
+        });
+}
+
+bool cropFillStrokeToContent(Stroke& stroke)
+{
+    if (!fillStrokeBitmapSizeIsValid(stroke)) {
+        return false;
+    }
+
+    int minX = stroke.bitmapWidth;
+    int minY = stroke.bitmapHeight;
+    int maxX = -1;
+    int maxY = -1;
+    for (int y = 0; y < stroke.bitmapHeight; ++y) {
+        for (int x = 0; x < stroke.bitmapWidth; ++x) {
+            const std::uint8_t mask = stroke.bitmap[static_cast<std::size_t>(y) *
+                                                    static_cast<std::size_t>(stroke.bitmapWidth) +
+                                                    static_cast<std::size_t>(x)];
+            if (mask == 0U) {
+                continue;
+            }
+            minX = std::min(minX, x);
+            minY = std::min(minY, y);
+            maxX = std::max(maxX, x);
+            maxY = std::max(maxY, y);
+        }
+    }
+
+    if (maxX < minX || maxY < minY) {
+        stroke.bitmap.clear();
+        stroke.bitmapWidth = 0;
+        stroke.bitmapHeight = 0;
+        return false;
+    }
+
+    if (minX == 0 && minY == 0 && maxX == stroke.bitmapWidth - 1 && maxY == stroke.bitmapHeight - 1) {
+        return true;
+    }
+
+    const int croppedWidth = maxX - minX + 1;
+    const int croppedHeight = maxY - minY + 1;
+    std::vector<std::uint8_t> cropped(static_cast<std::size_t>(croppedWidth) *
+                                      static_cast<std::size_t>(croppedHeight), 0U);
+    for (int y = 0; y < croppedHeight; ++y) {
+        for (int x = 0; x < croppedWidth; ++x) {
+            cropped[static_cast<std::size_t>(y) * static_cast<std::size_t>(croppedWidth) +
+                    static_cast<std::size_t>(x)] =
+                stroke.bitmap[static_cast<std::size_t>(minY + y) *
+                              static_cast<std::size_t>(stroke.bitmapWidth) +
+                              static_cast<std::size_t>(minX + x)];
+        }
+    }
+
+    stroke.bitmapX += minX;
+    stroke.bitmapY += minY;
+    stroke.bitmapWidth = croppedWidth;
+    stroke.bitmapHeight = croppedHeight;
+    stroke.bitmap = std::move(cropped);
+    return true;
 }
 
 void removeStaleDirectories(const fs::path& root, const std::set<std::string>& expectedNames)
@@ -210,6 +329,10 @@ json toJson(const Stroke& stroke, int fillIndex = -1)
         return json{
             {"brushEngine", "Fill"},
             {"fillIndex", fillIndex},
+            {"bitmapX", stroke.bitmapX},
+            {"bitmapY", stroke.bitmapY},
+            {"bitmapWidth", stroke.bitmapWidth},
+            {"bitmapHeight", stroke.bitmapHeight},
         };
     }
 
@@ -242,18 +365,28 @@ std::vector<Stroke> loadFillStrokesFile(const fs::path& path)
         return result;
     }
 
-    std::uint32_t strokeCount = 0U;
-    if (!readUint32(file, strokeCount)) {
+    std::uint32_t firstValue = 0U;
+    if (!readUint32(file, firstValue)) {
+        return result;
+    }
+    const bool hasV2Header = firstValue == kFillBinMagicV2;
+    std::uint32_t strokeCount = firstValue;
+    if (hasV2Header && !readUint32(file, strokeCount)) {
         return result;
     }
 
     result.reserve(strokeCount);
     for (std::uint32_t strokeIndex = 0U; strokeIndex < strokeCount; ++strokeIndex) {
+        std::uint32_t bitmapX = 0U;
+        std::uint32_t bitmapY = 0U;
         std::uint32_t bitmapWidth = 0U;
         std::uint32_t bitmapHeight = 0U;
         Stroke stroke;
         stroke.brushEngine = StrokeBrushEngine::Fill;
 
+        if (hasV2Header && (!readUint32(file, bitmapX) || !readUint32(file, bitmapY))) {
+            return {};
+        }
         if (!readUint32(file, bitmapWidth) || !readUint32(file, bitmapHeight)) {
             return {};
         }
@@ -271,6 +404,8 @@ std::vector<Stroke> loadFillStrokesFile(const fs::path& path)
             return {};
         }
 
+        stroke.bitmapX = static_cast<int>(bitmapX);
+        stroke.bitmapY = static_cast<int>(bitmapY);
         stroke.bitmapWidth = static_cast<int>(bitmapWidth);
         stroke.bitmapHeight = static_cast<int>(bitmapHeight);
         stroke.opacity = std::clamp(stroke.opacity, 0.05f, 1.0f);
@@ -278,6 +413,9 @@ std::vector<Stroke> loadFillStrokesFile(const fs::path& path)
         file.read(reinterpret_cast<char*>(stroke.bitmap.data()), static_cast<std::streamsize>(stroke.bitmap.size()));
         if (!file) {
             return {};
+        }
+        if (!cropFillStrokeToContent(stroke)) {
+            continue;
         }
         result.push_back(std::move(stroke));
     }
@@ -289,11 +427,7 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
 {
     std::uint32_t fillCount = 0U;
     for (const Stroke& stroke : layer.strokes) {
-        const std::uint64_t expectedSize = static_cast<std::uint64_t>(stroke.bitmapWidth) * static_cast<std::uint64_t>(stroke.bitmapHeight);
-        if (stroke.brushEngine == StrokeBrushEngine::Fill
-            && stroke.bitmapWidth > 0
-            && stroke.bitmapHeight > 0
-            && expectedSize == static_cast<std::uint64_t>(stroke.bitmap.size())) {
+        if (fillStrokeHasPaint(stroke)) {
             ++fillCount;
         }
     }
@@ -304,36 +438,31 @@ bool saveFillStrokesFile(const fs::path& path, const Layer& layer, std::string* 
         return true;
     }
 
-    std::ofstream file(path, std::ios::binary);
-    if (!file) {
-        setError(errorMessage, "failed to open fill binary for write: " + path.string());
-        return false;
-    }
-
-    writeUint32(file, fillCount);
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(8U);
+    appendUint32(bytes, kFillBinMagicV2);
+    appendUint32(bytes, fillCount);
     for (const Stroke& stroke : layer.strokes) {
-        const std::uint64_t expectedSize = static_cast<std::uint64_t>(stroke.bitmapWidth) * static_cast<std::uint64_t>(stroke.bitmapHeight);
-        if (stroke.brushEngine != StrokeBrushEngine::Fill
-            || stroke.bitmapWidth <= 0
-            || stroke.bitmapHeight <= 0
-            || expectedSize != static_cast<std::uint64_t>(stroke.bitmap.size())) {
+        if (!fillStrokeHasPaint(stroke)) {
+            continue;
+        }
+        Stroke storedStroke = stroke;
+        if (!cropFillStrokeToContent(storedStroke)) {
             continue;
         }
 
-        writeUint32(file, static_cast<std::uint32_t>(stroke.bitmapWidth));
-        writeUint32(file, static_cast<std::uint32_t>(stroke.bitmapHeight));
-        for (float component : stroke.color) {
-            writeFloat32(file, component);
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapX));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapY));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapWidth));
+        appendUint32(bytes, static_cast<std::uint32_t>(storedStroke.bitmapHeight));
+        for (float component : storedStroke.color) {
+            appendFloat32(bytes, component);
         }
-        writeFloat32(file, stroke.opacity);
-        file.write(reinterpret_cast<const char*>(stroke.bitmap.data()), static_cast<std::streamsize>(stroke.bitmap.size()));
-        if (!file) {
-            setError(errorMessage, "failed to write fill binary: " + path.string());
-            return false;
-        }
+        appendFloat32(bytes, storedStroke.opacity);
+        bytes.insert(bytes.end(), storedStroke.bitmap.begin(), storedStroke.bitmap.end());
     }
 
-    return true;
+    return writeBinaryFileIfChanged(path, bytes, errorMessage);
 }
 
 std::optional<Stroke> strokeFromJson(const json& value, const std::vector<Stroke>& fillStrokes)
@@ -385,7 +514,7 @@ json toJson(const Layer& layer)
     int fillIndex = 0;
     for (const Stroke& stroke : layer.strokes) {
         if (stroke.brushEngine == StrokeBrushEngine::Fill) {
-            if (stroke.bitmap.empty() || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0) {
+            if (!fillStrokeHasPaint(stroke)) {
                 continue;
             }
             strokes.push_back(toJson(stroke, fillIndex));

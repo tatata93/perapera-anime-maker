@@ -2,7 +2,7 @@
 
 // このファイルの役割:
 // ペンで引いた1本の線、またはバケツ塗りで作ったFillStrokeを表す。
-// Simple/MyPaintは点列を正データにし、Fillはキャンバスサイズの1chマスクを正データにする。
+// Simple/MyPaintは点列を正データにし、Fillは1chマスクを正データにする。
 
 #include <array>
 #include <cstdint>
@@ -57,9 +57,12 @@ struct Stroke {
     std::vector<StrokePoint> points;
 
     // Fill エンジンのときだけ使う。
-    // bitmapWidth × bitmapHeight の 1ch マスク（0=塗らない / 255=塗る）。
+    // bitmapX/Y を左上原点とする bitmapWidth × bitmapHeight の 1ch マスク。
+    // マスク値は 0=塗らない / 255=塗る。古い作業中データの 1 も塗りとして扱う。
     // points は空のまま使わない。
     std::vector<std::uint8_t> bitmap;
+    int bitmapX = 0;
+    int bitmapY = 0;
     int bitmapWidth = 0;
     int bitmapHeight = 0;
 
@@ -67,7 +70,7 @@ struct Stroke {
     void addPoint(const StrokePoint& point);
 
     // 点列の外接矩形を返す。
-    // Fillはキャンバスサイズ全体を返す。将来、Fillのdirty矩形を別途保存する余地は残す。
+    // Fillは保存済みマスクの外接矩形を返す。
     StrokeBounds bounds() const;
 };
 

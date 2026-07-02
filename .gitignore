@@ -50,3 +50,12 @@ vcpkg_installed/
 vcpkg-manifest-install.log
 
 vcpkg-manifest-root.log
+
+# Local project/user data
+my_anime_project/
+imgui.ini
+build/
+build_*/
+build_cellpanel_clean/
+*.bak
+*.before_*

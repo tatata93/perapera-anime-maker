@@ -15,11 +15,13 @@
 #include "core/Frame.h"
 #include "core/Project.h"
 #include "core/Stroke.h"
+#include "core/Timesheet.h"
 #include "brush/MyPaintBrushEngine.h"
 #include "render/CanvasRenderer.h"
 #include "ui/panels/BrushPanel.h"
 #include "ui/panels/ColorPanel.h"
 #include "ui/panels/ExportPanel.h"
+#include "ui/panels/TimesheetPanel.h"
 
 namespace perapera {
 
@@ -65,6 +67,13 @@ private:
     ui::ColorPanelState colorPanelState_;
     ui::ExportPanelState exportState_;
 
+    // Timesheet Rebuild Step 5:
+    // タイムシートUIの一時入力を正式core Timesheetへ同期するためのApp内一時状態。
+    // まだProject保存、キャンバス表示、再生、出力には接続しない。
+    ui::TimesheetPanelState timesheetPanelState_;
+    Timesheet workingTimesheet_;
+    bool workingTimesheetDirty_ = false;
+
     Stroke currentStroke_;
     bool isDrawingStroke_ = false;
     // MyPaintの逐次処理中かどうかのフラグ。
@@ -84,6 +93,37 @@ private:
     int playbackDirection_ = 1;
     float playbackSpeed_ = 1.0f;
     float playbackAccumulator_ = 0.0f;
+
+    // Timesheet Rebuild Step 6.5:
+    // タイムシートTだけを進める試作再生。activeFrameIndex_ は変更しない。
+    bool isPlayingTimesheet_ = false;
+    bool timesheetPlaybackPingPong_ = false;
+    int timesheetPlaybackDirection_ = 1;
+    float timesheetPlaybackSpeed_ = 1.0f;
+    float timesheetPlaybackAccumulator_ = 0.0f;
+
+    // Timesheet Rebuild Step 7.9:
+    // 任意T範囲だけを再生する。原画間再生は、この範囲指定のプリセットとして扱う。
+    bool isPlayingTimesheetRange_ = false;
+    int timesheetPlaybackRangeStartFrame_ = 0;
+    int timesheetPlaybackRangeEndFrame_ = 0;
+
+    // Timesheet Rebuild Step 7.10:
+    // T選択と作画F編集対象がズレても作画できるようにする。
+    // true: タイムシートのT/セル選択時に、表示される作画Fへ編集対象を寄せる。
+    bool timesheetEditFollowsSelectedT_ = true;
+
+    // Timesheet Rebuild Step 7.10.5:
+    // タイムラインで明示的に別の作画Fを選んだ時は、タイムシート由来の表示Fを同時表示しない。
+    // true: TS表示Fと編集Fがズレたら、編集中Fだけを表示して作画を優先する。
+    // false: 旧7.10互換として、TS表示の上に編集中Fを重ねる。
+    bool timesheetPreferEditingFrameWhenMismatch_ = true;
+    bool timesheetDrawActiveFrameOverPreview_ = false;
+    int previewWarmCursor_ = 0;
+    CanvasDisplayMode previewReadyDisplayMode_ = CanvasDisplayMode::Drawing;
+    std::vector<char> previewReadyFlags_;
+    int previewReadyCount_ = 0;
+    int previewReadyScanCursor_ = 0;
 
     std::vector<FrameSnapshot> undoStack_;
     std::vector<FrameSnapshot> redoStack_;
@@ -120,8 +160,9 @@ private:
     void updateFramePlayback();
     bool stepActiveFrame(int delta);
     bool advancePlaybackFrame();
+    void warmPlaybackFrameCache();
 
-    void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize);
+    void handleCanvasInput(ImVec2 areaMin, ImVec2 areaSize, bool allowDrawingInput);
     void beginStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
     void updateStroke(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);
     void applyFloodFillAt(ImVec2 mouseScreen, ImVec2 areaMin, ImVec2 areaSize);

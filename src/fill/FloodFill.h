@@ -51,4 +51,14 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
                                       const std::array<float, 4>& fillColor,
                                       const FloodFillSettings& settings);
 
+FloodFillResult makeFloodFillStrokes(const Frame& frame,
+                                      int targetLayerIndex,
+                                      const std::vector<const Frame*>& wallFrames,
+                                      int canvasWidth,
+                                      int canvasHeight,
+                                      int seedX,
+                                      int seedY,
+                                      const std::array<float, 4>& fillColor,
+                                      const FloodFillSettings& settings);
+
 } // namespace perapera::fill

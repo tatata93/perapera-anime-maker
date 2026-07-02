@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "core/Cell.h"
 #include "core/Frame.h"
@@ -37,6 +38,21 @@ public:
                                     int height,
                                     ExportMode mode = ExportMode::Composite,
                                     std::string* errorMessage = nullptr);
+
+    static bool exportCellsFrame(const std::vector<const Cell*>& cells,
+                                 int frameIndex,
+                                 const std::filesystem::path& outputPath,
+                                 int width,
+                                 int height,
+                                 ExportMode mode = ExportMode::Composite,
+                                 std::string* errorMessage = nullptr);
+
+    static bool exportCellsFrameSequence(const std::vector<const Cell*>& cells,
+                                         const std::filesystem::path& outputFolder,
+                                         int width,
+                                         int height,
+                                         ExportMode mode = ExportMode::Composite,
+                                         std::string* errorMessage = nullptr);
 };
 
 } // namespace perapera

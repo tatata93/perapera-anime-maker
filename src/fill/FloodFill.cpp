@@ -124,6 +124,7 @@ struct WallMask {
 
 WallMask buildWallMask(const Frame& frame,
                        int targetLayerIndex,
+                       const std::vector<const Frame*>& wallFrames,
                        int width,
                        int height,
                        const FloodFillSettings& settings)
@@ -145,22 +146,27 @@ WallMask buildWallMask(const Frame& frame,
     CanvasBitmap layerBitmap;
     layerBitmap.resize(nullptr, width, height);
 
-    for (int layerIndex = 0; layerIndex < static_cast<int>(frame.layers.size()); ++layerIndex) {
-        if (layerIndex == targetLayerIndex) {
+    for (const Frame* wallFrame : wallFrames) {
+        if (wallFrame == nullptr) {
             continue;
         }
+        for (int layerIndex = 0; layerIndex < static_cast<int>(wallFrame->layers.size()); ++layerIndex) {
+            if (wallFrame == &frame && layerIndex == targetLayerIndex) {
+                continue;
+            }
 
-        const Layer& layer = frame.layers[static_cast<std::size_t>(layerIndex)];
-        if (!layer.visible || layer.opacity <= 0.0f || !isWallLayer(layer.type)) {
-            continue;
-        }
+            const Layer& layer = wallFrame->layers[static_cast<std::size_t>(layerIndex)];
+            if (!layer.visible || layer.opacity <= 0.0f || !isWallLayer(layer.type)) {
+                continue;
+            }
 
-        layerBitmap.clear();
-        for (const Stroke& stroke : layer.strokes) {
-            bakeStrokeToBitmap(layerBitmap, stroke, layer.opacity);
+            layerBitmap.clear();
+            for (const Stroke& stroke : layer.strokes) {
+                bakeStrokeToBitmap(layerBitmap, stroke, layer.opacity);
+            }
+            addBitmapAlphaToMask(masks.wall, layerBitmap, width, height, wallThreshold);
+            addBitmapAlphaToMask(masks.lineCore, layerBitmap, width, height, kLineCoreThreshold);
         }
-        addBitmapAlphaToMask(masks.wall, layerBitmap, width, height, wallThreshold);
-        addBitmapAlphaToMask(masks.lineCore, layerBitmap, width, height, kLineCoreThreshold);
     }
 
     // 線の小穴（閉じていない隙間）を塞ぐための膨張。
@@ -188,6 +194,28 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
                                       const std::array<float, 4>& fillColor,
                                       const FloodFillSettings& settings)
 {
+    const std::vector<const Frame*> wallFrames{&frame};
+    return makeFloodFillStrokes(frame,
+                                targetLayerIndex,
+                                wallFrames,
+                                canvasWidth,
+                                canvasHeight,
+                                seedX,
+                                seedY,
+                                fillColor,
+                                settings);
+}
+
+FloodFillResult makeFloodFillStrokes(const Frame& frame,
+                                      int targetLayerIndex,
+                                      const std::vector<const Frame*>& wallFrames,
+                                      int canvasWidth,
+                                      int canvasHeight,
+                                      int seedX,
+                                      int seedY,
+                                      const std::array<float, 4>& fillColor,
+                                      const FloodFillSettings& settings)
+{
     FloodFillResult result;
     const int width = std::max(0, canvasWidth);
     const int height = std::max(0, canvasHeight);
@@ -204,7 +232,7 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    const WallMask masks = buildWallMask(frame, targetLayerIndex, width, height, settings);
+    const WallMask masks = buildWallMask(frame, targetLayerIndex, wallFrames, width, height, settings);
     const std::vector<std::uint8_t>& wall = masks.wall;
     const std::vector<std::uint8_t>& lineCore = masks.lineCore;
     const std::size_t seedIndex = indexOf(seedX, seedY, width);
@@ -305,18 +333,47 @@ FloodFillResult makeFloodFillStrokes(const Frame& frame,
         return result;
     }
 
-    // FillStrokeの正規マスクは 0 / 255 とし、CanvasBitmap/PngExporterで直接焼ける正データにする。
-    for (std::uint8_t& pixel : filled) {
-        pixel = pixel == 0U ? 0U : 255U;
+    int minX = width;
+    int minY = height;
+    int maxX = -1;
+    int maxY = -1;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            if (filled[indexOf(x, y, width)] == 0U) {
+                continue;
+            }
+            minX = std::min(minX, x);
+            minY = std::min(minY, y);
+            maxX = std::max(maxX, x);
+            maxY = std::max(maxY, y);
+        }
+    }
+    if (maxX < minX || maxY < minY) {
+        result.message = "nothing to fill";
+        return result;
+    }
+
+    const int croppedWidth = maxX - minX + 1;
+    const int croppedHeight = maxY - minY + 1;
+    std::vector<std::uint8_t> croppedMask(static_cast<std::size_t>(croppedWidth) *
+                                          static_cast<std::size_t>(croppedHeight), 0U);
+    for (int y = 0; y < croppedHeight; ++y) {
+        for (int x = 0; x < croppedWidth; ++x) {
+            const std::uint8_t value = filled[indexOf(minX + x, minY + y, width)];
+            croppedMask[static_cast<std::size_t>(y) * static_cast<std::size_t>(croppedWidth) +
+                        static_cast<std::size_t>(x)] = value == 0U ? 0U : 255U;
+        }
     }
 
     Stroke fillStroke;
     fillStroke.color = fillColor;
     fillStroke.opacity = 1.0f;
     fillStroke.brushEngine = StrokeBrushEngine::Fill;
-    fillStroke.bitmap = std::move(filled);
-    fillStroke.bitmapWidth = width;
-    fillStroke.bitmapHeight = height;
+    fillStroke.bitmap = std::move(croppedMask);
+    fillStroke.bitmapX = minX;
+    fillStroke.bitmapY = minY;
+    fillStroke.bitmapWidth = croppedWidth;
+    fillStroke.bitmapHeight = croppedHeight;
     result.strokes.push_back(std::move(fillStroke));
     result.success = true;
     result.message = "filled";

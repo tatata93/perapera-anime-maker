@@ -221,6 +221,23 @@ void drawBrushPanel(BrushSettings& settings)
     if (settings.tool == ToolKind::FloodFill) {
         ImGui::Separator();
         ImGui::TextUnformatted(u8c(u8"バケツ塗り"));
+        int wallSourceIndex = 1;
+        if (settings.fillWallSource == FloodFillWallSource::ActiveCell) {
+            wallSourceIndex = 0;
+        } else if (settings.fillWallSource == FloodFillWallSource::SoloCell) {
+            wallSourceIndex = 2;
+        }
+        const char* wallSourceItems[] = {"Active cell", "Visible cells", "Solo cell"};
+        ImGui::SetNextItemWidth(190.0f);
+        if (ImGui::Combo("Wall source", &wallSourceIndex, wallSourceItems, IM_ARRAYSIZE(wallSourceItems))) {
+            if (wallSourceIndex == 0) {
+                settings.fillWallSource = FloodFillWallSource::ActiveCell;
+            } else if (wallSourceIndex == 2) {
+                settings.fillWallSource = FloodFillWallSource::SoloCell;
+            } else {
+                settings.fillWallSource = FloodFillWallSource::VisibleCells;
+            }
+        }
         ImGui::SliderInt(u8c(u8"許容範囲"), &settings.fillTolerance, 0, 255);
         ImGui::SliderInt(u8c(u8"隙間閉じpx"), &settings.fillGapClosePx, 0, 8);
         ImGui::SliderInt(u8c(u8"境界下塗りpx"), &settings.fillInsetPx, 0, 16);

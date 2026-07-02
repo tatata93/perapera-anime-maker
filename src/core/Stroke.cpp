@@ -52,10 +52,10 @@ StrokeBounds Stroke::bounds() const
         if (bitmap.empty() || bitmapWidth <= 0 || bitmapHeight <= 0) {
             return result;
         }
-        result.minX = 0.0f;
-        result.minY = 0.0f;
-        result.maxX = static_cast<float>(bitmapWidth);
-        result.maxY = static_cast<float>(bitmapHeight);
+        result.minX = static_cast<float>(bitmapX);
+        result.minY = static_cast<float>(bitmapY);
+        result.maxX = static_cast<float>(bitmapX + bitmapWidth);
+        result.maxY = static_cast<float>(bitmapY + bitmapHeight);
         result.valid = true;
         return result;
     }

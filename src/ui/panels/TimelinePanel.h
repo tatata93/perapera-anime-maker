@@ -6,6 +6,8 @@
 
 #include "core/Cell.h"
 
+#include <vector>
+
 namespace perapera::ui {
 
 enum class TimelinePanelAction {
@@ -18,6 +20,7 @@ enum class TimelinePanelAction {
 TimelinePanelAction drawTimelinePanel(Cell& cell,
                                       int& activeFrameIndex,
                                       bool& onionPrevious,
-                                      bool& onionNext);
+                                      bool& onionNext,
+                                      const std::vector<int>& playbackOrderFrameIndices = {});
 
 } // namespace perapera::ui

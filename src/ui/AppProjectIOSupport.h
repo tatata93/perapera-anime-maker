@@ -39,6 +39,7 @@ void resetMp4PreflightLog(const std::filesystem::path& logPath,
                           const std::filesystem::path& mp4Path,
                           int fps);
 
+bool normalizeCellStructure(Project& project);
 void normalizeProjectForStep14(Project& project);
 ProjectStats collectProjectStats(const Project& project);
 std::string statsToText(const ProjectStats& stats);

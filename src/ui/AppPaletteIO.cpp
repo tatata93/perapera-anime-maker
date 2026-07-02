@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -100,6 +101,32 @@ void setError(std::string* error, const std::string& text)
     }
 }
 
+bool writeTextFileIfChanged(const std::filesystem::path& path,
+                            const std::string& text,
+                            std::string* error)
+{
+    std::ifstream existing(path, std::ios::binary);
+    if (existing) {
+        std::ostringstream buffer;
+        buffer << existing.rdbuf();
+        if (buffer.str() == text) {
+            return true;
+        }
+    }
+
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        setError(error, "file open failed: " + path.string());
+        return false;
+    }
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (!file) {
+        setError(error, "file write failed: " + path.string());
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool App::saveColorPalette(const std::filesystem::path& projectFolder, std::string* error) const
@@ -120,17 +147,8 @@ bool App::saveColorPalette(const std::filesystem::path& projectFolder, std::stri
     jsonPalette["swatches"] = writeSwatchList(colorPanelState_.swatches);
     jsonPalette["recentColors"] = writeSwatchList(colorPanelState_.recentColors);
 
-    std::ofstream file(palettePath, std::ios::binary | std::ios::trunc);
-    if (!file) {
-        setError(error, "palette open failed: " + palettePath.string());
-        return false;
-    }
-    file << std::setw(2) << jsonPalette << '\n';
-    if (!file) {
-        setError(error, "palette write failed: " + palettePath.string());
-        return false;
-    }
-    return true;
+    const std::string text = jsonPalette.dump(2) + '\n';
+    return writeTextFileIfChanged(palettePath, text, error);
 }
 
 bool App::loadColorPalette(const std::filesystem::path& projectFolder, std::string* error)

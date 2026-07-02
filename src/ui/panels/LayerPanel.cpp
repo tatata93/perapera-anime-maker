@@ -147,20 +147,26 @@ LayerPanelAction drawLayerPanel(Frame& frame, int& activeLayerIndex)
 
     ImGui::Separator();
     ImGui::TextUnformatted(u8c(u8"レイヤー一覧"));
-    for (int index = static_cast<int>(frame.layers.size()) - 1; index >= 0; --index) {
-        Layer& layer = frame.layers[static_cast<std::size_t>(index)];
-        ImGui::PushID(index);
-        ImGui::Checkbox("##LayerVisible_v27", &layer.visible);
-        ImGui::SameLine();
-        const bool selected = activeLayerIndex == index;
-        if (ImGui::Selectable(layer.name.c_str(), selected)) {
-            activeLayerIndex = index;
+    const int layerCount = static_cast<int>(frame.layers.size());
+    ImGuiListClipper clipper;
+    clipper.Begin(layerCount);
+    while (clipper.Step()) {
+        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+            const int index = layerCount - 1 - row;
+            Layer& layer = frame.layers[static_cast<std::size_t>(index)];
+            ImGui::PushID(index);
+            ImGui::Checkbox("##LayerVisible_v27", &layer.visible);
+            ImGui::SameLine();
+            const bool selected = activeLayerIndex == index;
+            if (ImGui::Selectable(layer.name.c_str(), selected)) {
+                activeLayerIndex = index;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("[%s]", layerTypeToString(layer.type));
+            ImGui::SetNextItemWidth(80.0f);
+            ImGui::SliderFloat("##LayerOpacity_v27", &layer.opacity, 0.0f, 1.0f, "%.2f");
+            ImGui::PopID();
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled("[%s]", layerTypeToString(layer.type));
-        ImGui::SetNextItemWidth(80.0f);
-        ImGui::SliderFloat("##LayerOpacity_v27", &layer.opacity, 0.0f, 1.0f, "%.2f");
-        ImGui::PopID();
     }
 
     ImGui::PopID();

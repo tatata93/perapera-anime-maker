@@ -1,6 +1,7 @@
 // このファイルの役割:
 // CanvasBitmapのRGBA8ピクセルバッファ、SDL_Texture、ストローク焼き込みを実装する。
 // Phase 1.5 Step 19では、バケツ塗り専用のFillStrokeをマスクから直接ピクセルへ焼く。
+// Phase 1.5 Step 19dでは、旧0/1 FillStrokeマスクも255相当として扱い、表示を安定させる。
 
 #include "render/CanvasBitmap.h"
 
@@ -9,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace perapera {
 namespace {
@@ -24,6 +26,46 @@ float pressureMappedValue(float baseValue, float pressure, float amount, float m
     const float safeAmount = std::clamp(amount, 0.0f, 1.0f);
     const float scale = (1.0f - safeAmount) + safeAmount * std::max(minimumScale, safePressure);
     return baseValue * scale;
+}
+
+void blendPixelAtOffset(std::vector<std::uint8_t>& pixels,
+                        std::size_t offset,
+                        std::uint8_t r,
+                        std::uint8_t g,
+                        std::uint8_t b,
+                        std::uint8_t a)
+{
+    if (a == 0U) {
+        return;
+    }
+
+    const std::uint8_t dstAByte = pixels[offset + 3U];
+    if (a == 255U || dstAByte == 0U) {
+        pixels[offset + 0U] = r;
+        pixels[offset + 1U] = g;
+        pixels[offset + 2U] = b;
+        pixels[offset + 3U] = a;
+        return;
+    }
+
+    const std::uint32_t srcA = static_cast<std::uint32_t>(a);
+    const std::uint32_t dstA = static_cast<std::uint32_t>(dstAByte);
+    const std::uint32_t dstFactor = (dstA * (255U - srcA) + 127U) / 255U;
+    const std::uint32_t outA = srcA + dstFactor;
+    if (outA == 0U) {
+        return;
+    }
+
+    auto blendChannel = [&](std::uint8_t src, std::uint8_t dst) {
+        const std::uint32_t value = static_cast<std::uint32_t>(src) * srcA +
+                                    static_cast<std::uint32_t>(dst) * dstFactor;
+        return static_cast<std::uint8_t>((value + outA / 2U) / outA);
+    };
+
+    pixels[offset + 0U] = blendChannel(r, pixels[offset + 0U]);
+    pixels[offset + 1U] = blendChannel(g, pixels[offset + 1U]);
+    pixels[offset + 2U] = blendChannel(b, pixels[offset + 2U]);
+    pixels[offset + 3U] = static_cast<std::uint8_t>(outA);
 }
 
 } // namespace
@@ -114,7 +156,7 @@ void CanvasBitmap::resize(SDL_Renderer* renderer, int width, int height)
 
 void CanvasBitmap::clear()
 {
-    std::fill(pixels_.begin(), pixels_.end(), 0U);
+    std::fill(pixels_.begin(), pixels_.end(), static_cast<std::uint8_t>(0U));
     expandDirty(0, 0, width_, height_);
 }
 
@@ -195,23 +237,57 @@ void CanvasBitmap::bakeStroke(const Stroke& stroke, float opacity)
     const std::uint8_t b = toByte(stroke.color[2]);
 
     if (stroke.brushEngine == StrokeBrushEngine::Fill) {
-        if (stroke.bitmap.empty() || stroke.bitmapWidth != width_ || stroke.bitmapHeight != height_) {
+        const std::size_t expectedSize = static_cast<std::size_t>(std::max(0, stroke.bitmapWidth)) *
+                                         static_cast<std::size_t>(std::max(0, stroke.bitmapHeight));
+        if (stroke.bitmap.empty() || stroke.bitmapWidth <= 0 || stroke.bitmapHeight <= 0 ||
+            expectedSize != stroke.bitmap.size()) {
             return;
         }
 
-        for (int y = 0; y < height_; ++y) {
-            for (int x = 0; x < width_; ++x) {
-                const std::size_t idx = static_cast<std::size_t>(y) * static_cast<std::size_t>(width_) +
-                                        static_cast<std::size_t>(x);
-                const std::uint8_t mask = stroke.bitmap[idx];
+        const int dirtyX0 = std::clamp(stroke.bitmapX, 0, width_);
+        const int dirtyY0 = std::clamp(stroke.bitmapY, 0, height_);
+        const int dirtyX1 = std::clamp(stroke.bitmapX + stroke.bitmapWidth, 0, width_);
+        const int dirtyY1 = std::clamp(stroke.bitmapY + stroke.bitmapHeight, 0, height_);
+        if (dirtyX0 >= dirtyX1 || dirtyY0 >= dirtyY1) {
+            return;
+        }
+
+        const std::uint8_t fullMaskAlpha = toByte(combinedOpacity);
+        if (fullMaskAlpha == 0U) {
+            return;
+        }
+
+        const int localX0 = dirtyX0 - stroke.bitmapX;
+        const int localY0 = dirtyY0 - stroke.bitmapY;
+        const int localX1 = dirtyX1 - stroke.bitmapX;
+        const int localY1 = dirtyY1 - stroke.bitmapY;
+        const std::size_t bitmapStride = static_cast<std::size_t>(stroke.bitmapWidth);
+        const std::size_t canvasStride = static_cast<std::size_t>(width_);
+
+        for (int localY = localY0; localY < localY1; ++localY) {
+            std::size_t maskOffset = static_cast<std::size_t>(localY) * bitmapStride +
+                                     static_cast<std::size_t>(localX0);
+            std::size_t pixelOffset =
+                (static_cast<std::size_t>(stroke.bitmapY + localY) * canvasStride +
+                 static_cast<std::size_t>(stroke.bitmapX + localX0)) * 4U;
+
+            for (int localX = localX0; localX < localX1; ++localX) {
+                const std::uint8_t mask = stroke.bitmap[maskOffset++];
                 if (mask == 0U) {
+                    pixelOffset += 4U;
                     continue;
                 }
-                const float maskOpacity = static_cast<float>(mask) / 255.0f;
-                blendPixel(x, y, r, g, b, toByte(combinedOpacity * maskOpacity));
+                // FillStrokeの正規マスクは 0 / 255。
+                // Step 19初期パッケージを適用済みのセッションでは 0 / 1 のマスクが残る可能性があるため、
+                // 1も「塗る」として扱い、既存作業中データの表示を安定させる。
+                const std::uint8_t sourceAlpha = (mask == 1U || mask == 255U)
+                    ? fullMaskAlpha
+                    : toByte(combinedOpacity * (static_cast<float>(mask) / 255.0f));
+                blendPixelAtOffset(pixels_, pixelOffset, r, g, b, sourceAlpha);
+                pixelOffset += 4U;
             }
         }
-        expandDirty(0, 0, width_, height_);
+        expandDirty(dirtyX0, dirtyY0, dirtyX1, dirtyY1);
         return;
     }
 
