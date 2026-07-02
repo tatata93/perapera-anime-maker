@@ -1951,3 +1951,13 @@ The writer creates `cells/cell_ID/cell.json` and `frames/frame_NNN/frame.json` u
 No UI files were changed.
 No legacy ProjectIO compatibility layer was added because the project is still in development and the new final_spec_v6 layout is the priority.
 
+
+## 2026-07-03 - Phase 2 Step 2-d: Layer layout minimal save
+
+- Added `src/io/LayerLayoutIO.h` and `src/io/LayerLayoutIO.cpp`.
+- Added `tools/layer_layout_io_selftest.cpp`.
+- Added layer JSON save for `frames/frame_001/layers/layer_001.json` style output.
+- Saved layer metadata and stroke payloads, including Simple/MyPaint points and Fill bitmap data.
+- Did not modify UI or existing `ProjectIO`.
+- Kept all added files below 800 lines.
+

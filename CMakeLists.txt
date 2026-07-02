@@ -400,3 +400,19 @@ endif()
 # PERAPERA_PHASE2_STEP2C_END
 
 
+
+# final_spec_v6 Phase 2 Step 2-d: layer layout minimal save selftest.
+add_executable(perapera_layer_layout_io_selftest
+    tools/layer_layout_io_selftest.cpp
+    src/io/LayerLayoutIO.cpp
+    src/core/Layer.cpp
+    src/core/Stroke.cpp
+)
+target_include_directories(perapera_layer_layout_io_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_layer_layout_io_selftest PRIVATE nlohmann_json::nlohmann_json)
+if (MSVC)
+    target_compile_options(perapera_layer_layout_io_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_layer_layout_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+

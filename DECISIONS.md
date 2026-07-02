@@ -679,3 +679,11 @@ The project is still in development, so the new final_spec_v6 layout can become 
 
 Cell-level IO is split into `CellLayoutIO` instead of adding save code to large UI/application files.
 
+
+## 2026-07-03 - Phase 2 Step 2-d decisions
+
+- New save structure is prioritized over legacy project compatibility.
+- Layer save helpers stay separate from UI and existing project save code until the new file layout is assembled.
+- `ProjectLayoutPaths.h` is not rewritten in this step because the caller can pass a frame directory directly, avoiding duplicate path helpers.
+- Unnecessary Step 1-c UI status code should remain removed; large UI files should not grow for this save-layer step.
+
