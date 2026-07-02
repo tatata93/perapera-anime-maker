@@ -1917,3 +1917,12 @@ final_spec_v6.md
 - Scene Plate is not restored.
 - Shooting/cell placement UI is not added yet.
 
+
+## final_spec_v6 Phase 2 Step 2-a: project layout path helpers
+
+- Added a path-helper layer for the future `Project -> Scene -> Cut -> Cell` folder layout.
+- Added `src/io/ProjectLayoutPaths.h`.
+- Added `tools/project_layout_paths_selftest.cpp`.
+- Added `docs/final_spec_v6_phase2_step2a_project_layout_paths_policy.md`.
+- This step does not change `ProjectIO`, `CutIO`, existing project save/load, or UI.
+- The goal is to fix the future storage paths before wiring save/load into them.

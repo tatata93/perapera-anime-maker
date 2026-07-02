@@ -352,3 +352,14 @@ if (NOT TARGET perapera_cut_cell_timesheet_bridge_selftest)
     endif()
 endif()
 
+# final_spec_v6 Phase 2 Step 2-a: Project layout path selftest.
+add_executable(perapera_project_layout_paths_selftest
+    tools/project_layout_paths_selftest.cpp
+)
+target_include_directories(perapera_project_layout_paths_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if (MSVC)
+    target_compile_options(perapera_project_layout_paths_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_project_layout_paths_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+

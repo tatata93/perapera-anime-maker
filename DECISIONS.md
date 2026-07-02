@@ -656,3 +656,12 @@ The Timesheet is conceptually Cut-owned, while physical `timesheet.json` separat
 
 This step adds a small core bridge and selftest only. It does not add UI, change save format, or revive Scene Plate.
 
+
+## Decision: Phase 2 Step 2-a path helpers only
+
+For Phase 2 Step 2-a, the project folder layout is introduced as path helpers and a selftest only.
+Existing save/load remains unchanged until later Step 2-b/2-c work.
+
+Timesheet remains physically separable as `timesheet.json` under the cut folder because it is important as a standalone production artifact and should later support standalone display/printing.
+
+Scene Plate / scene-panel code must not be reintroduced for this storage work.
