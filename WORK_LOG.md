@@ -1961,3 +1961,11 @@ No legacy ProjectIO compatibility layer was added because the project is still i
 - Did not modify UI or existing `ProjectIO`.
 - Kept all added files below 800 lines.
 
+
+## Phase 2 Step 2-d selftest fix
+
+- Fixed `tools/layer_layout_io_selftest.cpp` after the Windows debug runtime aborted during selftest cleanup.
+- The input file is now closed before temporary directory removal.
+- Temporary cleanup now uses `std::error_code` and does not throw.
+- No UI, ProjectIO, or save-format compatibility changes were made.
+

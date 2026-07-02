@@ -687,3 +687,10 @@ Cell-level IO is split into `CellLayoutIO` instead of adding save code to large 
 - `ProjectLayoutPaths.h` is not rewritten in this step because the caller can pass a frame directory directly, avoiding duplicate path helpers.
 - Unnecessary Step 1-c UI status code should remain removed; large UI files should not grow for this save-layer step.
 
+
+## Decision: Step 2-d selftest cleanup must be non-throwing
+
+Layer layout save remains valid, but Windows debug builds can abort if a temp
+file is still open while the test deletes the temp directory. Selftests should
+close files before cleanup and use non-throwing filesystem cleanup paths.
+
