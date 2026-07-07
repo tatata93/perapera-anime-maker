@@ -1969,3 +1969,24 @@ No legacy ProjectIO compatibility layer was added because the project is still i
 - Temporary cleanup now uses `std::error_code` and does not throw.
 - No UI, ProjectIO, or save-format compatibility changes were made.
 
+
+## Phase 2 handoff for Claude
+
+A root-level `CLAUDE_HANDOFF.md` was added so a temporary external coding assistant can inspect the current progress from GitHub.
+
+Current handoff status:
+
+- Phase 2 Step 2-c is treated as completed by the user.
+- Phase 2 Step 2-d introduced `LayerLayoutIO`, but its selftest showed a Windows Debug Runtime abort.
+- A Step 2-d selftest cleanup fix was prepared and must be verified before continuing.
+- The next safe implementation step after verification is Phase 2 Step 2-e: a small top-level new-layout save entry.
+
+Rules recorded for the handoff:
+
+- `final_spec_v6.md` remains the top-level spec.
+- Legacy/backward compatibility is not required during development.
+- Files over 800 lines should be split or lightened by default.
+- Unnecessary files/functions should be removed or lightened when found.
+- Scene Plate / scene panel must not return.
+- PowerShell apply scripts should be ASCII-only.
+

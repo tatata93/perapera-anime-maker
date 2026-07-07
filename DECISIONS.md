@@ -694,3 +694,12 @@ Layer layout save remains valid, but Windows debug builds can abort if a temp
 file is still open while the test deletes the temp directory. Selftests should
 close files before cleanup and use non-throwing filesystem cleanup paths.
 
+
+## Decision: root-level Claude handoff
+
+A root-level `CLAUDE_HANDOFF.md` should be kept visible on GitHub while Claude temporarily works on the repository.
+
+Claude should use it as the current progress source before making changes. The immediate required verification is Phase 2 Step 2-d `perapera_layer_layout_io_selftest.exe` after applying the cleanup fix. If it does not pass and `build/bin/perapera_anime_maker.exe` is not generated, Claude must fix that before moving to Phase 2 Step 2-e.
+
+Compatibility with old save formats is not required at this stage. The new `final_spec_v6.md` structure has priority.
+
