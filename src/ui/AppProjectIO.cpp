@@ -11,9 +11,11 @@
 #include <utility>
 #include <vector>
 
+#include "core/CutCellTimesheetBridge.h"
 #include "io/FfmpegRunner.h"
 #include "io/PngExporter.h"
 #include "io/ProjectIO.h"
+#include "io/ProjectLayoutSaveEntry.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/panels/CellPanel.h"
 
@@ -71,6 +73,40 @@ std::string exportCellScopeText(const std::vector<const Cell*>& cells)
     return "visible cells=" + std::to_string(cells.size());
 }
 
+Scene activeSceneForProjectSave(const Project& project)
+{
+    Scene scene;
+    scene.id = "scene_001";
+    scene.name = project.name.empty() ? "Scene 1" : project.name;
+    scene.cutOrder = {"cut_001"};
+    return scene;
+}
+
+Cut activeCutForProjectSave(const Project& project, const Timesheet& workingTimesheet)
+{
+    Cut cut;
+    cut.id = "cut_001";
+    cut.name = "Cut 1";
+    cut.frameRate = project.output.fps > 0 ? project.output.fps : 24;
+    cut.totalFrames = project.timeline.totalFrames > 0 ? project.timeline.totalFrames : 1;
+    cut.cellZOrderKeys = project.cellOrder;
+    cut.timesheet = workingTimesheet;
+    cut.timesheet.totalFrames = cut.totalFrames;
+    (void)ensureTimesheetTracksForActiveCutCells(project, cut.timesheet);
+    return cut;
+}
+
+bool saveProjectNewLayoutForActiveCut(const std::filesystem::path& projectFolder,
+                                      const Project& project,
+                                      const Timesheet& workingTimesheet,
+                                      ProjectLayoutSaveEntryResult* result,
+                                      std::string* error)
+{
+    const Scene scene = activeSceneForProjectSave(project);
+    const Cut cut = activeCutForProjectSave(project, workingTimesheet);
+    return saveProjectNewLayoutMinimal(projectFolder, scene, cut, project.cells, result, error);
+}
+
 } // namespace
 
 void App::saveProject()
@@ -82,6 +118,12 @@ void App::saveProject()
     std::string error;
     if (!ProjectIO::save(toSave, projectFolder, &error)) {
         lastMessage_ = "save failed: " + error;
+        return;
+    }
+
+    ProjectLayoutSaveEntryResult newLayoutResult;
+    if (!saveProjectNewLayoutForActiveCut(projectFolder, toSave, workingTimesheet_, &newLayoutResult, &error)) {
+        lastMessage_ = "new layout save failed: " + error;
         return;
     }
 
@@ -104,7 +146,9 @@ void App::saveProject()
     afterProjectChanged();
     const appio::SavedSelection selection{activeCellIndex_, activeFrameIndex_, activeLayerIndex_, true};
     lastMessage_ = "project saved: " + projectFolder.string() + " | " +
-        appio::statsToText(stats) + " | " + appio::selectionText(selection);
+        appio::statsToText(stats) + " | " + appio::selectionText(selection) +
+        " | new layout cells=" + std::to_string(newLayoutResult.cellCount) +
+        " frames=" + std::to_string(newLayoutResult.frameCount);
 }
 
 void App::loadProject()
@@ -173,6 +217,13 @@ void App::saveLoadRoundTripCheck()
         lastMessage_ = "round trip save failed: " + error;
         return;
     }
+
+    ProjectLayoutSaveEntryResult newLayoutResult;
+    if (!saveProjectNewLayoutForActiveCut(projectFolder, toSave, workingTimesheet_, &newLayoutResult, &error)) {
+        lastMessage_ = "round trip new layout save failed: " + error;
+        return;
+    }
+
     if (!appio::writeAppState(projectFolder, activeCellIndex_, activeFrameIndex_, activeLayerIndex_, beforeStats, &error)) {
         lastMessage_ = "round trip app_state failed: " + error;
         return;
