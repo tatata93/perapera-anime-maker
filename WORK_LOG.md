@@ -2006,3 +2006,11 @@ Rules recorded for the handoff:
 - Re-copied `DrawingNewLayoutIO` files so the target can build even when the previous package partially applied.
 - Did not touch large UI files in this fix.
 
+
+## Phase 2 Step 2-i header-only stroke build fix
+
+- Fixed `perapera_drawing_new_layout_io_selftest` after local build reported that `src/drawing/Stroke.cpp` was missing.
+- Removed non-inline `Stroke::invalidateBounds()` calls from the new layout IO selftest path.
+- Rebuilt the CMake target without requiring `src/drawing/Stroke.cpp`.
+- Kept app drawing new-layout IO in small split files and did not modify large UI files.
+

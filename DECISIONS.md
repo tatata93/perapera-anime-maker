@@ -717,3 +717,8 @@ Compatibility with old save formats is not required at this stage. The new `fina
 - Missing selftest executable is treated as an incomplete Step 2-i integration.
 - The fix only registers the CMake target and app source file, avoiding additional UI changes.
 
+
+## Phase 2 Step 2-i header-only stroke build fix decision
+
+`DrawingNewLayoutIO` must not depend on `src/drawing/Stroke.cpp` for the Step 2-i selftest because the user's local tree reported that the file is absent. The new-layout save/load path will avoid calling non-inline `Stroke` methods until the drawing model is cleaned up.
+

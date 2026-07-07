@@ -121,7 +121,6 @@ Stroke strokeFromJson(const json& value)
         }
     }
 
-    stroke.invalidateBounds();
     return stroke;
 }
 

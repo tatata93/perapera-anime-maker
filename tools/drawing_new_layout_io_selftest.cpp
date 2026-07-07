@@ -43,7 +43,6 @@ perapera::DrawingCell makeCell()
     stroke.radiusPx = 6.0f;
     stroke.points.push_back({10.0f, 20.0f});
     stroke.points.push_back({30.0f, 40.0f});
-    stroke.invalidateBounds();
 
     layer.strokes.push_back(stroke);
     frame.layers.push_back(layer);
