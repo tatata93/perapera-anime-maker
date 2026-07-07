@@ -725,3 +725,9 @@ Compatibility with old save formats is not required at this stage. The new `fina
 
 ## Decision: remove bad Step 2-i DrawingNewLayoutIO bridge
 The project is still in development and old compatibility is not required. The temporary DrawingNewLayoutIO bridge introduced duplicate app-facing IO and depended on drawing headers that are not valid for the current build path. Remove it instead of patching around it. Future app load/save connection should use the existing new-layout IO entry points and the currently compiled app model.
+
+
+## Decision: remove failed DrawingNewLayoutIO adapter
+
+The `DrawingNewLayoutIO` path introduced invalid include assumptions for the selftest target and duplicated the new layout IO direction. Because the application executable is still generated and the core new layout IO path already exists, the failed adapter should be removed rather than repaired. Future app save/load connection should use confirmed app call sites and avoid duplicate adapter layers.
+

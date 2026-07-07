@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26)
+﻿cmake_minimum_required(VERSION 3.26)
 
 project(
     perapera_anime_maker
@@ -11,8 +11,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# exe を build/bin にまとめる。
-# ユーザーの起動確認コマンドが build 以下から exe を探せるようにする。
+# exe 繧・build/bin 縺ｫ縺ｾ縺ｨ繧√ｋ縲・
+# 繝ｦ繝ｼ繧ｶ繝ｼ縺ｮ襍ｷ蜍慕｢ｺ隱阪さ繝槭Φ繝峨′ build 莉･荳九°繧・exe 繧呈爾縺帙ｋ繧医≧縺ｫ縺吶ｋ縲・
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
@@ -21,8 +21,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
 
 include(FetchContent)
 
-# SDL3: ウィンドウ・入力・Renderer を担当する。
-# zlib ライセンス。
+# SDL3: 繧ｦ繧｣繝ｳ繝峨え繝ｻ蜈･蜉帙・Renderer 繧呈球蠖薙☆繧九・
+# zlib 繝ｩ繧､繧ｻ繝ｳ繧ｹ縲・
 set(SDL_SHARED ON CACHE BOOL "Build SDL3 as a shared library" FORCE)
 set(SDL_STATIC OFF CACHE BOOL "Do not build SDL3 as a static library" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "Do not build SDL3 test library" FORCE)
@@ -34,8 +34,8 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-# Dear ImGui: UIパネルを担当する。
-# MIT ライセンス。
+# Dear ImGui: UI繝代ロ繝ｫ繧呈球蠖薙☆繧九・
+# MIT 繝ｩ繧､繧ｻ繝ｳ繧ｹ縲・
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -43,8 +43,8 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-# nlohmann/json: project.json と layer_NNN.json 保存で使う。
-# MIT ライセンス。
+# nlohmann/json: project.json 縺ｨ layer_NNN.json 菫晏ｭ倥〒菴ｿ縺・・
+# MIT 繝ｩ繧､繧ｻ繝ｳ繧ｹ縲・
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 FetchContent_Declare(
     nlohmann_json
@@ -55,13 +55,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(SDL3 imgui nlohmann_json)
 
-# libmypaint: Phase 1.5で導入するブラシエンジンライブラリ。
-# vcpkgのlibmypaint portはpkg-config情報だけを持つ構成がある。
-# さらにVisual Studio同梱vcpkgではpkg-config検出が環境変数に左右されやすいため、
+# libmypaint: Phase 1.5縺ｧ蟆主・縺吶ｋ繝悶Λ繧ｷ繧ｨ繝ｳ繧ｸ繝ｳ繝ｩ繧､繝悶Λ繝ｪ縲・
+# vcpkg縺ｮlibmypaint port縺ｯpkg-config諠・ｱ縺縺代ｒ謖√▽讒区・縺後≠繧九・
+# 縺輔ｉ縺ｫVisual Studio蜷梧｢ｱvcpkg縺ｧ縺ｯpkg-config讀懷・縺檎腸蠅・､画焚縺ｫ蟾ｦ蜿ｳ縺輔ｌ繧・☆縺・◆繧√・
 # 1) CMake config
 # 2) pkg-config
-# 3) vcpkg_installed/ 直下のヘッダ/ライブラリ直接検出
-# の順で安全に探す。
+# 3) vcpkg_installed/ 逶ｴ荳九・繝倥ャ繝/繝ｩ繧､繝悶Λ繝ｪ逶ｴ謗･讀懷・
+# 縺ｮ鬆・〒螳牙・縺ｫ謗｢縺吶・
 find_package(libmypaint CONFIG QUIET)
 find_package(PkgConfig QUIET)
 
@@ -88,9 +88,9 @@ elseif (LIBMYPAINT_FOUND)
     set(PERAPERA_LIBMYPAINT_AVAILABLE ON)
     message(STATUS "libmypaint found by pkg-config: ${LIBMYPAINT_VERSION}")
 else()
-    # vcpkg manifest modeでは、インストール先がプロジェクト直下の
-    # vcpkg_installed/ になる。pkg-configが拾えない場合でも、
-    # この場所に libmypaint のヘッダと import lib があれば使える。
+    # vcpkg manifest mode縺ｧ縺ｯ縲√う繝ｳ繧ｹ繝医・繝ｫ蜈医′繝励Ο繧ｸ繧ｧ繧ｯ繝育峩荳九・
+    # vcpkg_installed/ 縺ｫ縺ｪ繧九Ｑkg-config縺梧鏡縺医↑縺・ｴ蜷医〒繧ゅ・
+    # 縺薙・蝣ｴ謇縺ｫ libmypaint 縺ｮ繝倥ャ繝縺ｨ import lib 縺後≠繧後・菴ｿ縺医ｋ縲・
     if (DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
         set(PERAPERA_VCPKG_TRIPLET "${VCPKG_TARGET_TRIPLET}")
     else()
@@ -322,16 +322,16 @@ else()
  target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# WindowsでSDL3.dllをexe横にコピーする。
-# SDL3を共有ライブラリでFetchContentビルドした場合、これがないと起動時にDLLが見つからない。
+# Windows縺ｧSDL3.dll繧弾xe讓ｪ縺ｫ繧ｳ繝斐・縺吶ｋ縲・
+# SDL3繧貞・譛峨Λ繧､繝悶Λ繝ｪ縺ｧFetchContent繝薙Ν繝峨＠縺溷ｴ蜷医√％繧後′縺ｪ縺・→襍ｷ蜍墓凾縺ｫDLL縺瑚ｦ九▽縺九ｉ縺ｪ縺・・
 add_custom_command(TARGET perapera_anime_maker POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:SDL3::SDL3>
         $<TARGET_FILE_DIR:perapera_anime_maker>
 )
 
-# vcpkg直下からlibmypaintを直接拾った場合、実行時に必要なDLLもexe横へコピーする。
-# vcpkg_installed はgit管理しない。ローカル環境の依存物として扱う。
+# vcpkg逶ｴ荳九°繧瑛ibmypaint繧堤峩謗･諡ｾ縺｣縺溷ｴ蜷医∝ｮ溯｡梧凾縺ｫ蠢・ｦ√↑DLL繧Ｆxe讓ｪ縺ｸ繧ｳ繝斐・縺吶ｋ縲・
+# vcpkg_installed 縺ｯgit邂｡逅・＠縺ｪ縺・ゅΟ繝ｼ繧ｫ繝ｫ迺ｰ蠅・・萓晏ｭ倡黄縺ｨ縺励※謇ｱ縺・・
 if (PERAPERA_LIBMYPAINT_DIRECT AND EXISTS "${PERAPERA_VCPKG_RUNTIME_BIN_DIR}")
     add_custom_command(TARGET perapera_anime_maker POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
