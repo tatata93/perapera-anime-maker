@@ -463,3 +463,31 @@ else()
     target_compile_options(perapera_project_layout_read_entry_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+
+# PERAPERA_PHASE2_STEP2H_BEGIN
+# final_spec_v6 Phase 2 Step 2-h: new-layout load entry.
+target_sources(perapera_anime_maker PRIVATE
+    src/io/ProjectLayoutLoadEntry.cpp
+)
+
+add_executable(perapera_project_layout_load_entry_selftest
+    tools/project_layout_load_entry_selftest.cpp
+    src/io/ProjectLayoutLoadEntry.cpp
+    src/io/ProjectLayoutSaveEntry.cpp
+    src/io/SceneCutLayoutIO.cpp
+    src/io/CellLayoutIO.cpp
+    src/io/LayerLayoutIO.cpp
+    src/io/CutIO.cpp
+    src/io/TimesheetIO.cpp
+    src/core/Timesheet.cpp
+    src/core/Layer.cpp
+    src/core/Stroke.cpp
+)
+target_include_directories(perapera_project_layout_load_entry_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_project_layout_load_entry_selftest PRIVATE nlohmann_json::nlohmann_json)
+if (MSVC)
+    target_compile_options(perapera_project_layout_load_entry_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_project_layout_load_entry_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+# PERAPERA_PHASE2_STEP2H_END

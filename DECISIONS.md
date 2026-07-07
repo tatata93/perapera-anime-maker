@@ -703,3 +703,11 @@ Claude should use it as the current progress source before making changes. The i
 
 Compatibility with old save formats is not required at this stage. The new `final_spec_v6.md` structure has priority.
 
+
+## 2026-07-08 Phase 2 Step 2-h decisions
+
+- New `final_spec_v6` layout load is prioritized over old save compatibility.
+- `CLAUDE_HANDOFF.md` is temporary and can be removed from the main workflow.
+- Loading code belongs in `src/io`, not in UI files.
+- Path logic should continue to reuse `ProjectLayoutPaths.h` rather than adding duplicate helpers.
+

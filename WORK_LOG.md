@@ -1990,3 +1990,12 @@ Rules recorded for the handoff:
 - Scene Plate / scene panel must not return.
 - PowerShell apply scripts should be ASCII-only.
 
+
+## 2026-07-08 Phase 2 Step 2-h: new layout load entry
+
+- Removed temporary Claude handoff file from the active repo workflow.
+- Added `src/io/ProjectLayoutLoadEntry.h` and `.cpp`.
+- Added `tools/project_layout_load_entry_selftest.cpp`.
+- Kept compatibility with old ProjectIO out of scope because the project is still in development.
+- Kept load logic outside large UI files.
+
