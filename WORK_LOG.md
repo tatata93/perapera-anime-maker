@@ -2035,3 +2035,10 @@ Rules recorded for the handoff:
 - Fixed the Step 2-k inventory generation script after Windows PowerShell failed on `System.IO.Path.GetRelativePath`.
 - Kept the cleanup goal: remove the failed DrawingNewLayoutIO route and generate an app save/load inventory report.
 - No C++ source behavior was changed by this applyfix.
+
+## Phase 2 Step 2-m: ProjectIO usage audit
+
+- Generated docs/final_spec_v6_phase2_step2m_projectio_usage_audit.md from local sources.
+- Removed failed DrawingNewLayoutIO path in prior step and kept it removed.
+- ProjectIO deleted by script: False
+- Goal: only remove legacy ProjectIO when no app/tool/CMake references remain.

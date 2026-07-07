@@ -736,3 +736,7 @@ The `DrawingNewLayoutIO` path introduced invalid include assumptions for the sel
 
 PowerShell apply scripts must not depend on newer .NET methods such as `System.IO.Path.GetRelativePath`.
 Use manual path normalization and `-f` string formatting instead of fragile interpolation around `:`.
+
+## Phase 2 Step 2-m decision
+
+ProjectIO removal must be evidence-based. If any reference remains outside src/io/ProjectIO.*, ProjectIO stays until the reference is migrated to the new layout IO. Do not add a second DrawingNewLayoutIO bridge; connect real app IO paths directly to ProjectLayoutSaveEntry / ProjectLayoutLoadEntry.
