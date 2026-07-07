@@ -722,3 +722,6 @@ Compatibility with old save formats is not required at this stage. The new `fina
 
 `DrawingNewLayoutIO` must not depend on `src/drawing/Stroke.cpp` for the Step 2-i selftest because the user's local tree reported that the file is absent. The new-layout save/load path will avoid calling non-inline `Stroke` methods until the drawing model is cleaned up.
 
+
+## Decision: remove bad Step 2-i DrawingNewLayoutIO bridge
+The project is still in development and old compatibility is not required. The temporary DrawingNewLayoutIO bridge introduced duplicate app-facing IO and depended on drawing headers that are not valid for the current build path. Remove it instead of patching around it. Future app load/save connection should use the existing new-layout IO entry points and the currently compiled app model.

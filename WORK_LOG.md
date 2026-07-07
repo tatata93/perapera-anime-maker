@@ -2014,3 +2014,8 @@ Rules recorded for the handoff:
 - Rebuilt the CMake target without requiring `src/drawing/Stroke.cpp`.
 - Kept app drawing new-layout IO in small split files and did not modify large UI files.
 
+
+## Phase 2 Step 2-i cleanup: remove broken DrawingNewLayoutIO path
+- Removed the temporary DrawingNewLayoutIO app-facing path because it depended on the legacy drawing header set and blocked the selftest target.
+- Kept the main executable path intact and returned Step 2-i to a cleanup state before reconnecting app load/save.
+- Next app connection must inspect the actual current app/save code first and avoid adding another parallel IO layer unnecessarily.
