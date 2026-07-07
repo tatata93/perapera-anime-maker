@@ -1999,3 +1999,10 @@ Rules recorded for the handoff:
 - Kept compatibility with old ProjectIO out of scope because the project is still in development.
 - Kept load logic outside large UI files.
 
+
+## Phase 2 Step 2-i CMake target fix
+
+- Fixed missing CMake registration for `perapera_drawing_new_layout_io_selftest`.
+- Re-copied `DrawingNewLayoutIO` files so the target can build even when the previous package partially applied.
+- Did not touch large UI files in this fix.
+

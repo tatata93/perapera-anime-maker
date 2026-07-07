@@ -711,3 +711,9 @@ Compatibility with old save formats is not required at this stage. The new `fina
 - Loading code belongs in `src/io`, not in UI files.
 - Path logic should continue to reuse `ProjectLayoutPaths.h` rather than adding duplicate helpers.
 
+
+## Phase 2 Step 2-i CMake target fix decision
+
+- Missing selftest executable is treated as an incomplete Step 2-i integration.
+- The fix only registers the CMake target and app source file, avoiding additional UI changes.
+

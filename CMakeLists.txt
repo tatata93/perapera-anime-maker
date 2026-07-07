@@ -491,3 +491,27 @@ else()
     target_compile_options(perapera_project_layout_load_entry_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 # PERAPERA_PHASE2_STEP2H_END
+
+# PERAPERA_PHASE2_STEP2I_CMAKE_FIX_BEGIN
+# final_spec_v6 Phase 2 Step 2-i: app drawing new-layout CMake registration.
+if (TARGET perapera_anime_maker)
+    target_sources(perapera_anime_maker PRIVATE
+        src/project/DrawingNewLayoutIO.cpp
+    )
+endif()
+
+if (NOT TARGET perapera_drawing_new_layout_io_selftest)
+    add_executable(perapera_drawing_new_layout_io_selftest
+        tools/drawing_new_layout_io_selftest.cpp
+        src/project/DrawingNewLayoutIO.cpp
+        src/drawing/Stroke.cpp
+    )
+    target_include_directories(perapera_drawing_new_layout_io_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(perapera_drawing_new_layout_io_selftest PRIVATE nlohmann_json::nlohmann_json)
+    if (MSVC)
+        target_compile_options(perapera_drawing_new_layout_io_selftest PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(perapera_drawing_new_layout_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endif()
+# PERAPERA_PHASE2_STEP2I_CMAKE_FIX_END
