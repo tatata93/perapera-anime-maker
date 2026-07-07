@@ -4,7 +4,7 @@ Current branch/state:
 
 - Work is on `main`.
 - GitHub should have only `main`.
-- Latest completed step: final_spec_v6 Phase 2 Step 2-f.
+- Latest completed step: final_spec_v6 Phase 2 Step 2-g.
 
 What was just done:
 
@@ -16,6 +16,11 @@ What was just done:
   - `src/ui/AppProjectIO.cpp`
   - `App::saveProject()` now writes both the legacy save and the new `scenes/scene_001/cuts/cut_001/` layout.
   - `App::saveLoadRoundTripCheck()` also writes the new layout, then still verifies through the existing legacy load path.
+- Added Step 2-g read/inspection entry:
+  - `src/io/ProjectLayoutReadEntry.h`
+  - `src/io/ProjectLayoutReadEntry.cpp`
+  - `tools/project_layout_read_entry_selftest.cpp`
+  - It validates `scene.json`, `cut.json`, `timesheet.json`, `cell.json`, `frame.json`, and layer JSON files.
 
 Important direction:
 
@@ -27,12 +32,12 @@ Important direction:
 Verification already done:
 
 - `cmake --build .\build --config Debug --target perapera_anime_maker --parallel 1`
-- All `build/bin/*selftest.exe` passed: 16 selftests.
+- All `build/bin/*selftest.exe` passed: 17 selftests.
 
 Recommended next task:
 
-- Phase 2 Step 2-g: add a narrow read/inspection or load selftest for the new layout.
-- Do not replace the app load path yet unless the new layout read path is verified first.
+- Phase 2 Step 2-h: turn the new-layout inspector into a real app load path.
+- Keep the legacy load path available until the new layout can reconstruct enough Project data safely.
 
 User confirmation that would help:
 

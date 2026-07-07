@@ -153,6 +153,7 @@ add_executable(perapera_anime_maker
     src/io/SceneCutLayoutIO.cpp
     src/io/LayerLayoutIO.cpp
     src/io/ProjectLayoutSaveEntry.cpp
+    src/io/ProjectLayoutReadEntry.cpp
     src/io/PngExporter.cpp
     src/io/FfmpegRunner.cpp
     src/render/CanvasBitmap.cpp
@@ -438,5 +439,27 @@ if (MSVC)
     target_compile_options(perapera_project_layout_save_entry_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_project_layout_save_entry_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# final_spec_v6 Phase 2 Step 2-g: new-layout read/inspection selftest.
+add_executable(perapera_project_layout_read_entry_selftest
+    tools/project_layout_read_entry_selftest.cpp
+    src/io/ProjectLayoutReadEntry.cpp
+    src/io/ProjectLayoutSaveEntry.cpp
+    src/io/SceneCutLayoutIO.cpp
+    src/io/CellLayoutIO.cpp
+    src/io/LayerLayoutIO.cpp
+    src/io/CutIO.cpp
+    src/io/TimesheetIO.cpp
+    src/core/Timesheet.cpp
+    src/core/Layer.cpp
+    src/core/Stroke.cpp
+)
+target_include_directories(perapera_project_layout_read_entry_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_project_layout_read_entry_selftest PRIVATE nlohmann_json::nlohmann_json)
+if (MSVC)
+    target_compile_options(perapera_project_layout_read_entry_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_project_layout_read_entry_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 

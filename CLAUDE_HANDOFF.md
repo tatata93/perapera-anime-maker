@@ -30,12 +30,13 @@ final_spec_v6.md
       ├─ 2-c: cell.json / frames directory save                    done
       ├─ 2-d: layer_NNN.json / stroke save                         verified
       ├─ 2-e: one top-level save entry for new layout               done
-      └─ 2-f: connect new-layout save entry to app save path        done
+      ├─ 2-f: connect new-layout save entry to app save path        done
+      └─ 2-g: inspect/read entry for new layout                     done
 ```
 
 ## Immediate first action
 
-Step 2-d, Step 2-e, and Step 2-f have been verified locally.
+Step 2-d through Step 2-g have been verified locally.
 
 Before adding new features, keep the tree clean enough to hand off:
 
@@ -144,13 +145,13 @@ git push origin codex/fillstroke-crop-cache
 Proceed to:
 
 ```text
-Phase 2 Step 2-g: inspect/load path for the new layout, still without broad UI changes
+Phase 2 Step 2-h: turn the new-layout inspector into a real app load path
 ```
 
 Goal:
 
-- Decide whether the next useful step is a read-only inspector/selftest for `scenes/scene_001/cuts/cut_001/` or a minimal app-side load path.
-- Keep UI changes minimal until the save/load path is stable.
+- Use `inspectProjectNewLayoutMinimal()` as the basis for a real load path.
+- Keep UI changes minimal until the new load path is stable.
 - Do not reintroduce Scene Plate or old scene-panel concepts.
 - Include build verification that `build/bin/perapera_anime_maker.exe` still exists.
 
@@ -168,4 +169,4 @@ Do not jump to these yet:
 
 ## Handoff summary
 
-Claude should first confirm the local branch is clean enough to proceed, then continue from Step 2-g. Step 2-f connects app save to `saveProjectNewLayoutMinimal()` in `src/ui/AppProjectIO.cpp`.
+Claude should first confirm the local branch is clean enough to proceed, then continue from Step 2-h. Step 2-g adds `src/io/ProjectLayoutReadEntry.*` and `tools/project_layout_read_entry_selftest.cpp`.
