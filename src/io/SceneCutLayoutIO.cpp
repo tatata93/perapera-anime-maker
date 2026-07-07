@@ -26,7 +26,7 @@ void setError(std::string* errorMessage, const std::string& message)
 
 std::string normalizedId(const std::string& id, const char* fallback)
 {
-    return ProjectLayoutPaths::sanitizeId(id, fallback);
+    return normalizeLayoutId(id, fallback);
 }
 
 bool writeJsonFileIfChanged(const fs::path& path, const json& value, std::string* errorMessage)
@@ -111,13 +111,14 @@ bool saveMinimalSceneAndCut(
     }
 
     std::error_code errorCode;
-    if (!ProjectLayoutPaths::createCutFolderSkeleton(projectRoot, normalizedScene.id, normalizedCut.id, errorCode)) {
+    fs::create_directories(cellsDirectory(projectRoot, normalizedScene.id, normalizedCut.id), errorCode);
+    if (errorCode) {
         setError(errorMessage, "failed to create scene/cut folders: " + errorCode.message());
         return false;
     }
 
-    const fs::path scenePath = ProjectLayoutPaths::sceneJsonPath(projectRoot, normalizedScene.id);
-    const fs::path cutFolder = ProjectLayoutPaths::cutFolder(projectRoot, normalizedScene.id, normalizedCut.id);
+    const fs::path scenePath = sceneJsonPath(projectRoot, normalizedScene.id);
+    const fs::path cutFolder = cutDirectory(projectRoot, normalizedScene.id, normalizedCut.id);
 
     if (!writeJsonFileIfChanged(scenePath, sceneMetadataToJson(normalizedScene, normalizedCut), errorMessage)) {
         return false;

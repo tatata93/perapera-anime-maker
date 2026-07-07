@@ -34,7 +34,6 @@ nlohmann::json readJson(const std::filesystem::path& path)
 
 int main()
 {
-    namespace paths = perapera::ProjectLayoutPaths;
     namespace io = perapera::SceneCutLayoutIO;
 
     bool ok = true;
@@ -65,10 +64,10 @@ int main()
         return 1;
     }
 
-    ok &= expect(std::filesystem::exists(paths::sceneJsonPath(root, "scene_001")), "scene.json exists");
-    ok &= expect(std::filesystem::exists(paths::cutJsonPath(root, "scene_001", "cut_001")), "cut.json exists");
-    ok &= expect(std::filesystem::exists(paths::timesheetJsonPath(root, "scene_001", "cut_001")), "timesheet.json exists");
-    ok &= expect(std::filesystem::is_directory(paths::cellsRoot(root, "scene_001", "cut_001")), "cells folder exists");
+    ok &= expect(std::filesystem::exists(perapera::sceneJsonPath(root, "scene_001")), "scene.json exists");
+    ok &= expect(std::filesystem::exists(perapera::cutJsonPath(root, "scene_001", "cut_001")), "cut.json exists");
+    ok &= expect(std::filesystem::exists(perapera::cutTimesheetJsonPath(root, "scene_001", "cut_001")), "timesheet.json exists");
+    ok &= expect(std::filesystem::is_directory(perapera::cellsDirectory(root, "scene_001", "cut_001")), "cells folder exists");
 
     const nlohmann::json sceneJson = readJson(result.sceneJsonPath);
     ok &= expect(sceneJson.value("kind", std::string{}) == "perapera.scene.v1", "scene kind");

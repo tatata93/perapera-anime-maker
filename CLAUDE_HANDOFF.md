@@ -28,42 +28,19 @@ final_spec_v6.md
       ├─ 2-a: path helpers                                         done
       ├─ 2-b: minimal scene.json / cut.json save                   done
       ├─ 2-c: cell.json / frames directory save                    done
-      ├─ 2-d: layer_NNN.json / stroke save                         needs selftest-fix verification
-      └─ 2-e: one top-level save entry for new layout               next after 2-d passes
+      ├─ 2-d: layer_NNN.json / stroke save                         verified
+      └─ 2-e: one top-level save entry for new layout               done
 ```
 
 ## Immediate first action
 
-Do not start Step 2-e until Step 2-d is verified.
+Step 2-d and Step 2-e have both been verified locally.
 
-The latest known problem was a Debug Runtime abort when running:
+Before adding new features, keep the tree clean enough to hand off:
 
-```powershell
-.\build\bin\perapera_layer_layout_io_selftest.exe
-```
-
-A fix package was prepared to update only:
-
-```text
-tools/layer_layout_io_selftest.cpp
-docs/final_spec_v6_phase2_step2d_layer_layout_selftest_fix_policy.md
-WORK_LOG.md
-DECISIONS.md
-```
-
-The suspected cause was selftest cleanup on Windows: removing a directory while a file stream was still open. Verify the fix by running the full clean build and then:
-
-```powershell
-.\build\bin\perapera_layer_layout_io_selftest.exe
-```
-
-Expected output:
-
-```text
-perapera_layer_layout_io_selftest passed
-```
-
-Only after that, continue to Phase 2 Step 2-e.
+- Commit or intentionally discard unrelated untracked notes.
+- Do not restore Scene Plate / ScenePlateImageCache / scene panel code.
+- Keep new save-layout work in the root project, not in a nested `perapera-anime-maker/` folder.
 
 ## Current design decisions
 
@@ -161,32 +138,20 @@ After commit:
 git push origin codex/fillstroke-crop-cache
 ```
 
-## Recommended next step after Step 2-d passes
+## Recommended next step
 
 Proceed to:
 
 ```text
-Phase 2 Step 2-e: new-layout save entry
+Phase 2 Step 2-f: connect the new-layout save entry to a controlled save path
 ```
 
 Goal:
 
-- Add one small public entry point that calls the existing new-layout IO helpers.
-- It should assemble:
-  - `SceneCutLayoutIO`
-  - `CellLayoutIO`
-  - `LayerLayoutIO`
-- It should write the new layout under:
-  - `scenes/scene_001/cuts/cut_001/`
-- It should not change UI yet.
-- It should not modify legacy `ProjectIO` unless absolutely necessary.
-- It should include a selftest that verifies a minimal project creates:
-  - `scene.json`
-  - `cut.json`
-  - `timesheet.json`
-  - `cells/cell_A/cell.json`
-  - `cells/cell_A/frames/frame_001/frame.json`
-  - `cells/cell_A/frames/frame_001/layers/layer_001.json`
+- Call `saveProjectNewLayoutMinimal()` from a controlled entry point.
+- Keep UI changes minimal or absent until the save path is stable.
+- Do not reintroduce legacy compatibility as a blocker.
+- Include a selftest or manual verification that `build/bin/perapera_anime_maker.exe` still exists.
 
 ## What not to do next
 
@@ -202,4 +167,4 @@ Do not jump to these yet:
 
 ## Handoff summary
 
-Claude should first confirm the local branch is clean enough to proceed, run the full build, verify Step 2-d selftest, and only then implement Step 2-e as a small, testable save-entry layer.
+Claude should first confirm the local branch is clean enough to proceed, then continue from Step 2-f. Step 2-e exists as `src/io/ProjectLayoutSaveEntry.*` with `tools/project_layout_save_entry_selftest.cpp`.
