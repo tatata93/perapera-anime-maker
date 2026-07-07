@@ -731,3 +731,8 @@ The project is still in development and old compatibility is not required. The t
 
 The `DrawingNewLayoutIO` path introduced invalid include assumptions for the selftest target and duplicated the new layout IO direction. Because the application executable is still generated and the core new layout IO path already exists, the failed adapter should be removed rather than repaired. Future app save/load connection should use confirmed app call sites and avoid duplicate adapter layers.
 
+
+## Decision: keep apply scripts PowerShell 5.1 compatible
+
+PowerShell apply scripts must not depend on newer .NET methods such as `System.IO.Path.GetRelativePath`.
+Use manual path normalization and `-f` string formatting instead of fragile interpolation around `:`.

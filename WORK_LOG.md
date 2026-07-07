@@ -2029,3 +2029,9 @@ Rules recorded for the handoff:
 - Kept UI files untouched.
 - Next work is to inspect actual app save/load call sites before reconnecting app load.
 
+
+## Phase 2 Step 2-k applyfix: PowerShell 5.1 compatible app IO inventory
+
+- Fixed the Step 2-k inventory generation script after Windows PowerShell failed on `System.IO.Path.GetRelativePath`.
+- Kept the cleanup goal: remove the failed DrawingNewLayoutIO route and generate an app save/load inventory report.
+- No C++ source behavior was changed by this applyfix.
