@@ -180,3 +180,18 @@ Current state:
 Next recommended task:
 
 - Continue with a low-risk large-file split only after reading the target file carefully.
+
+---
+
+## Latest handoff: Phase 2 Step 2-t CellPanel split
+
+Current state:
+
+- Added `src/ui/panels/CellPanelModel.h/.cpp`.
+- Moved cell ID, cell order, display label, layer count, duplicate naming, and layer-ID maintenance helpers out of `CellPanel.cpp`.
+- `CellPanel.cpp` now keeps ImGui drawing and display-mode state and is below 800 lines.
+- Debug app build succeeded after the split.
+
+Next recommended task:
+
+- Consider the next low-risk large-file split, likely `CanvasRenderer.cpp`, but only after isolating pure helper logic.

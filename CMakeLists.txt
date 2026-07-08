@@ -173,6 +173,7 @@ add_executable(perapera_anime_maker
     src/ui/CanvasView.cpp
     src/ui/panels/BrushPanel.cpp
     src/ui/panels/CellPanel.cpp
+    src/ui/panels/CellPanelModel.cpp
     src/ui/panels/TimesheetPanel.cpp
     src/ui/panels/TimesheetPanelBridge.cpp
     src/ui/panels/ColorPanel.cpp

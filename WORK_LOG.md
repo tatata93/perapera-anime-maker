@@ -2089,3 +2089,9 @@ Rules recorded for the handoff:
 
 - Added the previously untracked Step 2-k app IO inventory cleanup applyfix policy document to the repository history.
 - This keeps the working tree clean for subsequent implementation work.
+
+## Phase 2 Step 2-t: CellPanel model helper split
+
+- Split ID/cell-order/layer-ID helper logic from `CellPanel.cpp` into `CellPanelModel.h/.cpp`.
+- Kept ImGui drawing and display-mode state in `CellPanel.cpp`.
+- Reduced `CellPanel.cpp` to 774 lines while keeping the app build green.

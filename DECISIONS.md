@@ -771,3 +771,7 @@ Project layout inspection must stay light enough for future project lists and st
 ## Phase 2 Step 2-s decision
 
 Keep the Step 2-k app IO inventory cleanup applyfix policy as a tracked historical document because it explains why the app IO inventory script stayed PowerShell 5.1 compatible.
+
+## Phase 2 Step 2-t decision
+
+Large UI file reduction should start with low-risk model helpers. `CellPanelModel` owns cell IDs, ordering, display labels, and layer-ID maintenance; `CellPanel.cpp` keeps the ImGui workflow.
