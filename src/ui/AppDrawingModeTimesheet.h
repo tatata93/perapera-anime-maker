@@ -22,6 +22,35 @@ int autoCreateMissingDrawingFramesForTimesheetEntries(
     Project& project,
     const ui::TimesheetPanelState& state);
 
+struct TimesheetPlaybackStep {
+    int requestedFrame = 0;
+    int direction = 1;
+    bool canPlay = true;
+};
+
+struct TimesheetPlaybackRange {
+    int startFrame = 0;
+    int endFrame = 0;
+};
+
+int clampTimesheetPreviewFrame(int totalFrames, int zeroBasedFrame);
+
+TimesheetPlaybackStep stepTimesheetPreviewFrameIndex(int totalFrames,
+                                                     int selectedFrame,
+                                                     int delta,
+                                                     bool pingPong,
+                                                     int currentDirection);
+
+TimesheetPlaybackRange normalizeTimesheetPlaybackRange(int totalFrames,
+                                                       int startFrame,
+                                                       int endFrame);
+
+TimesheetPlaybackStep stepTimesheetRangePreviewFrameIndex(int selectedFrame,
+                                                          int delta,
+                                                          TimesheetPlaybackRange range,
+                                                          bool pingPong,
+                                                          int currentDirection);
+
 std::vector<int> buildTimesheetPlaybackOrderFrameIndicesForCell(const Timesheet& timesheet, const Cell& cell);
 
 int adjacentPlaybackOrderFrameIndex(const std::vector<int>& playbackOrderFrameIndices,

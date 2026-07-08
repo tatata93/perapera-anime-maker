@@ -117,6 +117,53 @@ void testPlaybackOrder()
             "unknown active frame should be absent");
 }
 
+void testPlaybackStepping()
+{
+    require(perapera::app_drawing::clampTimesheetPreviewFrame(5, -4) == 0,
+            "preview frame clamp should stop below zero");
+    require(perapera::app_drawing::clampTimesheetPreviewFrame(5, 99) == 4,
+            "preview frame clamp should stop above final frame");
+    require(perapera::app_drawing::clampTimesheetPreviewFrame(0, 99) == 0,
+            "preview frame clamp should tolerate empty frame counts");
+
+    perapera::app_drawing::TimesheetPlaybackStep step =
+        perapera::app_drawing::stepTimesheetPreviewFrameIndex(5, 4, 1, false, 1);
+    require(step.canPlay && step.requestedFrame == 0 && step.direction == 1,
+            "linear preview playback should wrap after the final frame");
+
+    step = perapera::app_drawing::stepTimesheetPreviewFrameIndex(5, 4, 1, true, 1);
+    require(step.canPlay && step.requestedFrame == 3 && step.direction == -1,
+            "ping-pong preview playback should bounce at the final frame");
+
+    step = perapera::app_drawing::stepTimesheetPreviewFrameIndex(1, 0, 1, false, 1);
+    require(!step.canPlay && step.requestedFrame == 0,
+            "preview playback should stop when only one frame exists");
+
+    perapera::app_drawing::TimesheetPlaybackRange range =
+        perapera::app_drawing::normalizeTimesheetPlaybackRange(10, 8, 2);
+    require(range.startFrame == 2 && range.endFrame == 8,
+            "playback range normalization should swap reversed ranges");
+
+    range = perapera::app_drawing::normalizeTimesheetPlaybackRange(4, -5, 99);
+    require(range.startFrame == 0 && range.endFrame == 3,
+            "playback range normalization should clamp to timeline bounds");
+
+    step = perapera::app_drawing::stepTimesheetRangePreviewFrameIndex(
+        8, 1, perapera::app_drawing::TimesheetPlaybackRange{2, 8}, false, 1);
+    require(step.requestedFrame == 2 && step.direction == 1,
+            "range playback should wrap to range start");
+
+    step = perapera::app_drawing::stepTimesheetRangePreviewFrameIndex(
+        8, 1, perapera::app_drawing::TimesheetPlaybackRange{2, 8}, true, 1);
+    require(step.requestedFrame == 7 && step.direction == -1,
+            "range ping-pong playback should bounce inside range");
+
+    step = perapera::app_drawing::stepTimesheetRangePreviewFrameIndex(
+        4, 1, perapera::app_drawing::TimesheetPlaybackRange{4, 4}, true, 1);
+    require(step.requestedFrame == 4 && step.direction == 1,
+            "single-frame range playback should stay on the range frame");
+}
+
 } // namespace
 
 int main()
@@ -125,6 +172,7 @@ int main()
         testCountsAndSelection();
         testProjectLookupAndAutoCreate();
         testPlaybackOrder();
+        testPlaybackStepping();
     } catch (const std::exception& e) {
         std::cerr << "perapera_app_drawing_mode_timesheet_selftest failed: " << e.what() << '\n';
         return 1;

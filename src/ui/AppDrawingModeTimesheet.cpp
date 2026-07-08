@@ -106,6 +106,86 @@ int autoCreateMissingDrawingFramesForTimesheetEntries(
     return createdCount;
 }
 
+int clampTimesheetPreviewFrame(int totalFrames, int zeroBasedFrame)
+{
+    const int lastFrame = std::max(0, totalFrames - 1);
+    return std::clamp(zeroBasedFrame, 0, lastFrame);
+}
+
+TimesheetPlaybackStep stepTimesheetPreviewFrameIndex(int totalFrames,
+                                                     int selectedFrame,
+                                                     int delta,
+                                                     bool pingPong,
+                                                     int currentDirection)
+{
+    const int frameCount = std::max(1, totalFrames);
+    TimesheetPlaybackStep result;
+    result.requestedFrame = selectedFrame;
+    result.direction = currentDirection;
+    result.canPlay = frameCount > 1;
+    if (!result.canPlay) {
+        return result;
+    }
+
+    int nextFrame = selectedFrame + delta;
+    if (nextFrame < 0 || nextFrame >= frameCount) {
+        if (pingPong) {
+            result.direction = -currentDirection;
+            nextFrame = selectedFrame + result.direction;
+        } else {
+            nextFrame = nextFrame >= frameCount ? 0 : frameCount - 1;
+        }
+    }
+
+    result.requestedFrame = nextFrame;
+    return result;
+}
+
+TimesheetPlaybackRange normalizeTimesheetPlaybackRange(int totalFrames,
+                                                       int startFrame,
+                                                       int endFrame)
+{
+    const int lastFrame = std::max(0, totalFrames - 1);
+    TimesheetPlaybackRange range;
+    range.startFrame = std::clamp(startFrame, 0, lastFrame);
+    range.endFrame = std::clamp(endFrame, 0, lastFrame);
+    if (range.startFrame > range.endFrame) {
+        std::swap(range.startFrame, range.endFrame);
+    }
+    return range;
+}
+
+TimesheetPlaybackStep stepTimesheetRangePreviewFrameIndex(int selectedFrame,
+                                                          int delta,
+                                                          TimesheetPlaybackRange range,
+                                                          bool pingPong,
+                                                          int currentDirection)
+{
+    TimesheetPlaybackStep result;
+    result.requestedFrame = selectedFrame;
+    result.direction = currentDirection;
+    result.canPlay = true;
+
+    if (range.endFrame <= range.startFrame) {
+        result.requestedFrame = range.startFrame;
+        return result;
+    }
+
+    int nextFrame = selectedFrame + delta;
+    if (nextFrame < range.startFrame || nextFrame > range.endFrame) {
+        if (pingPong) {
+            result.direction = -currentDirection;
+            nextFrame = selectedFrame + result.direction;
+            nextFrame = std::clamp(nextFrame, range.startFrame, range.endFrame);
+        } else {
+            nextFrame = delta >= 0 ? range.startFrame : range.endFrame;
+        }
+    }
+
+    result.requestedFrame = nextFrame;
+    return result;
+}
+
 std::vector<int> buildTimesheetPlaybackOrderFrameIndicesForCell(const Timesheet& timesheet, const Cell& cell)
 {
     std::vector<int> playbackOrderFrameIndices;

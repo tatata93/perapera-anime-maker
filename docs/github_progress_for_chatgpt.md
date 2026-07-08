@@ -5,7 +5,7 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest pushed step after this update: `Phase 2 Step 2-ai: split timesheet playback helpers`
+- Latest pushed step after this update: `Phase 2 Step 2-aj: add timesheet playback helper selftest`
 - Main purpose of the latest work: reduce large drawing/render files safely and add lightweight selftests without making app startup or project loading heavier.
 
 ## Recent completed steps
@@ -25,12 +25,13 @@ Last updated: 2026-07-09
 - Step 2-ag: split drawing-mode left/right panels and timeline area into `AppDrawingModePanels.cpp`.
 - Step 2-ah: split canvas drawing and stroke finish/cancel helpers into `AppDrawingModeCanvas.cpp`.
 - Step 2-ai: split timesheet playback helpers into `AppDrawingModeTimesheetPlayback.cpp`.
+- Step 2-aj: added pure helper coverage for timesheet preview/range playback stepping.
 
 ## Important current state
 
 - `src/render/CanvasRenderer.cpp` is now below the 800-line limit.
 - `src/ui/panels/CellPanel.cpp` is below the 800-line limit.
-- `src/ui/AppDrawingMode.cpp` is now under the 800-line guideline, reduced from about 1917 lines to about 760 lines.
+- `src/ui/AppDrawingMode.cpp` is under the 800-line guideline, reduced from about 1917 lines to about 760 lines.
 - The app save/load path is already on the new layout IO route, not legacy `ProjectIO::save/load`.
 - `DrawingNewLayoutIO` should not be restored.
 
@@ -47,13 +48,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Continue reducing `src/ui/AppDrawingMode.cpp` toward the 800-line target.
-2. Split only closed helper groups first. Avoid moving App state ownership, input flow, or renderer invalidation until dependencies are clear.
-3. Add a small selftest immediately after each helper split when the logic is model-only.
+1. Review whether Phase 2 Step 2 can be closed and whether the next work should move to Step 3.
+2. If staying in Step 2, add only focused tests or cleanup; avoid adding startup/project-load work.
+3. If moving on, keep future work as numbered Phase steps and update logs before pushing.
 
 ## Suggested next candidate
 
-Inspect `src/ui/AppDrawingMode.cpp` and look for the next helper group that does not mutate App state directly. Keep UI rendering flow in place unless the moved code has a narrow interface. Do future work as numbered Phase 2 steps and update `WORK_LOG.md`, `DECISIONS.md`, and this handoff file before pushing.
+Phase 2 Step 2 large-file cleanup and lightweight helper coverage are likely sufficient. Next candidate is a Phase 2 Step 3 review/implementation item from the main spec, unless a missing save/load/timesheet bridge issue is found.
 
 Useful commands:
 

@@ -12,14 +12,15 @@ namespace perapera {
 using app_drawing::countTimesheetEntries;
 using app_drawing::projectCellById;
 using app_drawing::selectedTimesheetPanelEntry;
+using app_drawing::TimesheetPlaybackRange;
+using app_drawing::TimesheetPlaybackStep;
 using app_drawing::timesheetPanelKindUsesDrawingFrame;
 
 void App::setTimesheetPreviewFrame(const ui::TimesheetPanelViewModel& timesheetPanelData,
                                    int zeroBasedFrame,
                                    const char* reason)
 {
-    const int lastFrame = std::max(0, timesheetPanelData.totalFrames - 1);
-    const int nextFrame = std::clamp(zeroBasedFrame, 0, lastFrame);
+    const int nextFrame = app_drawing::clampTimesheetPreviewFrame(timesheetPanelData.totalFrames, zeroBasedFrame);
     if (timesheetPanelState_.selectedTimelineFrame == nextFrame) {
         return;
     }
@@ -91,33 +92,30 @@ bool App::syncEditingTargetToSelectedTimesheetCell(const ui::TimesheetPanelViewM
 
 void App::stepTimesheetPreviewFrame(const ui::TimesheetPanelViewModel& timesheetPanelData, int delta)
 {
-    const int frameCount = std::max(1, timesheetPanelData.totalFrames);
-    if (frameCount <= 1) {
+    const TimesheetPlaybackStep step = app_drawing::stepTimesheetPreviewFrameIndex(
+        timesheetPanelData.totalFrames,
+        timesheetPanelState_.selectedTimelineFrame,
+        delta,
+        timesheetPlaybackPingPong_,
+        timesheetPlaybackDirection_);
+    if (!step.canPlay) {
         isPlayingTimesheet_ = false;
         timesheetPlaybackAccumulator_ = 0.0f;
         return;
     }
 
-    int nextFrame = timesheetPanelState_.selectedTimelineFrame + delta;
-    if (nextFrame < 0 || nextFrame >= frameCount) {
-        if (timesheetPlaybackPingPong_) {
-            timesheetPlaybackDirection_ = -timesheetPlaybackDirection_;
-            nextFrame = timesheetPanelState_.selectedTimelineFrame + timesheetPlaybackDirection_;
-        } else {
-            nextFrame = nextFrame >= frameCount ? 0 : frameCount - 1;
-        }
-    }
-    setTimesheetPreviewFrame(timesheetPanelData, nextFrame, "timesheet playback");
+    timesheetPlaybackDirection_ = step.direction;
+    setTimesheetPreviewFrame(timesheetPanelData, step.requestedFrame, "timesheet playback");
 }
 
 void App::normalizeTimesheetPlaybackRange(const ui::TimesheetPanelViewModel& timesheetPanelData)
 {
-    const int lastFrame = std::max(0, timesheetPanelData.totalFrames - 1);
-    timesheetPlaybackRangeStartFrame_ = std::clamp(timesheetPlaybackRangeStartFrame_, 0, lastFrame);
-    timesheetPlaybackRangeEndFrame_ = std::clamp(timesheetPlaybackRangeEndFrame_, 0, lastFrame);
-    if (timesheetPlaybackRangeStartFrame_ > timesheetPlaybackRangeEndFrame_) {
-        std::swap(timesheetPlaybackRangeStartFrame_, timesheetPlaybackRangeEndFrame_);
-    }
+    const TimesheetPlaybackRange range = app_drawing::normalizeTimesheetPlaybackRange(
+        timesheetPanelData.totalFrames,
+        timesheetPlaybackRangeStartFrame_,
+        timesheetPlaybackRangeEndFrame_);
+    timesheetPlaybackRangeStartFrame_ = range.startFrame;
+    timesheetPlaybackRangeEndFrame_ = range.endFrame;
 }
 
 void App::setTimesheetPlaybackRangeFromOneBased(const ui::TimesheetPanelViewModel& timesheetPanelData,
@@ -142,24 +140,14 @@ void App::setTimesheetPlaybackRangeFromOneBased(const ui::TimesheetPanelViewMode
 void App::stepTimesheetRangePreviewFrame(const ui::TimesheetPanelViewModel& timesheetPanelData, int delta)
 {
     normalizeTimesheetPlaybackRange(timesheetPanelData);
-    const int rangeStart = timesheetPlaybackRangeStartFrame_;
-    const int rangeEnd = timesheetPlaybackRangeEndFrame_;
-    if (rangeEnd <= rangeStart) {
-        setTimesheetPreviewFrame(timesheetPanelData, rangeStart, "timesheet range playback");
-        return;
-    }
-
-    int nextFrame = timesheetPanelState_.selectedTimelineFrame + delta;
-    if (nextFrame < rangeStart || nextFrame > rangeEnd) {
-        if (timesheetPlaybackPingPong_) {
-            timesheetPlaybackDirection_ = -timesheetPlaybackDirection_;
-            nextFrame = timesheetPanelState_.selectedTimelineFrame + timesheetPlaybackDirection_;
-            nextFrame = std::clamp(nextFrame, rangeStart, rangeEnd);
-        } else {
-            nextFrame = delta >= 0 ? rangeStart : rangeEnd;
-        }
-    }
-    setTimesheetPreviewFrame(timesheetPanelData, nextFrame, "timesheet range playback");
+    const TimesheetPlaybackStep step = app_drawing::stepTimesheetRangePreviewFrameIndex(
+        timesheetPanelState_.selectedTimelineFrame,
+        delta,
+        TimesheetPlaybackRange{timesheetPlaybackRangeStartFrame_, timesheetPlaybackRangeEndFrame_},
+        timesheetPlaybackPingPong_,
+        timesheetPlaybackDirection_);
+    timesheetPlaybackDirection_ = step.direction;
+    setTimesheetPreviewFrame(timesheetPanelData, step.requestedFrame, "timesheet range playback");
 }
 
 } // namespace perapera

@@ -2167,3 +2167,8 @@ Rules recorded for the handoff:
 - Added `src/ui/AppDrawingModeTimesheetPlayback.cpp`.
 - Moved timesheet selected-T preview, range playback, ping-pong stepping, and edit-target synchronization helpers out of local lambdas in `AppDrawingMode.cpp`.
 - Reduced `AppDrawingMode.cpp` below the 800-line guideline while keeping startup and project-load behavior unchanged.
+## Phase 2 Step 2-aj: Timesheet playback helper selftest
+
+- Added pure helper functions for timesheet preview frame clamping, whole-T playback stepping, playback range normalization, and range playback stepping.
+- Extended `perapera_app_drawing_mode_timesheet_selftest` with linear wrap, ping-pong bounce, range clamp/swap, range wrap, and single-frame stability checks.
+- Kept the test independent from ImGui windows, SDL startup, project loading, and preview cache warmup.

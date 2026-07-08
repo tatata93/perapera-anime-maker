@@ -823,3 +823,6 @@ Move canvas and stroke lifecycle methods as a closed App method group. Do not ch
 ## Phase 2 Step 2-ai decision
 
 Timesheet preview playback state transitions can live in App helper methods. Keep UI layout in AppDrawingMode.cpp for now, but move playback/range/edit-target synchronization logic to a separate file to satisfy the 800-line guideline.
+## Phase 2 Step 2-aj decision
+
+Close the timesheet playback split with pure helper coverage rather than testing private App methods directly. This keeps the regression check fast and avoids adding startup, project-load, or renderer-window work.

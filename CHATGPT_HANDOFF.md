@@ -362,3 +362,17 @@ Current state:
 Next recommended task:
 
 - Add focused tests for the new playback helper behavior if practical, or continue separating the remaining timesheet assistant UI into smaller files without changing project load/startup behavior.
+
+---
+
+## Latest handoff: Phase 2 Step 2-aj Timesheet playback helper selftest
+
+Current state:
+
+- Added pure helper functions for timesheet preview frame clamping, whole-T playback stepping, playback range normalization, and range playback stepping.
+- Extended `perapera_app_drawing_mode_timesheet_selftest` to cover linear wrap, ping-pong bounce, range clamp/swap, range wrap, and single-frame stability.
+- Kept the test independent from ImGui windows, SDL startup, project loading, and preview cache warmup.
+
+Next recommended task:
+
+- Phase 2 Step 2 cleanup is now likely sufficient. Review remaining Phase 2 completion gaps, then move to the next Phase 2/Step 3 item if no missing save/load/timesheet bridge issue is found.
