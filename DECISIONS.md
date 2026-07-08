@@ -751,3 +751,7 @@ The legacy ProjectIO route is no longer an active source or build dependency. Do
 ## Phase 2 Step 2-n decision
 
 New-layout load fidelity is improved in `ProjectLayoutLoadEntry` directly. Do not restore the legacy ProjectIO path for missing fields; add focused round-trip tests for each saved field instead.
+
+## Phase 2 Step 2-o decision
+
+Root project metadata belongs to the new layout as `project.json`. App save should use the full-Project layout save overload; legacy ProjectIO must not be restored to preserve canvas/output/audio/camera fields.

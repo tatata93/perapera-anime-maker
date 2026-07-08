@@ -2061,3 +2061,11 @@ Rules recorded for the handoff:
 - Rebuilt loaded `Project.cells` / `Project.cellOrder` using `Cut.cellZOrderKeys` before appending unlisted cells.
 - Reflected scene/cut metadata into the minimal loaded `Project` result.
 - Strengthened `perapera_project_layout_load_entry_selftest` to cover brush settings, Fill bitmap, layer type, FPS, total frames, and cut cell order.
+
+## Phase 2 Step 2-o: Project metadata and cell motion keys
+
+- Added full-Project new-layout save overload that writes root `project.json`.
+- App save now uses the full-Project overload so canvas/output/audio/camera metadata is preserved.
+- New-layout load reads root `project.json` when present and restores canvas, output, audio, and camera settings.
+- `Cell.motionKeys` are now written to `cell.json` and restored during new-layout load.
+- Strengthened the load selftest to cover project metadata and motion keys.

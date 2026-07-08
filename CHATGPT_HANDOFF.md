@@ -108,3 +108,19 @@ Current state:
 Next recommended task:
 
 - Continue load-fidelity work by checking fields that still are not saved or loaded, especially `Cell.motionKeys`, canvas/output width and height, camera/audio, and any layer/frame metadata needed by the UI.
+
+---
+
+## Latest handoff: Phase 2 Step 2-o project metadata and motion keys
+
+Current state:
+
+- App save now uses the full-`Project` new-layout save overload.
+- New-layout save writes root `project.json` for canvas, output, audio, camera, and scene order metadata.
+- New-layout load reads `project.json` when present.
+- `Cell.motionKeys` are written to `cell.json` and restored on load.
+- The project layout load selftest verifies project metadata and cell motion keys.
+
+Next recommended task:
+
+- Inspect remaining unsaved state, especially UI selection/app-state coupling, project/cut multi-scene expansion points, and any renderer cache invalidation needed after loading metadata changes.

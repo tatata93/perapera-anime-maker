@@ -104,7 +104,7 @@ bool saveProjectNewLayoutForActiveCut(const std::filesystem::path& projectFolder
 {
     const Scene scene = activeSceneForProjectSave(project);
     const Cut cut = activeCutForProjectSave(project, workingTimesheet);
-    return saveProjectNewLayoutMinimal(projectFolder, scene, cut, project.cells, result, error);
+    return saveProjectNewLayoutMinimal(projectFolder, scene, cut, project, result, error);
 }
 
 bool loadProjectNewLayoutForActiveCut(const std::filesystem::path& projectFolder,
@@ -117,9 +117,7 @@ bool loadProjectNewLayoutForActiveCut(const std::filesystem::path& projectFolder
 
 void applyLoadedSceneCutSettings(Project& project, const Scene& scene, const Cut& cut)
 {
-    if (!scene.name.empty()) {
-        project.name = scene.name;
-    }
+    (void)scene;
     if (cut.totalFrames > 0) {
         project.timeline.totalFrames = cut.totalFrames;
     }

@@ -32,6 +32,10 @@ inline std::string defaultCutId() {
     return "cut_001";
 }
 
+inline std::filesystem::path projectJsonPath(const std::filesystem::path& projectRoot) {
+    return projectRoot / "project.json";
+}
+
 inline std::string frameDirectoryName(int zeroBasedFrameIndex) {
     const int number = zeroBasedFrameIndex + 1;
     const int hundreds = (number / 100) % 10;

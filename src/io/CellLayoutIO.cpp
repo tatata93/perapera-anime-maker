@@ -59,6 +59,20 @@ nlohmann::json cellJson(const Cell& cell) {
     json["frameCount"] = cell.frames.size();
     json["framesDirectory"] = "frames";
 
+    nlohmann::json motionKeys = nlohmann::json::array();
+    for (const CellMotionKey& key : cell.motionKeys) {
+        motionKeys.push_back({
+            {"frame", key.frame},
+            {"placement",
+             {{"x", key.placement.x},
+              {"y", key.placement.y},
+              {"scale", key.placement.scale},
+              {"rotation", key.placement.rotation}}},
+            {"interpolation", key.interpolation},
+        });
+    }
+    json["motionKeys"] = std::move(motionKeys);
+
     nlohmann::json frames = nlohmann::json::array();
     for (std::size_t index = 0; index < cell.frames.size(); ++index) {
         const Frame& frame = cell.frames[index];

@@ -11,11 +11,13 @@
 
 #include "core/Cell.h"
 #include "core/Cut.h"
+#include "core/Project.h"
 #include "core/Scene.h"
 
 namespace perapera {
 
 struct ProjectLayoutSaveEntryResult {
+    std::filesystem::path projectJsonPath;
     std::filesystem::path sceneJsonPath;
     std::filesystem::path cutJsonPath;
     std::filesystem::path timesheetJsonPath;
@@ -27,6 +29,13 @@ bool saveProjectNewLayoutMinimal(const std::filesystem::path& projectRoot,
                                  const Scene& scene,
                                  const Cut& cut,
                                  const std::vector<Cell>& cells,
+                                 ProjectLayoutSaveEntryResult* outResult = nullptr,
+                                 std::string* errorMessage = nullptr);
+
+bool saveProjectNewLayoutMinimal(const std::filesystem::path& projectRoot,
+                                 const Scene& scene,
+                                 const Cut& cut,
+                                 const Project& project,
                                  ProjectLayoutSaveEntryResult* outResult = nullptr,
                                  std::string* errorMessage = nullptr);
 

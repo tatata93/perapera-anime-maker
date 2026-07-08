@@ -269,6 +269,90 @@ void applyCutCellOrder(Project& project, std::vector<Cell>& loadedCells, const s
     }
 }
 
+CameraKey readCameraKey(const json& value) {
+    CameraKey key;
+    if (!value.is_object()) {
+        return key;
+    }
+    key.frame = jsonInt(value, "frame", key.frame);
+    key.centerX = jsonFloat(value, "centerX", key.centerX);
+    key.centerY = jsonFloat(value, "centerY", key.centerY);
+    key.zoom = jsonFloat(value, "zoom", key.zoom);
+    return key;
+}
+
+bool readProjectMetadataIfExists(const fs::path& projectRoot, Project& project, std::string* errorMessage) {
+    const fs::path metadataPath = projectJsonPath(projectRoot);
+    std::error_code errorCode;
+    if (!fs::exists(metadataPath, errorCode)) {
+        return true;
+    }
+
+    json metadata;
+    if (!readJsonFile(metadataPath, metadata, errorMessage)) {
+        return false;
+    }
+
+    project.name = metadata.value("name", project.name);
+
+    const auto canvasIterator = metadata.find("canvas");
+    if (canvasIterator != metadata.end() && canvasIterator->is_object()) {
+        project.canvas.width = jsonInt(*canvasIterator, "width", project.canvas.width);
+        project.canvas.height = jsonInt(*canvasIterator, "height", project.canvas.height);
+    }
+
+    const auto outputIterator = metadata.find("output");
+    if (outputIterator != metadata.end() && outputIterator->is_object()) {
+        project.output.width = jsonInt(*outputIterator, "width", project.output.width);
+        project.output.height = jsonInt(*outputIterator, "height", project.output.height);
+        project.output.fps = jsonInt(*outputIterator, "fps", project.output.fps);
+        project.output.pixelAspect = jsonFloat(*outputIterator, "pixelAspect", project.output.pixelAspect);
+    }
+
+    const auto audioIterator = metadata.find("audio");
+    if (audioIterator != metadata.end() && audioIterator->is_object()) {
+        project.audio.enabled = audioIterator->value("enabled", project.audio.enabled);
+        project.audio.filePath = audioIterator->value("filePath", project.audio.filePath);
+        project.audio.startFrame = jsonInt(*audioIterator, "startFrame", project.audio.startFrame);
+    }
+
+    const auto cameraIterator = metadata.find("camera");
+    if (cameraIterator != metadata.end() && cameraIterator->is_object()) {
+        project.camera.centerX = jsonFloat(*cameraIterator, "centerX", project.camera.centerX);
+        project.camera.centerY = jsonFloat(*cameraIterator, "centerY", project.camera.centerY);
+        project.camera.zoom = jsonFloat(*cameraIterator, "zoom", project.camera.zoom);
+        project.camera.animationEnabled = cameraIterator->value("animationEnabled", project.camera.animationEnabled);
+        project.camera.keys.clear();
+
+        const json keysJson = cameraIterator->value("keys", json::array());
+        if (keysJson.is_array()) {
+            for (const json& keyJson : keysJson) {
+                project.camera.keys.push_back(readCameraKey(keyJson));
+            }
+        }
+    }
+
+    return true;
+}
+
+CellMotionKey readCellMotionKey(const json& value) {
+    CellMotionKey key;
+    if (!value.is_object()) {
+        return key;
+    }
+    key.frame = jsonInt(value, "frame", key.frame);
+    key.interpolation = value.value("interpolation", key.interpolation);
+
+    const auto placementIterator = value.find("placement");
+    if (placementIterator != value.end() && placementIterator->is_object()) {
+        key.placement.x = jsonFloat(*placementIterator, "x", key.placement.x);
+        key.placement.y = jsonFloat(*placementIterator, "y", key.placement.y);
+        key.placement.scale = jsonFloat(*placementIterator, "scale", key.placement.scale);
+        key.placement.rotation = jsonFloat(*placementIterator, "rotation", key.placement.rotation);
+    }
+    return key;
+}
+
 bool readFrame(
     const fs::path& cellDir,
     const json& frameEntry,
@@ -344,6 +428,14 @@ bool readCell(
         cell.placement.y = jsonFloat(*placementIterator, "y", cell.placement.y);
         cell.placement.scale = jsonFloat(*placementIterator, "scale", cell.placement.scale);
         cell.placement.rotation = jsonFloat(*placementIterator, "rotation", cell.placement.rotation);
+    }
+
+    cell.motionKeys.clear();
+    const json motionKeysJson = cellJson.value("motionKeys", json::array());
+    if (motionKeysJson.is_array()) {
+        for (const json& motionKeyJson : motionKeysJson) {
+            cell.motionKeys.push_back(readCellMotionKey(motionKeyJson));
+        }
     }
 
     const json framesJson = cellJson.value("frames", json::array());
@@ -423,7 +515,13 @@ bool loadProjectNewLayoutMinimal(
     result.scene.cuts.push_back(result.cut);
 
     result.project = Project{};
-    result.project.name = result.scene.name.empty() ? result.project.name : result.scene.name;
+    if (!readProjectMetadataIfExists(projectRoot, result.project, errorMessage)) {
+        return false;
+    }
+    const Project defaultProject;
+    if (!result.scene.name.empty() && result.project.name == defaultProject.name) {
+        result.project.name = result.scene.name;
+    }
     result.project.timeline.totalFrames = result.cut.totalFrames > 0 ? result.cut.totalFrames : result.project.timeline.totalFrames;
     result.project.output.fps = result.cut.frameRate > 0 ? result.cut.frameRate : result.project.output.fps;
     result.project.cells.clear();

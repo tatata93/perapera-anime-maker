@@ -8,6 +8,7 @@
 #include "core/Cell.h"
 #include "core/Cut.h"
 #include "core/Layer.h"
+#include "core/Project.h"
 #include "core/Scene.h"
 #include "core/StrokePoint.h"
 #include "io/ProjectLayoutLoadEntry.h"
@@ -56,6 +57,16 @@ perapera::Cell makeCell(std::string id, std::string category, int frameCount, in
     cell.opacity = 0.75f;
     cell.placement.x = 12.0f;
     cell.placement.y = 34.0f;
+    if (cell.id == "cell_A") {
+        perapera::CellMotionKey key;
+        key.frame = 7;
+        key.placement.x = 44.0f;
+        key.placement.y = 55.0f;
+        key.placement.scale = 1.25f;
+        key.placement.rotation = 12.5f;
+        key.interpolation = "ease";
+        cell.motionKeys.push_back(key);
+    }
 
     for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
         perapera::Frame frame;
@@ -132,9 +143,34 @@ int main() {
     cells.push_back(makeCell("cell_A", "character", 2, 2));
     cells.push_back(makeCell("cell_BG", "background", 1, 1));
 
+    perapera::Project project;
+    project.name = "Project Metadata Name";
+    project.canvas.width = 3200;
+    project.canvas.height = 1800;
+    project.output.width = 2048;
+    project.output.height = 1152;
+    project.output.fps = 30;
+    project.output.pixelAspect = 1.25f;
+    project.audio.enabled = true;
+    project.audio.filePath = "audio/dialog.wav";
+    project.audio.startFrame = 5;
+    project.camera.centerX = 1600.0f;
+    project.camera.centerY = 900.0f;
+    project.camera.zoom = 1.5f;
+    project.camera.animationEnabled = true;
+    project.camera.keys.push_back({3, 1200.0f, 700.0f, 1.2f});
+    project.cells = cells;
+    project.cellOrder = {"cell_A", "cell_BG"};
+
+    perapera::ProjectLayoutSaveEntryResult saveResult;
     std::string error;
-    if (!require(perapera::saveProjectNewLayoutMinimal(root, scene, cut, cells, nullptr, &error), "saveProjectNewLayoutMinimal failed")) {
+    if (!require(perapera::saveProjectNewLayoutMinimal(root, scene, cut, project, &saveResult, &error),
+                 "saveProjectNewLayoutMinimal failed")) {
         std::cerr << "error: " << error << '\n';
+        removeAllNoThrow(root);
+        return 1;
+    }
+    if (!require(fs::exists(saveResult.projectJsonPath), "project.json was not saved")) {
         removeAllNoThrow(root);
         return 1;
     }
@@ -149,8 +185,23 @@ int main() {
     if (!require(loaded.scene.id == "scene_001", "wrong scene id") ||
         !require(loaded.cut.id == "cut_001", "wrong cut id") ||
         !require(loaded.cut.totalFrames == 24, "wrong cut totalFrames") ||
+        !require(loaded.project.name == "Project Metadata Name", "wrong project name") ||
+        !require(loaded.project.canvas.width == 3200, "wrong canvas width") ||
+        !require(loaded.project.canvas.height == 1800, "wrong canvas height") ||
+        !require(loaded.project.output.width == 2048, "wrong output width") ||
+        !require(loaded.project.output.height == 1152, "wrong output height") ||
         !require(loaded.project.timeline.totalFrames == 24, "wrong project totalFrames") ||
         !require(loaded.project.output.fps == 30, "wrong project fps") ||
+        !require(nearlyEqual(loaded.project.output.pixelAspect, 1.25f), "wrong pixelAspect") ||
+        !require(loaded.project.audio.enabled, "wrong audio enabled") ||
+        !require(loaded.project.audio.filePath == "audio/dialog.wav", "wrong audio filePath") ||
+        !require(loaded.project.audio.startFrame == 5, "wrong audio startFrame") ||
+        !require(nearlyEqual(loaded.project.camera.centerX, 1600.0f), "wrong camera centerX") ||
+        !require(nearlyEqual(loaded.project.camera.centerY, 900.0f), "wrong camera centerY") ||
+        !require(nearlyEqual(loaded.project.camera.zoom, 1.5f), "wrong camera zoom") ||
+        !require(loaded.project.camera.animationEnabled, "wrong camera animation flag") ||
+        !require(loaded.project.camera.keys.size() == 1, "wrong camera key count") ||
+        !require(loaded.project.camera.keys[0].frame == 3, "wrong camera key frame") ||
         !require(loaded.project.cells.size() == 2, "wrong project cell count") ||
         !require(loaded.project.cellOrder.size() == 2, "wrong project cellOrder count") ||
         !require(loaded.project.cellOrder[0] == "cell_BG", "wrong first cellOrder") ||
@@ -170,6 +221,11 @@ int main() {
         return 1;
     }
     if (!require(cellA->frames.size() == 2, "wrong frame count for cell_A") ||
+        !require(cellA->motionKeys.size() == 1, "wrong motion key count") ||
+        !require(cellA->motionKeys[0].frame == 7, "wrong motion key frame") ||
+        !require(nearlyEqual(cellA->motionKeys[0].placement.x, 44.0f), "wrong motion key x") ||
+        !require(nearlyEqual(cellA->motionKeys[0].placement.scale, 1.25f), "wrong motion key scale") ||
+        !require(cellA->motionKeys[0].interpolation == "ease", "wrong motion key interpolation") ||
         !require(cellA->frames[0].layers.size() == 2, "wrong layer count for cell_A/F1")) {
         removeAllNoThrow(root);
         return 1;
