@@ -566,3 +566,19 @@ else()
     target_compile_options(perapera_app_drawing_mode_timesheet_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+
+# final_spec_v6 Phase 2 Step 2-ac: preview helper split
+if(TARGET perapera_anime_maker)
+  target_sources(perapera_anime_maker PRIVATE
+    src/ui/AppDrawingModePreview.cpp
+  )
+endif()
+
+if(NOT TARGET perapera_app_drawing_mode_preview_selftest)
+  add_executable(perapera_app_drawing_mode_preview_selftest
+    tools/app_drawing_mode_preview_selftest.cpp
+    src/ui/AppDrawingModePreview.cpp
+    src/ui/AppDrawingModeEraser.cpp
+  )
+  target_include_directories(perapera_app_drawing_mode_preview_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()

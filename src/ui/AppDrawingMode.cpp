@@ -1,4 +1,4 @@
-﻿// このファイルの役割:
+// このファイルの役割:
 #include "ui/App.h"
 #include <algorithm>
 #include <cmath>
@@ -18,6 +18,7 @@
 #include "io/TimesheetIO.h"
 #include "ui/AppDrawingModeEraser.h"
 #include "ui/AppDrawingModeOverlay.h"
+#include "ui/AppDrawingModePreview.h"
 #include "ui/AppDrawingModeTimesheet.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
@@ -33,6 +34,7 @@
 namespace perapera {
 using app_drawing::drawLightweightEraserPreview;
 using app_drawing::drawOnionFrameDirect;
+using app_drawing::previewFrameWithEraser;
 using app_drawing::adjacentPlaybackOrderFrameIndex;
 using app_drawing::autoCreateMissingDrawingFramesForTimesheetEntries;
 using app_drawing::buildTimesheetPlaybackOrderFrameIndicesForCell;
@@ -47,28 +49,6 @@ const char* u8c(const char8_t* text)
     return reinterpret_cast<const char*>(text);
 }
 
-Frame previewFrameWithEraser(const Frame& frame, int activeLayerIndex, const Stroke& eraserStroke)
-{
-    Frame preview = frame;
-    if (eraserStroke.points.empty() || activeLayerIndex < 0 || activeLayerIndex >= static_cast<int>(preview.layers.size())) {
-        return preview;
-    }
-    Layer& layer = preview.layers[static_cast<std::size_t>(activeLayerIndex)];
-    std::vector<Stroke> rewrittenStrokes;
-    rewrittenStrokes.reserve(layer.strokes.size());
-    bool changed = false;
-    const float radius = std::max(1.0f, eraserStroke.radiusPx);
-    for (const Stroke& stroke : layer.strokes) {
-        std::vector<Stroke> parts = splitStrokeByEraser(stroke, eraserStroke, radius, changed);
-        rewrittenStrokes.insert(rewrittenStrokes.end(),
-                                std::make_move_iterator(parts.begin()),
-                                std::make_move_iterator(parts.end()));
-    }
-    if (changed) {
-        layer.strokes = std::move(rewrittenStrokes);
-    }
-    return preview;
-}
 } // namespace
 void App::drawDrawingMode()
 {
