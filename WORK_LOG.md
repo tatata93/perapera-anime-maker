@@ -2137,3 +2137,9 @@ Rules recorded for the handoff:
 - Split drawing-mode timesheet helpers into `AppDrawingModeTimesheet.h/.cpp`.
 - Moved entry counting, panel entry selection, project cell lookup, missing drawing-frame creation, and playback-order helpers.
 - Reduced `AppDrawingMode.cpp` from 1632 lines to 1490 lines while keeping the Debug app build green.
+
+## Phase 2 Step 2-ab: AppDrawingMode timesheet selftest
+
+- Added `perapera_app_drawing_mode_timesheet_selftest` for `AppDrawingModeTimesheet`.
+- Covered entry counting, selected panel entry lookup, project cell lookup, missing drawing-frame creation, and playback-order navigation.
+- Kept the test independent from ImGui drawing, SDL windows, and app startup.

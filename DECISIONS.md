@@ -803,3 +803,7 @@ Overlay drawing helpers can leave `AppDrawingMode.cpp` because they do not own A
 ## Phase 2 Step 2-aa decision
 
 Timesheet helper logic can be separated from `AppDrawingMode.cpp` when it only transforms model/panel data. App state ownership and UI flow remain in AppDrawingMode for now.
+
+## Phase 2 Step 2-ab decision
+
+Drawing-mode timesheet helpers should be tested without starting the app. Playback order and missing drawing-frame creation are enough to catch the most likely regressions from the split.

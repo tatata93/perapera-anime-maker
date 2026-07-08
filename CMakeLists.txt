@@ -551,3 +551,18 @@ else()
     target_compile_options(perapera_app_drawing_mode_eraser_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_executable(perapera_app_drawing_mode_timesheet_selftest
+    tools/app_drawing_mode_timesheet_selftest.cpp
+    src/ui/AppDrawingModeTimesheet.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetResolver.cpp
+    src/core/Frame.cpp
+    src/core/Layer.cpp
+)
+target_include_directories(perapera_app_drawing_mode_timesheet_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if (MSVC)
+    target_compile_options(perapera_app_drawing_mode_timesheet_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_app_drawing_mode_timesheet_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+

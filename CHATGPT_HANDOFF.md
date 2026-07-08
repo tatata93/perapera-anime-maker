@@ -302,3 +302,18 @@ Current state:
 Next recommended task:
 
 - Add a focused selftest for `AppDrawingModeTimesheet`, especially playback order and missing frame creation, then continue reducing `AppDrawingMode.cpp`.
+
+---
+
+## Latest handoff: Phase 2 Step 2-ab AppDrawingMode timesheet selftest
+
+Current state:
+
+- Added `tools/app_drawing_mode_timesheet_selftest.cpp`.
+- Added CMake target `perapera_app_drawing_mode_timesheet_selftest`.
+- The selftest covers entry counting, selected panel entry lookup, project cell lookup, missing drawing-frame creation, and playback-order navigation.
+- The test is independent from ImGui drawing, SDL windows, and app startup.
+
+Next recommended task:
+
+- Continue reducing `AppDrawingMode.cpp` toward the 800-line target, or add selftests for any new helper group before moving more code.
