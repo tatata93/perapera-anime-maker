@@ -2149,3 +2149,10 @@ Rules recorded for the handoff:
 - Phase 2 Step 2-ae: split DrawingWorkspace layout shell from AppDrawingMode.cpp.
 
 - Phase 2 Step 2-af: cleaned leftover preview helper from AppDrawingMode.cpp.
+
+## Phase 2 Step 2-ag: AppDrawingMode panel split
+
+- Added `src/ui/AppDrawingModePanels.cpp`.
+- Moved drawing-mode left sidebar, right sidebar, and bottom timeline area methods out of `AppDrawingMode.cpp`.
+- Kept panel action routing, renderer invalidation, preview readiness reset, save/load/export calls, and timeline playback-order behavior unchanged.
+- This step is structure-only and does not add startup or project-load work.

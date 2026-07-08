@@ -317,3 +317,18 @@ Current state:
 Next recommended task:
 
 - Continue reducing `AppDrawingMode.cpp` toward the 800-line target, or add selftests for any new helper group before moving more code.
+
+---
+
+## Latest handoff: Phase 2 Step 2-ag AppDrawingMode panel split
+
+Current state:
+
+- Added `src/ui/AppDrawingModePanels.cpp`.
+- Moved `App::drawLeftSidebar()`, `App::drawRightSidebar()`, and `App::drawTimelineArea()` out of `AppDrawingMode.cpp`.
+- Kept panel actions, preview readiness reset, renderer dirty/clear calls, save/load/export routing, and timeline playback-order behavior unchanged.
+- This is a structure-only split; it does not add startup or project-load work.
+
+Next recommended task:
+
+- Continue reducing `src/ui/AppDrawingMode.cpp` with another closed helper group, or add a focused selftest if the next extracted logic is model-only.

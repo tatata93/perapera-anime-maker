@@ -1,11 +1,11 @@
 # GitHub progress handoff for ChatGPT
 
-Last updated: 2026-07-08
+Last updated: 2026-07-09
 
 ## Current branch
 
 - Branch: `main`
-- Latest pushed commit: `42e43a6 Phase 2 Step 2-ab: add AppDrawingMode timesheet selftest`
+- Latest pushed step after this update: `Phase 2 Step 2-ag: split AppDrawingMode panel helpers`
 - Main purpose of the latest work: reduce large drawing/render files safely and add lightweight selftests without making app startup or project loading heavier.
 
 ## Recent completed steps
@@ -18,12 +18,17 @@ Last updated: 2026-07-08
 - Step 2-z: split onion/eraser overlay drawing helpers from `AppDrawingMode.cpp`.
 - Step 2-aa: split drawing-mode timesheet helpers from `AppDrawingMode.cpp`.
 - Step 2-ab: added drawing-mode timesheet helper selftest.
+- Step 2-ac: split and cleaned preview helper registration state.
+- Step 2-ad: split drawing-mode timesheet ViewModel construction helper.
+- Step 2-ae: split drawing workspace layout shell.
+- Step 2-af: cleaned preview helper residue from `AppDrawingMode.cpp`.
+- Step 2-ag: split drawing-mode left/right panels and timeline area into `AppDrawingModePanels.cpp`.
 
 ## Important current state
 
 - `src/render/CanvasRenderer.cpp` is now below the 800-line limit.
 - `src/ui/panels/CellPanel.cpp` is below the 800-line limit.
-- `src/ui/AppDrawingMode.cpp` is still large, but reduced from about 1917 lines to about 1490 lines.
+- `src/ui/AppDrawingMode.cpp` is still large, but reduced from about 1917 lines to about 1300 lines.
 - The app save/load path is already on the new layout IO route, not legacy `ProjectIO::save/load`.
 - `DrawingNewLayoutIO` should not be restored.
 
@@ -46,7 +51,7 @@ Last updated: 2026-07-08
 
 ## Suggested next candidate
 
-Inspect `src/ui/AppDrawingMode.cpp` and look for the next helper group that does not mutate App state directly. Keep UI rendering flow in place unless the moved code has a narrow interface.
+Inspect `src/ui/AppDrawingMode.cpp` and look for the next helper group that does not mutate App state directly. Keep UI rendering flow in place unless the moved code has a narrow interface. Do future work as numbered Phase 2 steps and update `WORK_LOG.md`, `DECISIONS.md`, and this handoff file before pushing.
 
 Useful commands:
 
@@ -56,4 +61,3 @@ git log --oneline -12
 cmake -S . -B .\build -G "Visual Studio 18 2026"
 cmake --build .\build --config Debug --target perapera_anime_maker --parallel 1 -- /m:1 /nodeReuse:false
 ```
-

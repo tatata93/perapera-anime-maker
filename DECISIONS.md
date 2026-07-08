@@ -813,3 +813,7 @@ Drawing-mode timesheet helpers should be tested without starting the app. Playba
 - Phase 2 Step 2-ae: keep App state/input/renderer invalidation in AppDrawingMode.cpp; only move DrawingWorkspace layout shell.
 
 - Phase 2 Step 2-af: keep preview eraser helper outside AppDrawingMode.cpp; no DrawingNewLayoutIO restore.
+
+## Phase 2 Step 2-ag decision
+
+Keep App state ownership and panel action behavior unchanged while moving drawing-mode panel methods out of `AppDrawingMode.cpp`. Continue future large-file work as numbered Phase 2 steps.
