@@ -775,3 +775,7 @@ Keep the Step 2-k app IO inventory cleanup applyfix policy as a tracked historic
 ## Phase 2 Step 2-t decision
 
 Large UI file reduction should start with low-risk model helpers. `CellPanelModel` owns cell IDs, ordering, display labels, and layer-ID maintenance; `CellPanel.cpp` keeps the ImGui workflow.
+
+## Phase 2 Step 2-u decision
+
+`CellPanelModel` should remain small, deterministic, and self-tested before larger UI/render files are split. The selftest protects cell order and layer-ID invariants without starting the app or renderer.

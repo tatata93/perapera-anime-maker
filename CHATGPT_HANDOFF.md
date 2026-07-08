@@ -195,3 +195,18 @@ Current state:
 Next recommended task:
 
 - Consider the next low-risk large-file split, likely `CanvasRenderer.cpp`, but only after isolating pure helper logic.
+
+---
+
+## Latest handoff: Phase 2 Step 2-u CellPanel model selftest
+
+Current state:
+
+- Added `tools/cell_panel_model_selftest.cpp`.
+- Added CMake target `perapera_cell_panel_model_selftest`.
+- The selftest covers cell order/z-order repair, unique cell IDs, display labels, duplicate names, and cell-scoped layer ID repair.
+- The test is intentionally independent from ImGui and renderer code.
+
+Next recommended task:
+
+- Inspect `CanvasRenderer.cpp` for pure helper logic that can be split safely, or continue adding lightweight selftests around hot-path cache behavior before editing renderer internals.

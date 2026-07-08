@@ -2095,3 +2095,9 @@ Rules recorded for the handoff:
 - Split ID/cell-order/layer-ID helper logic from `CellPanel.cpp` into `CellPanelModel.h/.cpp`.
 - Kept ImGui drawing and display-mode state in `CellPanel.cpp`.
 - Reduced `CellPanel.cpp` to 774 lines while keeping the app build green.
+
+## Phase 2 Step 2-u: CellPanel model selftest
+
+- Added `perapera_cell_panel_model_selftest` for the CellPanel model helper split.
+- Covered cell order rebuild, z order repair, unique IDs, display labels, duplicate names, and scoped layer-ID repair.
+- Kept the test renderer/ImGui independent so it stays fast during later UI and loading work.

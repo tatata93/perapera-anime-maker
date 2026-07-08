@@ -509,3 +509,14 @@ else()
     target_compile_options(perapera_app_project_io_support_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_executable(perapera_cell_panel_model_selftest
+    tools/cell_panel_model_selftest.cpp
+    src/ui/panels/CellPanelModel.cpp
+)
+target_include_directories(perapera_cell_panel_model_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if (MSVC)
+    target_compile_options(perapera_cell_panel_model_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_cell_panel_model_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
