@@ -2084,3 +2084,8 @@ Rules recorded for the handoff:
 
 - Added `perapera_app_project_io_support_selftest` for `appio::projectSignature()` and selection helpers.
 - The selftest verifies that metadata, motion keys, Fill bitmap samples, and point pressure affect the signature without running the full UI.
+
+## Phase 2 Step 2-s: Adopt pending Step 2-k policy doc
+
+- Added the previously untracked Step 2-k app IO inventory cleanup applyfix policy document to the repository history.
+- This keeps the working tree clean for subsequent implementation work.

@@ -767,3 +767,7 @@ Project layout inspection must stay light enough for future project lists and st
 ## Phase 2 Step 2-r decision
 
 `projectSignature()` is now important enough to have focused coverage. Keep this selftest small and UI-independent so it stays cheap to run during IO work.
+
+## Phase 2 Step 2-s decision
+
+Keep the Step 2-k app IO inventory cleanup applyfix policy as a tracked historical document because it explains why the app IO inventory script stayed PowerShell 5.1 compatible.

@@ -167,3 +167,16 @@ Current state:
 Next recommended task:
 
 - Run full Debug build after this commit, then consider a low-risk split of an over-800-line file.
+
+---
+
+## Latest handoff: Phase 2 Step 2-s pending doc cleanup
+
+Current state:
+
+- The previously untracked Step 2-k applyfix policy document is now intended to be tracked.
+- This removes the recurring untracked doc from `git status` so future work starts cleanly.
+
+Next recommended task:
+
+- Continue with a low-risk large-file split only after reading the target file carefully.
