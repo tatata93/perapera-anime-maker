@@ -124,3 +124,17 @@ Current state:
 Next recommended task:
 
 - Inspect remaining unsaved state, especially UI selection/app-state coupling, project/cut multi-scene expansion points, and any renderer cache invalidation needed after loading metadata changes.
+
+---
+
+## Latest handoff: Phase 2 Step 2-p round-trip signature
+
+Current state:
+
+- `appio::projectSignature()` now covers project metadata, cell order, cell motion keys, layer metadata, stroke style fields, brush engine, point pressure, and Fill bitmap samples.
+- Fill bitmap hashing remains lightweight: size plus first/middle/last samples, not a full payload scan.
+- Manual save/load check should now catch more new-layout field loss without making normal saves heavy.
+
+Next recommended task:
+
+- Add focused coverage around app-level load/save selection behavior or inspect remaining large files for safe split candidates.

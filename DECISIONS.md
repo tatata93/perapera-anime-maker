@@ -755,3 +755,7 @@ New-layout load fidelity is improved in `ProjectLayoutLoadEntry` directly. Do no
 ## Phase 2 Step 2-o decision
 
 Root project metadata belongs to the new layout as `project.json`. App save should use the full-Project layout save overload; legacy ProjectIO must not be restored to preserve canvas/output/audio/camera fields.
+
+## Phase 2 Step 2-p decision
+
+Round-trip verification should remain lightweight. `projectSignature()` samples large Fill bitmap data and hashes metadata/style fields so save/load regressions are caught without reintroducing heavy full-payload scans.

@@ -30,6 +30,28 @@ void hashCombine(std::uint64_t& seed, std::uint64_t value)
     seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
 }
 
+void hashFloat(std::uint64_t& seed, float value)
+{
+    hashCombine(seed, static_cast<std::uint64_t>(static_cast<std::int64_t>(value * 1000.0f)));
+}
+
+void hashString(std::uint64_t& seed, const std::string& value)
+{
+    hashCombine(seed, std::hash<std::string>{}(value));
+}
+
+void hashBitmapSample(std::uint64_t& seed, const std::vector<std::uint8_t>& bitmap)
+{
+    hashCombine(seed, static_cast<std::uint64_t>(bitmap.size()));
+    if (bitmap.empty()) {
+        return;
+    }
+
+    hashCombine(seed, static_cast<std::uint64_t>(bitmap.front()));
+    hashCombine(seed, static_cast<std::uint64_t>(bitmap[bitmap.size() / 2U]));
+    hashCombine(seed, static_cast<std::uint64_t>(bitmap.back()));
+}
+
 bool frameHasStrokes(const Frame& frame)
 {
     for (const Layer& layer : frame.layers) {
@@ -328,21 +350,95 @@ std::string statsToText(const ProjectStats& stats)
 std::uint64_t projectSignature(const Project& project)
 {
     std::uint64_t seed = 1469598103934665603ULL;
+    hashString(seed, project.name);
+    hashCombine(seed, static_cast<std::uint64_t>(project.canvas.width));
+    hashCombine(seed, static_cast<std::uint64_t>(project.canvas.height));
+    hashCombine(seed, static_cast<std::uint64_t>(project.output.width));
+    hashCombine(seed, static_cast<std::uint64_t>(project.output.height));
+    hashCombine(seed, static_cast<std::uint64_t>(project.output.fps));
+    hashFloat(seed, project.output.pixelAspect);
+    hashCombine(seed, static_cast<std::uint64_t>(project.timeline.totalFrames));
+    hashCombine(seed, project.audio.enabled ? 1U : 0U);
+    hashString(seed, project.audio.filePath);
+    hashCombine(seed, static_cast<std::uint64_t>(project.audio.startFrame));
+    hashFloat(seed, project.camera.centerX);
+    hashFloat(seed, project.camera.centerY);
+    hashFloat(seed, project.camera.zoom);
+    hashCombine(seed, project.camera.animationEnabled ? 1U : 0U);
+    hashCombine(seed, static_cast<std::uint64_t>(project.camera.keys.size()));
+    for (const CameraKey& key : project.camera.keys) {
+        hashCombine(seed, static_cast<std::uint64_t>(key.frame));
+        hashFloat(seed, key.centerX);
+        hashFloat(seed, key.centerY);
+        hashFloat(seed, key.zoom);
+    }
+
+    hashCombine(seed, static_cast<std::uint64_t>(project.cellOrder.size()));
+    for (const std::string& cellId : project.cellOrder) {
+        hashString(seed, cellId);
+    }
+
     hashCombine(seed, static_cast<std::uint64_t>(project.cells.size()));
     for (const Cell& cell : project.cells) {
-        hashCombine(seed, std::hash<std::string>{}(cell.id));
+        hashString(seed, cell.id);
+        hashString(seed, cell.name);
+        hashString(seed, cell.category);
+        hashCombine(seed, static_cast<std::uint64_t>(cell.widthPx));
+        hashCombine(seed, static_cast<std::uint64_t>(cell.heightPx));
+        hashCombine(seed, static_cast<std::uint64_t>(cell.zOrder));
+        hashCombine(seed, cell.visible ? 1U : 0U);
+        hashFloat(seed, cell.opacity);
+        hashFloat(seed, cell.placement.x);
+        hashFloat(seed, cell.placement.y);
+        hashFloat(seed, cell.placement.scale);
+        hashFloat(seed, cell.placement.rotation);
+        hashCombine(seed, static_cast<std::uint64_t>(cell.motionKeys.size()));
+        for (const CellMotionKey& key : cell.motionKeys) {
+            hashCombine(seed, static_cast<std::uint64_t>(key.frame));
+            hashFloat(seed, key.placement.x);
+            hashFloat(seed, key.placement.y);
+            hashFloat(seed, key.placement.scale);
+            hashFloat(seed, key.placement.rotation);
+            hashString(seed, key.interpolation);
+        }
+
         hashCombine(seed, static_cast<std::uint64_t>(cell.frames.size()));
         for (const Frame& frame : cell.frames) {
-            hashCombine(seed, std::hash<std::string>{}(frame.name));
+            hashString(seed, frame.name);
+            hashCombine(seed, static_cast<std::uint64_t>(frame.durationFrames));
             hashCombine(seed, static_cast<std::uint64_t>(frame.layers.size()));
             for (const Layer& layer : frame.layers) {
-                hashCombine(seed, std::hash<std::string>{}(layer.layerId));
+                hashString(seed, layer.layerId);
+                hashString(seed, layer.name);
+                hashCombine(seed, layer.visible ? 1U : 0U);
+                hashFloat(seed, layer.opacity);
+                hashString(seed, layer.blendMode);
+                hashCombine(seed, static_cast<std::uint64_t>(layer.type));
                 hashCombine(seed, static_cast<std::uint64_t>(layer.strokes.size()));
                 for (const Stroke& stroke : layer.strokes) {
+                    hashCombine(seed, static_cast<std::uint64_t>(stroke.brushEngine));
+                    for (float channel : stroke.color) {
+                        hashFloat(seed, channel);
+                    }
+                    hashFloat(seed, stroke.radiusPx);
+                    hashFloat(seed, stroke.opacity);
+                    hashFloat(seed, stroke.hardness);
+                    hashFloat(seed, stroke.spacing);
+                    hashFloat(seed, stroke.pressureToSize);
+                    hashFloat(seed, stroke.pressureToOpacity);
+                    hashFloat(seed, stroke.watercolorBleed);
+                    hashFloat(seed, stroke.colorMix);
+                    hashFloat(seed, stroke.dryRate);
+                    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapX));
+                    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapY));
+                    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapWidth));
+                    hashCombine(seed, static_cast<std::uint64_t>(stroke.bitmapHeight));
+                    hashBitmapSample(seed, stroke.bitmap);
                     hashCombine(seed, static_cast<std::uint64_t>(stroke.points.size()));
                     for (const StrokePoint& point : stroke.points) {
-                        hashCombine(seed, static_cast<std::uint64_t>(static_cast<std::int64_t>(point.x * 1000.0f)));
-                        hashCombine(seed, static_cast<std::uint64_t>(static_cast<std::int64_t>(point.y * 1000.0f)));
+                        hashFloat(seed, point.x);
+                        hashFloat(seed, point.y);
+                        hashFloat(seed, point.pressure);
                     }
                 }
             }

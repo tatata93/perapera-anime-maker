@@ -2069,3 +2069,8 @@ Rules recorded for the handoff:
 - New-layout load reads root `project.json` when present and restores canvas, output, audio, and camera settings.
 - `Cell.motionKeys` are now written to `cell.json` and restored during new-layout load.
 - Strengthened the load selftest to cover project metadata and motion keys.
+
+## Phase 2 Step 2-p: Round-trip signature coverage
+
+- Strengthened `appio::projectSignature()` so save/load checks cover project metadata, cell order, motion keys, layer metadata, stroke style fields, brush engine, and Fill bitmap samples.
+- Kept Fill bitmap verification lightweight by hashing size plus first/middle/last samples instead of scanning full bitmap payloads.
