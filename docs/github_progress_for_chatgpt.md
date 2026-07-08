@@ -5,7 +5,7 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest pushed step after this update: `Phase 2 Step 2-ag: split AppDrawingMode panel helpers`
+- Latest pushed step after this update: `Phase 2 Step 2-ah: split AppDrawingMode canvas helpers`
 - Main purpose of the latest work: reduce large drawing/render files safely and add lightweight selftests without making app startup or project loading heavier.
 
 ## Recent completed steps
@@ -23,12 +23,13 @@ Last updated: 2026-07-09
 - Step 2-ae: split drawing workspace layout shell.
 - Step 2-af: cleaned preview helper residue from `AppDrawingMode.cpp`.
 - Step 2-ag: split drawing-mode left/right panels and timeline area into `AppDrawingModePanels.cpp`.
+- Step 2-ah: split canvas drawing and stroke finish/cancel helpers into `AppDrawingModeCanvas.cpp`.
 
 ## Important current state
 
 - `src/render/CanvasRenderer.cpp` is now below the 800-line limit.
 - `src/ui/panels/CellPanel.cpp` is below the 800-line limit.
-- `src/ui/AppDrawingMode.cpp` is still large, but reduced from about 1917 lines to about 1300 lines.
+- `src/ui/AppDrawingMode.cpp` is still large, but reduced from about 1917 lines to about 900 lines.
 - The app save/load path is already on the new layout IO route, not legacy `ProjectIO::save/load`.
 - `DrawingNewLayoutIO` should not be restored.
 

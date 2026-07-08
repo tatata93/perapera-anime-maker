@@ -332,3 +332,18 @@ Current state:
 Next recommended task:
 
 - Continue reducing `src/ui/AppDrawingMode.cpp` with another closed helper group, or add a focused selftest if the next extracted logic is model-only.
+
+---
+
+## Latest handoff: Phase 2 Step 2-ah AppDrawingMode canvas split
+
+Current state:
+
+- Added `src/ui/AppDrawingModeCanvas.cpp`.
+- Moved `App::drawCanvasArea()`, `App::fitCanvasToArea()`, `App::finishStroke()`, `App::cancelStroke()`, and `App::removeIntersectingStrokes()` out of `AppDrawingMode.cpp`.
+- Kept canvas display behavior, timesheet preview rendering, onion/light-table overlays, MyPaint stroke commit, eraser splitting, and renderer dirty/cache calls unchanged.
+- This step is structure-only and does not add startup or project-load work.
+
+Next recommended task:
+
+- `src/ui/AppDrawingMode.cpp` is now near the 900-line range. Continue toward the 800-line guideline by splitting a closed timesheet assistant UI block, or add a focused helper/test if the next block can be made model-only.

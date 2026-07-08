@@ -817,3 +817,6 @@ Drawing-mode timesheet helpers should be tested without starting the app. Playba
 ## Phase 2 Step 2-ag decision
 
 Keep App state ownership and panel action behavior unchanged while moving drawing-mode panel methods out of `AppDrawingMode.cpp`. Continue future large-file work as numbered Phase 2 steps.
+## Phase 2 Step 2-ah decision
+
+Move canvas and stroke lifecycle methods as a closed App method group. Do not change renderer warmup, project loading, or preview-file generation behavior in this split.

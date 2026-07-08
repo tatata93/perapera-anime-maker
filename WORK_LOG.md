@@ -2156,3 +2156,9 @@ Rules recorded for the handoff:
 - Moved drawing-mode left sidebar, right sidebar, and bottom timeline area methods out of `AppDrawingMode.cpp`.
 - Kept panel action routing, renderer invalidation, preview readiness reset, save/load/export calls, and timeline playback-order behavior unchanged.
 - This step is structure-only and does not add startup or project-load work.
+## Phase 2 Step 2-ah: AppDrawingMode canvas split
+
+- Added `src/ui/AppDrawingModeCanvas.cpp`.
+- Moved canvas drawing, canvas fitting, stroke finish/cancel, and eraser rewrite methods out of `AppDrawingMode.cpp`.
+- Kept canvas display, timesheet preview rendering, MyPaint commit, eraser splitting, and renderer dirty/cache behavior unchanged.
+- This step is structure-only and does not add startup or project-load work.
