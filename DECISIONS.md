@@ -791,3 +791,7 @@ Renderer file splitting should preserve cache behavior first. `CanvasRendererSup
 ## Phase 2 Step 2-x decision
 
 `AppDrawingMode.cpp` should be split by closed behavior first. Eraser stroke-splitting is pure model logic, while preview drawing and App state mutation stay in the drawing-mode file for now.
+
+## Phase 2 Step 2-y decision
+
+Eraser stroke-splitting should stay app-independent and tested. This makes future drawing-mode cleanup safer without adding startup or renderer cost.

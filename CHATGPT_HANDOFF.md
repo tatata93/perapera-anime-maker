@@ -256,3 +256,18 @@ Current state:
 Next recommended task:
 
 - Add a small selftest for `AppDrawingModeEraser`, then continue splitting AppDrawingMode by similarly closed helper groups.
+
+---
+
+## Latest handoff: Phase 2 Step 2-y AppDrawingMode eraser selftest
+
+Current state:
+
+- Added `tools/app_drawing_mode_eraser_selftest.cpp`.
+- Added CMake target `perapera_app_drawing_mode_eraser_selftest`.
+- The selftest covers no-hit preservation, crossing eraser splitting, large short-tap local gap behavior, and empty input stability.
+- The test is independent from ImGui, SDL windows, and app startup.
+
+Next recommended task:
+
+- Continue splitting `AppDrawingMode.cpp`; the next likely candidate is direct onion/eraser preview drawing helpers, but inspect dependencies before moving them.
