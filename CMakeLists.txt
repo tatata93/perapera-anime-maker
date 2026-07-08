@@ -571,3 +571,9 @@ if(TARGET perapera_anime_maker)
     src/ui/AppDrawingModePreview.cpp
   )
 endif()
+# final_spec_v6 Phase 2 Step 2-ae: drawing workspace layout helper split
+if(TARGET perapera_anime_maker)
+  target_sources(perapera_anime_maker PRIVATE
+    src/ui/AppDrawingModeWorkspace.cpp
+  )
+endif()

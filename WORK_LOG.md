@@ -2145,3 +2145,5 @@ Rules recorded for the handoff:
 - Kept the test independent from ImGui drawing, SDL windows, and app startup.
 
 - Phase 2 Step 2-ad: split TimesheetPanelViewModel builder from AppDrawingMode.cpp.
+
+- Phase 2 Step 2-ae: split DrawingWorkspace layout shell from AppDrawingMode.cpp.

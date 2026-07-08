@@ -20,6 +20,7 @@
 #include "ui/AppDrawingModeOverlay.h"
 #include "ui/AppDrawingModePreview.h"
 #include "ui/AppDrawingModeTimesheet.h"
+#include "ui/AppDrawingModeWorkspace.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/Theme.h"
 #include "ui/panels/BrushPanel.h"
@@ -902,43 +903,13 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
     updateFramePlayback();
     // Timesheet Rebuild Step 7.3:
     // キャンバス上ホイール時に親ワークスペースが縦スクロールしないようにする。
-    ImGui::BeginChild("DrawingWorkspace",
-                      ImVec2(0.0f, -28.0f),
-                      true,
-                      ImGuiWindowFlags_NoScrollWithMouse);
-    const float sideWidth = 245.0f;
-    const float rightWidth = 315.0f;
-    // Timesheet Rebuild Step 7.3:
-    // 下部タイムラインに作画Fの四角列を確実に出すため、高さを少し増やす。
-    const float timelineHeight = 215.0f;
-    const float centerHeight = std::max(160.0f,
-                                        ImGui::GetContentRegionAvail().y - timelineHeight - ImGui::GetStyle().ItemSpacing.y);
-    ImGui::BeginChild("DrawingUpperArea",
-                      ImVec2(0.0f, centerHeight),
-                      false,
-                      ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::BeginChild("DrawingLeftSidebar", ImVec2(sideWidth, 0.0f), true);
-    drawLeftSidebar();
-    ImGui::EndChild();
-    ImGui::SameLine();
-    ImGui::BeginChild("DrawingCanvasHost",
-                      ImVec2(-(rightWidth + ImGui::GetStyle().ItemSpacing.x), 0.0f),
-                      true,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    drawCanvasArea(rightWidth);
-    ImGui::SetScrollX(0.0f);
-    ImGui::SetScrollY(0.0f);
-    ImGui::EndChild();
-    ImGui::SameLine();
-    ImGui::BeginChild("DrawingRightSidebar_v5", ImVec2(rightWidth, 0.0f), true,
-                      ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_HorizontalScrollbar);
-    ImGui::PushID("DrawingRightSidebar_v5Content_v4");
-    drawRightSidebar();
-    ImGui::PopID();
-    ImGui::EndChild();
-    ImGui::EndChild();
-    drawTimelineArea();
-    ImGui::EndChild();
+  ::perapera::app_drawing::drawDrawingWorkspaceLayout(
+      {
+          [this]() { drawLeftSidebar(); },
+          [this](float rightWidth) { drawCanvasArea(rightWidth); },
+          [this]() { drawRightSidebar(); },
+          [this]() { drawTimelineArea(); },
+      });
 }
 void App::drawLeftSidebar()
 {
