@@ -147,7 +147,6 @@ add_executable(perapera_anime_maker
     src/core/TimesheetSceneResolver.cpp
     src/core/TimesheetInbetweenResolver.cpp
     src/core/TimesheetInbetweenPlanner.cpp
-    src/io/ProjectIO.cpp
     src/io/TimesheetIO.cpp
     src/io/CutIO.cpp
     src/io/SceneCutLayoutIO.cpp

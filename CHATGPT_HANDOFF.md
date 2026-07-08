@@ -44,3 +44,35 @@ User confirmation that would help:
 - Launch `build/bin/perapera_anime_maker.exe`.
 - Use Save once.
 - Confirm the project folder now contains `scenes/scene_001/cuts/cut_001/` with `cut.json`, `timesheet.json`, and `cells/`.
+
+---
+
+## Latest handoff: Phase 2 Step 2-l
+
+Current branch/state:
+
+- Work is on `main`.
+- Goal: connect `src/ui/AppProjectIO.cpp` directly to the new layout save/load entries.
+
+Latest intended changes:
+
+- `AppProjectIO.cpp` should not include or call legacy `ProjectIO::save` / `ProjectIO::load`.
+- App save should use `ProjectLayoutSaveEntry`.
+- App load and explicit round-trip check should use `ProjectLayoutLoadEntry` / `loadProjectNewLayoutMinimal`.
+- Loaded `cut.timesheet` should be reflected back to `workingTimesheet_`.
+- `DrawingNewLayoutIO` must stay removed.
+- Do not intentionally delete `ProjectIO.*` in this step; deletion policy remains Step 2-m.
+
+Files touched in this step:
+
+- `src/ui/AppProjectIO.cpp`
+- `CMakeLists.txt`
+- `docs/final_spec_v6_phase2_step2l_app_projectio_direct_fix_policy.md`
+- `WORK_LOG.md`
+- `DECISIONS.md`
+
+Next checks:
+
+- Confirm `AppProjectIO.cpp` no longer contains `ProjectIO::save`, `ProjectIO::load`, or `DrawingNewLayoutIO`.
+- Configure and build Debug.
+- Confirm `build/bin/perapera_anime_maker.exe` exists.

@@ -740,3 +740,6 @@ Use manual path normalization and `-f` string formatting instead of fragile inte
 ## Phase 2 Step 2-m decision
 
 ProjectIO removal must be evidence-based. If any reference remains outside src/io/ProjectIO.*, ProjectIO stays until the reference is migrated to the new layout IO. Do not add a second DrawingNewLayoutIO bridge; connect real app IO paths directly to ProjectLayoutSaveEntry / ProjectLayoutLoadEntry.
+## Phase 2 Step 2-l decision
+
+AppProjectIO should call the new layout save/load entries directly. Do not restore DrawingNewLayoutIO. Do not intentionally delete ProjectIO.* in this step; make the remaining deletion decision in Step 2-m after references are migrated.

@@ -14,7 +14,7 @@
 #include "core/CutCellTimesheetBridge.h"
 #include "io/FfmpegRunner.h"
 #include "io/PngExporter.h"
-#include "io/ProjectIO.h"
+#include "io/ProjectLayoutLoadEntry.h"
 #include "io/ProjectLayoutSaveEntry.h"
 #include "ui/AppProjectIOSupport.h"
 #include "ui/panels/CellPanel.h"
@@ -107,6 +107,27 @@ bool saveProjectNewLayoutForActiveCut(const std::filesystem::path& projectFolder
     return saveProjectNewLayoutMinimal(projectFolder, scene, cut, project.cells, result, error);
 }
 
+bool loadProjectNewLayoutForActiveCut(const std::filesystem::path& projectFolder,
+                                      ProjectLayoutLoadResult& result,
+                                      std::string* error)
+{
+    ProjectLayoutLoadOptions options;
+    return loadProjectNewLayoutMinimal(projectFolder, options, &result, error);
+}
+
+void applyLoadedSceneCutSettings(Project& project, const Scene& scene, const Cut& cut)
+{
+    if (!scene.name.empty()) {
+        project.name = scene.name;
+    }
+    if (cut.totalFrames > 0) {
+        project.timeline.totalFrames = cut.totalFrames;
+    }
+    if (cut.frameRate > 0) {
+        project.output.fps = cut.frameRate;
+    }
+}
+
 } // namespace
 
 void App::saveProject()
@@ -116,11 +137,6 @@ void App::saveProject()
 
     const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
     std::string error;
-    if (!ProjectIO::save(toSave, projectFolder, &error)) {
-        lastMessage_ = "save failed: " + error;
-        return;
-    }
-
     ProjectLayoutSaveEntryResult newLayoutResult;
     if (!saveProjectNewLayoutForActiveCut(projectFolder, toSave, workingTimesheet_, &newLayoutResult, &error)) {
         lastMessage_ = "new layout save failed: " + error;
@@ -138,10 +154,7 @@ void App::saveProject()
         return;
     }
 
-    // Step 20:
-    // 以前はここでProjectIO::load()してprojectSignature()まで走査していた。
-    // FillStrokeが増えると保存のたびに全フレーム/全ストローク/全bitmapを読むため遅い。
-    // 検証は saveLoadRoundTripCheck() の明示ボタンだけで行う。
+    // Keep the heavier reload verification behind the explicit round-trip check.
     project_ = std::move(toSave);
     afterProjectChanged();
     const appio::SavedSelection selection{activeCellIndex_, activeFrameIndex_, activeLayerIndex_, true};
@@ -154,13 +167,15 @@ void App::saveProject()
 void App::loadProject()
 {
     const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
-    Project loaded;
+    ProjectLayoutLoadResult loadResult;
     std::string error;
-    if (!ProjectIO::load(projectFolder, loaded, &error)) {
+    if (!loadProjectNewLayoutForActiveCut(projectFolder, loadResult, &error)) {
         lastMessage_ = "load failed: " + error;
         return;
     }
 
+    Project loaded = std::move(loadResult.project);
+    applyLoadedSceneCutSettings(loaded, loadResult.scene, loadResult.cut);
     appio::normalizeProjectForStep14(loaded);
     appio::SavedSelection selection = appio::readAppState(projectFolder);
     std::string selectionSource = "app_state";
@@ -187,6 +202,8 @@ void App::loadProject()
     redoStack_.clear();
 
     project_ = std::move(loaded);
+    workingTimesheet_ = loadResult.cut.timesheet;
+    workingTimesheetDirty_ = false;
     activeCellIndex_ = selection.cellIndex;
     activeFrameIndex_ = selection.frameIndex;
     activeLayerIndex_ = selection.layerIndex;
@@ -213,13 +230,7 @@ void App::saveLoadRoundTripCheck()
     const std::filesystem::path projectFolder = appio::absolutePath(exportState_.projectFolder);
 
     std::string error;
-    if (!ProjectIO::save(toSave, projectFolder, &error)) {
-        lastMessage_ = "round trip save failed: " + error;
-        return;
-    }
-
-    ProjectLayoutSaveEntryResult newLayoutResult;
-    if (!saveProjectNewLayoutForActiveCut(projectFolder, toSave, workingTimesheet_, &newLayoutResult, &error)) {
+    if (!saveProjectNewLayoutForActiveCut(projectFolder, toSave, workingTimesheet_, nullptr, &error)) {
         lastMessage_ = "round trip new layout save failed: " + error;
         return;
     }
@@ -234,11 +245,13 @@ void App::saveLoadRoundTripCheck()
         return;
     }
 
-    Project loaded;
-    if (!ProjectIO::load(projectFolder, loaded, &error)) {
+    ProjectLayoutLoadResult loadResult;
+    if (!loadProjectNewLayoutForActiveCut(projectFolder, loadResult, &error)) {
         lastMessage_ = "round trip load failed: " + error;
         return;
     }
+    Project loaded = std::move(loadResult.project);
+    applyLoadedSceneCutSettings(loaded, loadResult.scene, loadResult.cut);
     appio::normalizeProjectForStep14(loaded);
 
     const appio::ProjectStats afterStats = appio::collectProjectStats(loaded);
@@ -249,6 +262,8 @@ void App::saveLoadRoundTripCheck()
             selection = appio::SavedSelection{activeCellIndex_, activeFrameIndex_, activeLayerIndex_, true};
         }
         project_ = std::move(loaded);
+        workingTimesheet_ = loadResult.cut.timesheet;
+        workingTimesheetDirty_ = false;
         activeCellIndex_ = selection.cellIndex;
         activeFrameIndex_ = selection.frameIndex;
         activeLayerIndex_ = selection.layerIndex;

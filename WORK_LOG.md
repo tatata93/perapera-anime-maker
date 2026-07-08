@@ -2042,3 +2042,8 @@ Rules recorded for the handoff:
 - Removed failed DrawingNewLayoutIO path in prior step and kept it removed.
 - ProjectIO deleted by script: False
 - Goal: only remove legacy ProjectIO when no app/tool/CMake references remain.
+## Phase 2 Step 2-l: AppProjectIO direct layout IO fix
+
+- Replaced direct `ProjectIO::save` / `ProjectIO::load` calls in `src/ui/AppProjectIO.cpp` with `ProjectLayoutSaveEntry` / `ProjectLayoutLoadEntry`.
+- Kept `DrawingNewLayoutIO` removed.
+- Did not intentionally delete `ProjectIO.*`; remaining legacy deletion policy is deferred to Step 2-m.
