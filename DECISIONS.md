@@ -795,3 +795,7 @@ Renderer file splitting should preserve cache behavior first. `CanvasRendererSup
 ## Phase 2 Step 2-y decision
 
 Eraser stroke-splitting should stay app-independent and tested. This makes future drawing-mode cleanup safer without adding startup or renderer cost.
+
+## Phase 2 Step 2-z decision
+
+Overlay drawing helpers can leave `AppDrawingMode.cpp` because they do not own App state. Input handling and renderer invalidation stay in AppDrawingMode until their dependencies are split deliberately.

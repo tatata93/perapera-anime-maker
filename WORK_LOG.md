@@ -2125,3 +2125,9 @@ Rules recorded for the handoff:
 - Added `perapera_app_drawing_mode_eraser_selftest` for `AppDrawingModeEraser`.
 - Covered no-hit preservation, crossing eraser splitting, large short-tap local gap behavior, and empty input stability.
 - Kept the test independent from ImGui, SDL windows, and app startup.
+
+## Phase 2 Step 2-z: AppDrawingMode overlay helper split
+
+- Split direct onion-skin overlay drawing and lightweight eraser preview drawing into `AppDrawingModeOverlay.h/.cpp`.
+- Kept App state, input handling, frame selection, and renderer dirty notifications in `AppDrawingMode.cpp`.
+- Reduced `AppDrawingMode.cpp` from 1730 lines to 1632 lines while keeping the Debug app build green.

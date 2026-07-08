@@ -166,6 +166,7 @@ add_executable(perapera_anime_maker
     src/ui/App.cpp
     src/ui/AppDrawingMode.cpp
     src/ui/AppDrawingModeEraser.cpp
+    src/ui/AppDrawingModeOverlay.cpp
     src/ui/AppInput.cpp
     src/ui/AppLightTable.cpp
     src/ui/AppOperations.cpp

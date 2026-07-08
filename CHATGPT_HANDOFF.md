@@ -271,3 +271,18 @@ Current state:
 Next recommended task:
 
 - Continue splitting `AppDrawingMode.cpp`; the next likely candidate is direct onion/eraser preview drawing helpers, but inspect dependencies before moving them.
+
+---
+
+## Latest handoff: Phase 2 Step 2-z AppDrawingMode overlay split
+
+Current state:
+
+- Added `src/ui/AppDrawingModeOverlay.h/.cpp`.
+- Moved direct onion-skin overlay drawing and lightweight eraser preview drawing out of `AppDrawingMode.cpp`.
+- `AppDrawingMode.cpp` still owns App state, input handling, frame selection, and renderer dirty notifications.
+- Debug app build succeeded after the split.
+
+Next recommended task:
+
+- Continue reducing `AppDrawingMode.cpp`; inspect timesheet playback/helper logic near the top next, or add a small non-renderer test if a helper group is isolated.
