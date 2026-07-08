@@ -41,6 +41,18 @@ void expectInt(int actual, int expected, std::string_view label)
     std::cerr << "[NG] " << label << " expected=" << expected << " actual=" << actual << '\n';
 }
 
+void expectFloat(float actual, float expected, std::string_view label)
+{
+    const float diff = actual > expected ? actual - expected : expected - actual;
+    if (diff <= 0.0001f) {
+        std::cout << "[OK] " << label << " = " << actual << '\n';
+        return;
+    }
+
+    ++gFailureCount;
+    std::cerr << "[NG] " << label << " expected=" << expected << " actual=" << actual << '\n';
+}
+
 void expectString(std::string_view actual, std::string_view expected, std::string_view label)
 {
     if (actual == expected) {
@@ -68,6 +80,13 @@ perapera::Cut makeSampleCut()
     cut.frameRate = 24;
     cut.totalFrames = 18;
     cut.cellZOrderKeys = {"bg", "cell-a", "cell-b", "book"};
+    cut.hasCamera = true;
+    cut.camera.centerX = 640.0f;
+    cut.camera.centerY = 360.0f;
+    cut.camera.zoom = 1.25f;
+    cut.camera.animationEnabled = true;
+    cut.camera.keys.push_back({1, 640.0f, 360.0f, 1.25f});
+    cut.camera.keys.push_back({12, 700.0f, 400.0f, 1.5f});
 
     cut.timesheet.totalFrames = cut.totalFrames;
     cut.timesheet.defaultExposure = 2;
@@ -112,6 +131,8 @@ void runCutIoSelfTest()
     const std::string timesheetJsonText = readWholeFile(timesheetJson);
     expectTrue(cutJsonText.find("perapera.cut.v1") != std::string::npos, "cut kind is written");
     expectTrue(cutJsonText.find("timesheet.json") != std::string::npos, "timesheet file reference is written");
+    expectTrue(cutJsonText.find("\"camera\"") != std::string::npos, "cut camera is written");
+    expectTrue(cutJsonText.find("\"animationEnabled\": true") != std::string::npos, "cut camera animation flag is written");
     expectTrue(cutJsonText.find("第1カット") != std::string::npos, "Japanese cut name is written as UTF-8");
     expectTrue(cutJsonText.find("Aセル") == std::string::npos, "timesheet track display names are not mixed into cut.json");
     expectTrue(timesheetJsonText.find("Aセル") != std::string::npos, "timesheet track display names are written to timesheet.json");
@@ -124,6 +145,14 @@ void runCutIoSelfTest()
     expectString(loaded.name, "第1カット", "loaded cut name");
     expectInt(loaded.frameRate, 24, "loaded frameRate");
     expectInt(loaded.totalFrames, 18, "loaded totalFrames");
+    expectTrue(loaded.hasCamera, "loaded cut has camera metadata");
+    expectFloat(loaded.camera.centerX, 640.0f, "loaded camera centerX");
+    expectFloat(loaded.camera.centerY, 360.0f, "loaded camera centerY");
+    expectFloat(loaded.camera.zoom, 1.25f, "loaded camera zoom");
+    expectTrue(loaded.camera.animationEnabled, "loaded camera animation flag");
+    expectInt(static_cast<int>(loaded.camera.keys.size()), 2, "loaded camera key count");
+    expectInt(loaded.camera.keys[1].frame, 12, "loaded camera second key frame");
+    expectFloat(loaded.camera.keys[1].zoom, 1.5f, "loaded camera second key zoom");
     expectInt(static_cast<int>(loaded.cellZOrderKeys.size()), 4, "loaded cellZOrderKeys count");
     expectString(loaded.cellZOrderKeys[2], "cell-b", "loaded cellZOrderKeys order");
     expectInt(loaded.timesheet.totalFrames, 18, "loaded timesheet totalFrames follows cut");

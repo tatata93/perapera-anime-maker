@@ -88,6 +88,72 @@ bool readJsonFile(const fs::path& path, json& value, std::string* errorMessage)
     return true;
 }
 
+int jsonInt(const json& value, const char* key, int fallback)
+{
+    return value.value(key, fallback);
+}
+
+float jsonFloat(const json& value, const char* key, float fallback)
+{
+    return value.value(key, fallback);
+}
+
+json cameraToJson(const CameraSettings& camera)
+{
+    json keys = json::array();
+    for (const CameraKey& key : camera.keys) {
+        keys.push_back({
+            {"frame", key.frame},
+            {"centerX", key.centerX},
+            {"centerY", key.centerY},
+            {"zoom", key.zoom},
+        });
+    }
+
+    return json{
+        {"centerX", camera.centerX},
+        {"centerY", camera.centerY},
+        {"zoom", camera.zoom},
+        {"animationEnabled", camera.animationEnabled},
+        {"keys", std::move(keys)},
+    };
+}
+
+CameraKey cameraKeyFromJson(const json& value)
+{
+    CameraKey key;
+    if (!value.is_object()) {
+        return key;
+    }
+    key.frame = jsonInt(value, "frame", key.frame);
+    key.centerX = jsonFloat(value, "centerX", key.centerX);
+    key.centerY = jsonFloat(value, "centerY", key.centerY);
+    key.zoom = jsonFloat(value, "zoom", key.zoom);
+    return key;
+}
+
+CameraSettings cameraFromJson(const json& value)
+{
+    CameraSettings camera;
+    if (!value.is_object()) {
+        return camera;
+    }
+
+    camera.centerX = jsonFloat(value, "centerX", camera.centerX);
+    camera.centerY = jsonFloat(value, "centerY", camera.centerY);
+    camera.zoom = jsonFloat(value, "zoom", camera.zoom);
+    camera.animationEnabled = value.value("animationEnabled", camera.animationEnabled);
+    camera.keys.clear();
+
+    const json keys = value.value("keys", json::array());
+    if (keys.is_array()) {
+        for (const json& key : keys) {
+            camera.keys.push_back(cameraKeyFromJson(key));
+        }
+    }
+    return camera;
+}
+
 json cutMetadataToJson(const Cut& cut)
 {
     json cellZOrderKeys = json::array();
@@ -95,7 +161,7 @@ json cutMetadataToJson(const Cut& cut)
         cellZOrderKeys.push_back(key);
     }
 
-    return json{
+    json metadata{
         {"kind", kCutKind},
         {"formatVersion", kCutFormatVersion},
         {"id", cut.id},
@@ -105,6 +171,10 @@ json cutMetadataToJson(const Cut& cut)
         {"timesheetFile", "timesheet.json"},
         {"cellZOrderKeys", std::move(cellZOrderKeys)},
     };
+    if (cut.hasCamera) {
+        metadata["camera"] = cameraToJson(cut.camera);
+    }
+    return metadata;
 }
 
 Cut cutMetadataFromJson(const json& value)
@@ -120,6 +190,12 @@ Cut cutMetadataFromJson(const json& value)
     }
     cut.totalFrames = normalizeTimesheetFrameCount(cut.totalFrames);
     cut.timesheet.totalFrames = cut.totalFrames;
+
+    const auto cameraIterator = value.find("camera");
+    if (cameraIterator != value.end() && cameraIterator->is_object()) {
+        cut.hasCamera = true;
+        cut.camera = cameraFromJson(*cameraIterator);
+    }
 
     if (const json* cellZOrderKeys = value.find("cellZOrderKeys") == value.end() ? nullptr : &value.at("cellZOrderKeys")) {
         if (cellZOrderKeys->is_array()) {

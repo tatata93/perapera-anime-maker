@@ -2172,3 +2172,10 @@ Rules recorded for the handoff:
 - Added pure helper functions for timesheet preview frame clamping, whole-T playback stepping, playback range normalization, and range playback stepping.
 - Extended `perapera_app_drawing_mode_timesheet_selftest` with linear wrap, ping-pong bounce, range clamp/swap, range wrap, and single-frame stability checks.
 - Kept the test independent from ImGui windows, SDL startup, project loading, and preview cache warmup.
+## Phase 2 Step 3-a: Cut camera metadata bridge
+
+- Added shared `src/core/CameraSettings.h` and moved Project camera model definitions there.
+- Added optional Cut-owned camera metadata with `Cut::hasCamera`.
+- Updated `CutIO` to write/read camera metadata in `cut.json` without forcing old cut files to overwrite Project camera state.
+- Connected app save/load so the active Cut receives Project camera on save and applies Cut camera on load only when present.
+- Extended `perapera_cut_io_selftest` to cover Cut camera metadata round-trip.

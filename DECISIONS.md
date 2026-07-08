@@ -826,3 +826,6 @@ Timesheet preview playback state transitions can live in App helper methods. Kee
 ## Phase 2 Step 2-aj decision
 
 Close the timesheet playback split with pure helper coverage rather than testing private App methods directly. This keeps the regression check fast and avoids adding startup, project-load, or renderer-window work.
+## Phase 2 Step 3-a decision
+
+Open Phase 2 Step 3 with Cut-owned camera metadata because the main spec requires Timesheet / Cell / Camera to connect at Cut level. Preserve old project safety with `Cut::hasCamera` so missing camera objects do not overwrite Project-level camera settings.

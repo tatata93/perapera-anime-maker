@@ -376,3 +376,19 @@ Current state:
 Next recommended task:
 
 - Phase 2 Step 2 cleanup is now likely sufficient. Review remaining Phase 2 completion gaps, then move to the next Phase 2/Step 3 item if no missing save/load/timesheet bridge issue is found.
+
+---
+
+## Latest handoff: Phase 2 Step 3-a Cut camera metadata bridge
+
+Current state:
+
+- Added shared `src/core/CameraSettings.h`.
+- `Project` and `Cut` now use the same camera settings model.
+- `Cut` has optional camera metadata guarded by `hasCamera`.
+- `CutIO` writes and reads `camera` in `cut.json`.
+- App save passes the current Project camera into the active Cut; app load applies Cut camera only when present.
+
+Next recommended task:
+
+- Add/verify Cut-level camera coverage in project layout save/load tests, then continue Phase 2 Step 3 toward Cut-level Timesheet / Cell / Camera connection.

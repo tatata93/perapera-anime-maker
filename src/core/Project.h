@@ -7,25 +7,11 @@
 #include <string>
 #include <vector>
 
+#include "core/CameraSettings.h"
 #include "core/Cell.h"
 #include "core/WorkCanvas.h"
 
 namespace perapera {
-
-struct CameraKey {
-    int frame = 0;
-    float centerX = 1280.0f;
-    float centerY = 720.0f;
-    float zoom = 1.0f;
-};
-
-struct CameraSettings {
-    float centerX = 1280.0f;
-    float centerY = 720.0f;
-    float zoom = 1.0f;
-    bool animationEnabled = false;
-    std::vector<CameraKey> keys;
-};
 
 struct AudioSettings {
     bool enabled = false;

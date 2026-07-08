@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "core/CameraSettings.h"
 #include "core/Timesheet.h"
 
 #include <string>
@@ -19,6 +20,8 @@ struct Cut {
 
     // タイムシートはProject直下ではなくCut単位に持つ。
     Timesheet timesheet;
+    bool hasCamera = false;
+    CameraSettings camera;
 
     // 将来、表示・撮影順とタイムシート列順を接続するためのキー。
     std::vector<std::string> cellZOrderKeys;

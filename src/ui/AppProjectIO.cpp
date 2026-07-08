@@ -92,6 +92,8 @@ Cut activeCutForProjectSave(const Project& project, const Timesheet& workingTime
     cut.cellZOrderKeys = project.cellOrder;
     cut.timesheet = workingTimesheet;
     cut.timesheet.totalFrames = cut.totalFrames;
+    cut.hasCamera = true;
+    cut.camera = project.camera;
     (void)ensureTimesheetTracksForActiveCutCells(project, cut.timesheet);
     return cut;
 }
@@ -123,6 +125,9 @@ void applyLoadedSceneCutSettings(Project& project, const Scene& scene, const Cut
     }
     if (cut.frameRate > 0) {
         project.output.fps = cut.frameRate;
+    }
+    if (cut.hasCamera) {
+        project.camera = cut.camera;
     }
 }
 

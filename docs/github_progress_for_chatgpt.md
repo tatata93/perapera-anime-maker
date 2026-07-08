@@ -5,7 +5,7 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest pushed step after this update: `Phase 2 Step 2-aj: add timesheet playback helper selftest`
+- Latest pushed step after this update: `Phase 2 Step 3-a: add Cut camera metadata bridge`
 - Main purpose of the latest work: reduce large drawing/render files safely and add lightweight selftests without making app startup or project loading heavier.
 
 ## Recent completed steps
@@ -26,6 +26,7 @@ Last updated: 2026-07-09
 - Step 2-ah: split canvas drawing and stroke finish/cancel helpers into `AppDrawingModeCanvas.cpp`.
 - Step 2-ai: split timesheet playback helpers into `AppDrawingModeTimesheetPlayback.cpp`.
 - Step 2-aj: added pure helper coverage for timesheet preview/range playback stepping.
+- Step 3-a: added optional Cut-owned camera metadata and app save/load bridge.
 
 ## Important current state
 
@@ -48,13 +49,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Review whether Phase 2 Step 2 can be closed and whether the next work should move to Step 3.
-2. If staying in Step 2, add only focused tests or cleanup; avoid adding startup/project-load work.
-3. If moving on, keep future work as numbered Phase steps and update logs before pushing.
+1. Continue Phase 2 Step 3 Cut-level Timesheet / Cell / Camera connection.
+2. Add focused project layout save/load coverage for Cut camera metadata.
+3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate
 
-Phase 2 Step 2 large-file cleanup and lightweight helper coverage are likely sufficient. Next candidate is a Phase 2 Step 3 review/implementation item from the main spec, unless a missing save/load/timesheet bridge issue is found.
+Phase 2 Step 2 large-file cleanup and lightweight helper coverage are likely sufficient. Phase 2 Step 3 is now open, starting with Cut-level camera metadata.
 
 Useful commands:
 
