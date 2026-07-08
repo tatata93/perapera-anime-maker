@@ -565,20 +565,9 @@ if (MSVC)
 else()
     target_compile_options(perapera_app_drawing_mode_timesheet_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-
-
 # final_spec_v6 Phase 2 Step 2-ac: preview helper split
 if(TARGET perapera_anime_maker)
   target_sources(perapera_anime_maker PRIVATE
     src/ui/AppDrawingModePreview.cpp
   )
 endif()
-
-
-# final_spec_v6 Phase 2 Step 2-ac: preview helper split
-if(TARGET perapera_anime_maker)
-  target_sources(perapera_anime_maker PRIVATE
-    src/ui/AppDrawingModePreview.cpp
-  )
-endif()
-
