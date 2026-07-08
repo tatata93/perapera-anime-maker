@@ -45,6 +45,44 @@ bool readJsonFile(const fs::path& path, json& value, std::string* errorMessage)
     return true;
 }
 
+bool inspectLayerJsonHeader(const fs::path& path, std::string* errorMessage)
+{
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        setError(errorMessage, "failed to open layer json: " + path.string());
+        return false;
+    }
+
+    std::string prefix(8192U, '\0');
+    input.read(prefix.data(), static_cast<std::streamsize>(prefix.size()));
+    prefix.resize(static_cast<std::size_t>(std::max<std::streamsize>(0, input.gcount())));
+
+    if (prefix.find("\"schema\"") != std::string::npos &&
+        prefix.find("perapera.layer.v1") != std::string::npos) {
+        return true;
+    }
+
+    input.clear();
+    input.seekg(0, std::ios::beg);
+    json layerJson;
+    try {
+        input >> layerJson;
+    } catch (const std::exception& exception) {
+        setError(errorMessage, "failed to parse layer json: " + path.string() + " / " + exception.what());
+        return false;
+    }
+
+    if (!layerJson.is_object()) {
+        setError(errorMessage, "layer json root is not an object: " + path.string());
+        return false;
+    }
+    if (layerJson.value("schema", "") != "perapera.layer.v1") {
+        setError(errorMessage, "wrong layer schema: " + path.string());
+        return false;
+    }
+    return true;
+}
+
 std::vector<fs::path> sortedDirectories(const fs::path& root)
 {
     std::vector<fs::path> result;
@@ -111,12 +149,7 @@ bool inspectFrame(const fs::path& cellDir,
     }
 
     for (const fs::path& layerPath : layerFiles) {
-        json layerJson;
-        if (!readJsonFile(layerPath, layerJson, errorMessage)) {
-            return false;
-        }
-        if (layerJson.value("schema", "") != "perapera.layer.v1") {
-            setError(errorMessage, "wrong layer schema: " + layerPath.string());
+        if (!inspectLayerJsonHeader(layerPath, errorMessage)) {
             return false;
         }
         ++layerCount;

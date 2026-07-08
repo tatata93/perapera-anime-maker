@@ -2074,3 +2074,8 @@ Rules recorded for the handoff:
 
 - Strengthened `appio::projectSignature()` so save/load checks cover project metadata, cell order, motion keys, layer metadata, stroke style fields, brush engine, and Fill bitmap samples.
 - Kept Fill bitmap verification lightweight by hashing size plus first/middle/last samples instead of scanning full bitmap payloads.
+
+## Phase 2 Step 2-q: Lightweight layout inspection
+
+- Changed `ProjectLayoutReadEntry` so layer inspection usually checks the schema from a small file prefix instead of parsing full stroke/Fill bitmap payloads.
+- Kept full JSON parsing as a fallback for unusual layer files where the schema is not found in the prefix.

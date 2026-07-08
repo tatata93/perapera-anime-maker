@@ -138,3 +138,17 @@ Current state:
 Next recommended task:
 
 - Add focused coverage around app-level load/save selection behavior or inspect remaining large files for safe split candidates.
+
+---
+
+## Latest handoff: Phase 2 Step 2-q lightweight inspection
+
+Current state:
+
+- `ProjectLayoutReadEntry` avoids full layer JSON parsing in the normal case.
+- Layer inspection checks the schema from a small prefix first, so future project lists/startup checks do not read full stroke/Fill bitmap payloads.
+- Full parsing remains as a fallback for unusual layer files.
+
+Next recommended task:
+
+- Inspect remaining large UI/render files and split the least risky helpers, or add app-level save/load selection coverage.
