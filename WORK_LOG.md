@@ -2107,3 +2107,9 @@ Rules recorded for the handoff:
 - Split pure renderer helper logic into `CanvasRendererSupport.h/.cpp`.
 - Kept cache ownership, progressive rebuild state, draw flow, and pruning in `CanvasRenderer.cpp`.
 - Reduced `CanvasRenderer.cpp` to the 800-line limit while keeping the Debug app build green.
+
+## Phase 2 Step 2-w: CanvasRenderer support selftest
+
+- Added `perapera_canvas_renderer_support_selftest` for the helper split.
+- Covered display opacity caps, display layer order, cache ID fallback, lightweight revision values, and Paint append-order safety.
+- Kept the check independent from app startup and renderer windows.

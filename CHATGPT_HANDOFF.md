@@ -226,3 +226,18 @@ Current state:
 Next recommended task:
 
 - Add a small focused selftest for renderer support helper invariants, or inspect the next large file `src/ui/AppDrawingMode.cpp` before any split.
+
+---
+
+## Latest handoff: Phase 2 Step 2-w CanvasRenderer support selftest
+
+Current state:
+
+- Added `tools/canvas_renderer_support_selftest.cpp`.
+- Added CMake target `perapera_canvas_renderer_support_selftest`.
+- The selftest covers display opacity caps, layer rank, frame/layer cache IDs, lightweight revision values, and Paint append-order safety.
+- The test does not start the app or create a renderer window.
+
+Next recommended task:
+
+- Inspect `src/ui/AppDrawingMode.cpp` for a safe split candidate, or add focused tests around app drawing-mode state transitions before editing the large file.

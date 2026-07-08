@@ -783,3 +783,7 @@ Large UI file reduction should start with low-risk model helpers. `CellPanelMode
 ## Phase 2 Step 2-v decision
 
 Renderer file splitting should preserve cache behavior first. `CanvasRendererSupport` owns pure helper functions only; `CanvasRenderer.cpp` remains responsible for cache lifetime, progressive rebuild state, draw order execution, and pruning.
+
+## Phase 2 Step 2-w decision
+
+`CanvasRendererSupport` helpers are part of the hot drawing/cache path, so they should have a small selftest before deeper renderer edits. The test should avoid opening windows or warming real project files.
