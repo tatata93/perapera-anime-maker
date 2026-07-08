@@ -76,3 +76,20 @@ Next checks:
 - Confirm `AppProjectIO.cpp` no longer contains `ProjectIO::save`, `ProjectIO::load`, or `DrawingNewLayoutIO`.
 - Configure and build Debug.
 - Confirm `build/bin/perapera_anime_maker.exe` exists.
+
+---
+
+## Latest handoff: Phase 2 Step 2-m closeout
+
+Current state:
+
+- `src/io/ProjectIO.h` and `src/io/ProjectIO.cpp` are absent.
+- `CMakeLists.txt` no longer lists `src/io/ProjectIO.cpp`.
+- Active app save/load uses `ProjectLayoutSaveEntry` and `ProjectLayoutLoadEntry`.
+- `DrawingNewLayoutIO` remains removed.
+- Current source comments were cleaned so the active source no longer refers to the old route by name.
+- `docs/final_spec_v6_phase2_step2m_projectio_usage_audit.md` was updated to the current state.
+
+Recommended next task:
+
+- Improve new-layout load fidelity. In particular, inspect what `ProjectLayoutLoadEntry.cpp` restores for strokes, fill strokes, layer metadata, canvas/output settings, and timesheet assignment, then add focused selftests before widening app behavior.

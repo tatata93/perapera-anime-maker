@@ -1,14 +1,13 @@
 #pragma once
 
-// このファイルの役割:
-// Phase 2 Step 1-b の移行用ブリッジを定義する。
-// まだ Project -> Scene -> Cut -> Cell へ保存形式を移行しない段階で、
-// 既存 Project.cells / Project.cellOrder を「暫定 active Cut のセル群」として扱う。
+// Phase 2 Step 1-b migration bridge.
+// Treat the current Project.cells / Project.cellOrder pair as the active cut's
+// cell collection while the Scene -> Cut -> Cell model is being introduced.
 //
-// 注意:
-// - Project.h / ProjectIO.cpp の保存形式はここでは変更しない。
-// - Scene Plate / シーンパネル系は復活させない。
-// - UI側はこのブリッジ経由へ段階的に寄せる。
+// Rules:
+// - Keep this bridge storage-neutral.
+// - Do not reintroduce Scene Plate or a scene-management panel here.
+// - Keep UI migration staged through this bridge.
 
 #include <cstddef>
 #include <string>

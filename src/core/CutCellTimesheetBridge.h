@@ -8,7 +8,7 @@
 // Rules:
 // - Do not filter by Cell category. character/background/layout/book/effect/reference
 //   are all normal cells and may have timing in the Timesheet.
-// - Do not change ProjectIO or the physical save format in this step.
+// - Do not change the physical save format in this helper.
 // - Do not reintroduce Scene Plate or a scene-management panel.
 
 #include <cstddef>

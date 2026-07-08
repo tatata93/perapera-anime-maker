@@ -1,7 +1,7 @@
 #pragma once
 // final_spec_v6 Phase 2 Step 2-h.
 // Load the new scene/cut/cell/frame/layer layout into the current Project model.
-// Legacy ProjectIO compatibility is intentionally not handled here.
+// Old save-format compatibility is intentionally not handled here.
 
 #include <cstddef>
 #include <filesystem>

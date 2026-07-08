@@ -2,7 +2,7 @@
 
 // final_spec_v6 Phase 2 Step 2-b.
 // Minimal writer for the future Project -> Scene -> Cut folder layout.
-// This does not replace current ProjectIO yet.
+// This writes the scene/cut portion of the active new layout.
 
 #include <filesystem>
 #include <string>

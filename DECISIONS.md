@@ -743,3 +743,7 @@ ProjectIO removal must be evidence-based. If any reference remains outside src/i
 ## Phase 2 Step 2-l decision
 
 AppProjectIO should call the new layout save/load entries directly. Do not restore DrawingNewLayoutIO. Do not intentionally delete ProjectIO.* in this step; make the remaining deletion decision in Step 2-m after references are migrated.
+
+## Phase 2 Step 2-m closeout decision
+
+The legacy ProjectIO route is no longer an active source or build dependency. Do not restore it. Future work should improve the new layout load path directly.

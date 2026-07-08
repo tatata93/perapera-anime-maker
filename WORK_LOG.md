@@ -2047,3 +2047,10 @@ Rules recorded for the handoff:
 - Replaced direct `ProjectIO::save` / `ProjectIO::load` calls in `src/ui/AppProjectIO.cpp` with `ProjectLayoutSaveEntry` / `ProjectLayoutLoadEntry`.
 - Kept `DrawingNewLayoutIO` removed.
 - Did not intentionally delete `ProjectIO.*`; remaining legacy deletion policy is deferred to Step 2-m.
+
+## Phase 2 Step 2-m closeout: ProjectIO active references removed
+
+- Confirmed `src/io/ProjectIO.h` and `src/io/ProjectIO.cpp` are absent.
+- Confirmed active app save/load no longer calls `ProjectIO::save` or `ProjectIO::load`.
+- Removed stale `ProjectIO` wording from current source comments.
+- Updated the Step 2-m audit report to reflect the current active source state.

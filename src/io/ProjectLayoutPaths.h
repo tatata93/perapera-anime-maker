@@ -2,7 +2,7 @@
 
 // final_spec_v6 Phase 2 Step 2 path helpers.
 // Keep this header small and header-only so IO steps can share the new layout
-// without pulling in legacy ProjectIO behavior.
+// without pulling in save/load entry behavior.
 
 #include <filesystem>
 #include <string>
