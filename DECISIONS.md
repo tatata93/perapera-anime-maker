@@ -820,3 +820,6 @@ Keep App state ownership and panel action behavior unchanged while moving drawin
 ## Phase 2 Step 2-ah decision
 
 Move canvas and stroke lifecycle methods as a closed App method group. Do not change renderer warmup, project loading, or preview-file generation behavior in this split.
+## Phase 2 Step 2-ai decision
+
+Timesheet preview playback state transitions can live in App helper methods. Keep UI layout in AppDrawingMode.cpp for now, but move playback/range/edit-target synchronization logic to a separate file to satisfy the 800-line guideline.

@@ -347,3 +347,18 @@ Current state:
 Next recommended task:
 
 - `src/ui/AppDrawingMode.cpp` is now near the 900-line range. Continue toward the 800-line guideline by splitting a closed timesheet assistant UI block, or add a focused helper/test if the next block can be made model-only.
+
+---
+
+## Latest handoff: Phase 2 Step 2-ai Timesheet playback helper split
+
+Current state:
+
+- Added `src/ui/AppDrawingModeTimesheetPlayback.cpp`.
+- Moved selected-T preview movement, range playback, ping-pong playback stepping, and edit-target synchronization out of local lambdas in `AppDrawingMode.cpp`.
+- `src/ui/AppDrawingMode.cpp` is now under the 800-line guideline.
+- Behavior should remain unchanged: renderer invalidation, selected T/F handling, and playback messages are preserved.
+
+Next recommended task:
+
+- Add focused tests for the new playback helper behavior if practical, or continue separating the remaining timesheet assistant UI into smaller files without changing project load/startup behavior.

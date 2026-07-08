@@ -2162,3 +2162,8 @@ Rules recorded for the handoff:
 - Moved canvas drawing, canvas fitting, stroke finish/cancel, and eraser rewrite methods out of `AppDrawingMode.cpp`.
 - Kept canvas display, timesheet preview rendering, MyPaint commit, eraser splitting, and renderer dirty/cache behavior unchanged.
 - This step is structure-only and does not add startup or project-load work.
+## Phase 2 Step 2-ai: Timesheet playback helper split
+
+- Added `src/ui/AppDrawingModeTimesheetPlayback.cpp`.
+- Moved timesheet selected-T preview, range playback, ping-pong stepping, and edit-target synchronization helpers out of local lambdas in `AppDrawingMode.cpp`.
+- Reduced `AppDrawingMode.cpp` below the 800-line guideline while keeping startup and project-load behavior unchanged.

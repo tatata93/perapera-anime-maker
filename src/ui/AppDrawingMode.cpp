@@ -64,142 +64,6 @@ void App::drawDrawingMode()
         } else {
             workingTimesheet_.totalFrames = std::max(1, timesheetPanelData.totalFrames);
         }
-
-        // Timesheet Rebuild Step 6.5:
-        // タイムシートTだけを進める試作再生。作画F編集対象 activeFrameIndex_ は変更しない。
-        auto setTimesheetPreviewFrame = [&](int zeroBasedFrame, const char* reason) {
-            const int lastFrame = std::max(0, timesheetPanelData.totalFrames - 1);
-            const int nextFrame = std::clamp(zeroBasedFrame, 0, lastFrame);
-            if (timesheetPanelState_.selectedTimelineFrame != nextFrame) {
-                timesheetPanelState_.selectedTimelineFrame = nextFrame;
-                canvasRenderer_.markAllDirty();
-                lastMessage_ = std::string(reason) + " T" + std::to_string(nextFrame + 1) +
-                    " / edit F" + std::to_string(activeFrameIndex_ + 1);
-            }
-        };
-
-        auto syncEditingTargetToSelectedTimesheetCell = [&](const char* reason, bool allowResolvedHold) -> bool {
-            if (timesheetPanelData.cells.empty() || project_.cells.empty()) {
-                return false;
-            }
-
-            const int safeSelectedCellColumn = std::clamp(
-                timesheetPanelState_.selectedCellColumn,
-                0,
-                static_cast<int>(timesheetPanelData.cells.size()) - 1);
-            const ::perapera::ui::TimesheetPanelCellColumn& selectedColumn =
-                timesheetPanelData.cells[static_cast<std::size_t>(safeSelectedCellColumn)];
-
-            int selectedProjectCellIndex = -1;
-            Cell* selectedCell = projectCellById(project_, selectedColumn.cellId, &selectedProjectCellIndex);
-            if (selectedCell == nullptr || selectedCell->frames.empty()) {
-                return false;
-            }
-
-            int desiredDrawingFrameNumber = 0;
-            const ::perapera::ui::TimesheetPanelEditableEntry* selectedEntry =
-                selectedTimesheetPanelEntry(timesheetPanelData, timesheetPanelState_);
-            if (selectedEntry != nullptr && timesheetPanelKindUsesDrawingFrame(selectedEntry->kind)) {
-                desiredDrawingFrameNumber = selectedEntry->drawingFrameNumber;
-            } else if (allowResolvedHold && countTimesheetEntries(workingTimesheet_) > 0) {
-                const int selectedT = clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1);
-                const ResolvedTimesheetCell resolved =
-                    resolveTimesheetCell(workingTimesheet_, selectedColumn.cellId, selectedT);
-                if (resolved.visible && resolved.drawingFrameNumber > 0) {
-                    desiredDrawingFrameNumber = resolved.drawingFrameNumber;
-                }
-            }
-
-            if (desiredDrawingFrameNumber < 1 ||
-                desiredDrawingFrameNumber > static_cast<int>(selectedCell->frames.size())) {
-                return false;
-            }
-
-            const int desiredFrameIndex = desiredDrawingFrameNumber - 1;
-            const bool changed = activeCellIndex_ != selectedProjectCellIndex ||
-                activeFrameIndex_ != desiredFrameIndex;
-
-            activeCellIndex_ = selectedProjectCellIndex;
-            activeFrameIndex_ = desiredFrameIndex;
-            activeLayerIndex_ = 0;
-            clampSelection();
-
-            if (changed) {
-                canvasRenderer_.markAllDirty();
-                lastMessage_ = std::string(reason) + 
-                    ": edit target follows selected T -> cell " +
-                    std::to_string(activeCellIndex_ + 1) +
-                    " / F" + std::to_string(activeFrameIndex_ + 1);
-            }
-            return true;
-        };
-
-        auto stepTimesheetPreviewFrame = [&](int delta) {
-            const int frameCount = std::max(1, timesheetPanelData.totalFrames);
-            if (frameCount <= 1) {
-                isPlayingTimesheet_ = false;
-                timesheetPlaybackAccumulator_ = 0.0f;
-                return;
-            }
-
-            int nextFrame = timesheetPanelState_.selectedTimelineFrame + delta;
-            if (nextFrame < 0 || nextFrame >= frameCount) {
-                if (timesheetPlaybackPingPong_) {
-                    timesheetPlaybackDirection_ = -timesheetPlaybackDirection_;
-                    nextFrame = timesheetPanelState_.selectedTimelineFrame + timesheetPlaybackDirection_;
-                } else {
-                    nextFrame = nextFrame >= frameCount ? 0 : frameCount - 1;
-                }
-            }
-            setTimesheetPreviewFrame(nextFrame, "timesheet playback");
-        };
-
-        auto normalizeTimesheetPlaybackRange = [&]() {
-            const int lastFrame = std::max(0, timesheetPanelData.totalFrames - 1);
-            timesheetPlaybackRangeStartFrame_ = std::clamp(timesheetPlaybackRangeStartFrame_, 0, lastFrame);
-            timesheetPlaybackRangeEndFrame_ = std::clamp(timesheetPlaybackRangeEndFrame_, 0, lastFrame);
-            if (timesheetPlaybackRangeStartFrame_ > timesheetPlaybackRangeEndFrame_) {
-                std::swap(timesheetPlaybackRangeStartFrame_, timesheetPlaybackRangeEndFrame_);
-            }
-        };
-
-        auto setTimesheetPlaybackRangeFromOneBased = [&](int startT, int endT, const char* reason) {
-            const int lastT = std::max(1, timesheetPanelData.totalFrames);
-            startT = std::clamp(startT, 1, lastT);
-            endT = std::clamp(endT, 1, lastT);
-            if (startT > endT) {
-                std::swap(startT, endT);
-            }
-            timesheetPlaybackRangeStartFrame_ = startT - 1;
-            timesheetPlaybackRangeEndFrame_ = endT - 1;
-            normalizeTimesheetPlaybackRange();
-            setTimesheetPreviewFrame(timesheetPlaybackRangeStartFrame_, reason);
-            lastMessage_ = std::string(reason) + " T" + std::to_string(timesheetPlaybackRangeStartFrame_ + 1) +
-                "-T" + std::to_string(timesheetPlaybackRangeEndFrame_ + 1);
-        };
-
-        auto stepTimesheetRangePreviewFrame = [&](int delta) {
-            normalizeTimesheetPlaybackRange();
-            const int rangeStart = timesheetPlaybackRangeStartFrame_;
-            const int rangeEnd = timesheetPlaybackRangeEndFrame_;
-            if (rangeEnd <= rangeStart) {
-                setTimesheetPreviewFrame(rangeStart, "timesheet range playback");
-                return;
-            }
-
-            int nextFrame = timesheetPanelState_.selectedTimelineFrame + delta;
-            if (nextFrame < rangeStart || nextFrame > rangeEnd) {
-                if (timesheetPlaybackPingPong_) {
-                    timesheetPlaybackDirection_ = -timesheetPlaybackDirection_;
-                    nextFrame = timesheetPanelState_.selectedTimelineFrame + timesheetPlaybackDirection_;
-                    nextFrame = std::clamp(nextFrame, rangeStart, rangeEnd);
-                } else {
-                    nextFrame = delta >= 0 ? rangeStart : rangeEnd;
-                }
-            }
-            setTimesheetPreviewFrame(nextFrame, "timesheet range playback");
-        };
-
         if (isPlayingFrames_ && isPlayingTimesheet_) {
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
@@ -224,7 +88,7 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
         ImGui::Checkbox(u8c(u8"T選択で編集対象も追従##TimesheetEditFollowsSelectedT"), &timesheetEditFollowsSelectedT_);
         ImGui::SameLine();
         if (ImGui::SmallButton(u8c(u8"今のTの作画Fを編集##SyncEditToSelectedT"))) {
-            if (!syncEditingTargetToSelectedTimesheetCell("manual timesheet edit sync", true)) {
+            if (!syncEditingTargetToSelectedTimesheetCell(timesheetPanelData, "manual timesheet edit sync", true)) {
                 lastMessage_ = "manual timesheet edit sync failed: no drawable F for selected T/cell";
             }
         }
@@ -237,14 +101,14 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
-            setTimesheetPreviewFrame(0, "timesheet preview");
+            setTimesheetPreviewFrame(timesheetPanelData, 0, "timesheet preview");
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("<##TimesheetPlaybackPrev")) {
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
-            stepTimesheetPreviewFrame(-1);
+            stepTimesheetPreviewFrame(timesheetPanelData, -1);
         }
         ImGui::SameLine();
         if (ImGui::SmallButton(isPlayingTimesheet_ && !isPlayingTimesheetRange_ ? u8c(u8"停止##TimesheetPlaybackStop") : u8c(u8"全T再生##TimesheetPlaybackPlay"))) {
@@ -263,14 +127,14 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
-            stepTimesheetPreviewFrame(1);
+            stepTimesheetPreviewFrame(timesheetPanelData, 1);
         }
         ImGui::SameLine();
         if (ImGui::SmallButton(">|##TimesheetPlaybackLast")) {
             isPlayingTimesheet_ = false;
             isPlayingTimesheetRange_ = false;
             timesheetPlaybackAccumulator_ = 0.0f;
-            setTimesheetPreviewFrame(timesheetPanelData.totalFrames - 1, "timesheet preview");
+            setTimesheetPreviewFrame(timesheetPanelData, timesheetPanelData.totalFrames - 1, "timesheet preview");
         }
 
         const char* timesheetSpeedItems[] = {"0.25x", "0.5x", "1x", "2x"};
@@ -292,22 +156,22 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
         ImGui::SameLine();
         ImGui::Checkbox(u8c(u8"ピンポン##TimesheetPlaybackPingPong"), &timesheetPlaybackPingPong_);
 
-        normalizeTimesheetPlaybackRange();
+        normalizeTimesheetPlaybackRange(timesheetPanelData);
         ImGui::SeparatorText(u8c(u8"T範囲再生"));
         int rangeStartT = timesheetPlaybackRangeStartFrame_ + 1;
         int rangeEndT = timesheetPlaybackRangeEndFrame_ + 1;
         ImGui::SetNextItemWidth(82.0f);
         if (ImGui::InputInt(u8c(u8"開始T##TimesheetRangeStartT"), &rangeStartT)) {
-            setTimesheetPlaybackRangeFromOneBased(rangeStartT, rangeEndT, "timesheet range set");
+            setTimesheetPlaybackRangeFromOneBased(timesheetPanelData, rangeStartT, rangeEndT, "timesheet range set");
         }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(82.0f);
         if (ImGui::InputInt(u8c(u8"終了T##TimesheetRangeEndT"), &rangeEndT)) {
-            setTimesheetPlaybackRangeFromOneBased(rangeStartT, rangeEndT, "timesheet range set");
+            setTimesheetPlaybackRangeFromOneBased(timesheetPanelData, rangeStartT, rangeEndT, "timesheet range set");
         }
         ImGui::SameLine();
         if (ImGui::SmallButton(isPlayingTimesheet_ && isPlayingTimesheetRange_ ? u8c(u8"範囲停止##TimesheetRangeStop") : u8c(u8"範囲再生##TimesheetRangePlay"))) {
-            normalizeTimesheetPlaybackRange();
+            normalizeTimesheetPlaybackRange(timesheetPanelData);
             if (isPlayingTimesheet_ && isPlayingTimesheetRange_) {
                 isPlayingTimesheet_ = false;
                 isPlayingTimesheetRange_ = false;
@@ -317,7 +181,7 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
                 isPlayingFrames_ = false;
                 if (timesheetPanelState_.selectedTimelineFrame < timesheetPlaybackRangeStartFrame_ ||
                     timesheetPanelState_.selectedTimelineFrame > timesheetPlaybackRangeEndFrame_) {
-                    setTimesheetPreviewFrame(timesheetPlaybackRangeStartFrame_, "timesheet range playback");
+                    setTimesheetPreviewFrame(timesheetPanelData, timesheetPlaybackRangeStartFrame_, "timesheet range playback");
                 }
             }
             timesheetPlaybackAccumulator_ = 0.0f;
@@ -325,7 +189,7 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
         }
         ImGui::SameLine();
         if (ImGui::SmallButton(u8c(u8"全Tを範囲##TimesheetRangeAll"))) {
-            setTimesheetPlaybackRangeFromOneBased(1, std::max(1, timesheetPanelData.totalFrames), "timesheet range all");
+            setTimesheetPlaybackRangeFromOneBased(timesheetPanelData, 1, std::max(1, timesheetPanelData.totalFrames), "timesheet range all");
         }
         ImGui::TextDisabled(u8c(u8"タイムシート再生はTだけを進めます。作画F編集対象は変更しません。"));
         ImGui::TextDisabled(u8c(u8"原画間再生は、原画間検出からT範囲へ入れます。"));
@@ -345,9 +209,9 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
                     timesheetPlaybackAccumulator_ -= secondsPerTimelineFrame;
                     const int direction = timesheetPlaybackDirection_ == 0 ? 1 : timesheetPlaybackDirection_;
                     if (isPlayingTimesheetRange_) {
-                        stepTimesheetRangePreviewFrame(direction);
+                        stepTimesheetRangePreviewFrame(timesheetPanelData, direction);
                     } else {
-                        stepTimesheetPreviewFrame(direction);
+                        stepTimesheetPreviewFrame(timesheetPanelData, direction);
                     }
                 }
             }
@@ -412,7 +276,7 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
                 !isPlayingFrames_ &&
                 !isPlayingTimesheet_ &&
                 !isPlayingTimesheetRange_) {
-                if (!syncEditingTargetToSelectedTimesheetCell("timesheet selection", true)) {
+                if (!syncEditingTargetToSelectedTimesheetCell(timesheetPanelData, "timesheet selection", true)) {
                     lastMessage_ = "timesheet preview T" + std::to_string(timesheetPanelState_.selectedTimelineFrame + 1) +
                         " / edit F" + std::to_string(activeFrameIndex_ + 1) +
                         " / no drawable F to sync";
@@ -688,7 +552,7 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
                     }
 
                     if (ImGui::SmallButton(u8c(u8"この原画間を再生T範囲へ##SetRangeFromKeyInterval"))) {
-                        setTimesheetPlaybackRangeFromOneBased(
+                        setTimesheetPlaybackRangeFromOneBased(timesheetPanelData,
                             interval.previousKey.timelineFrame,
                             interval.nextKey.timelineFrame,
                             "timesheet range from key interval");

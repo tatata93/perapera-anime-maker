@@ -149,6 +149,19 @@ private:
     void drawLeftSidebar();
     void drawRightSidebar();
     void drawTimelineArea();
+    void setTimesheetPreviewFrame(const ui::TimesheetPanelViewModel& timesheetPanelData,
+                                  int zeroBasedFrame,
+                                  const char* reason);
+    bool syncEditingTargetToSelectedTimesheetCell(const ui::TimesheetPanelViewModel& timesheetPanelData,
+                                                  const char* reason,
+                                                  bool allowResolvedHold);
+    void stepTimesheetPreviewFrame(const ui::TimesheetPanelViewModel& timesheetPanelData, int delta);
+    void normalizeTimesheetPlaybackRange(const ui::TimesheetPanelViewModel& timesheetPanelData);
+    void setTimesheetPlaybackRangeFromOneBased(const ui::TimesheetPanelViewModel& timesheetPanelData,
+                                               int startT,
+                                               int endT,
+                                               const char* reason);
+    void stepTimesheetRangePreviewFrame(const ui::TimesheetPanelViewModel& timesheetPanelData, int delta);
     void drawFingerPlaybackControls();
     void drawLightTableControls();
     void drawLightTableOverlay(ImVec2 areaMin, ImVec2 areaSize, ImDrawList* drawList);
