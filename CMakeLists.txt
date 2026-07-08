@@ -157,6 +157,7 @@ add_executable(perapera_anime_maker
     src/io/FfmpegRunner.cpp
     src/render/CanvasBitmap.cpp
     src/render/CanvasRenderer.cpp
+    src/render/CanvasRendererSupport.cpp
     src/brush/SimpleBrushEngine.cpp
     src/brush/MyPaintBrushEngine.cpp
     src/fill/FloodFill.cpp

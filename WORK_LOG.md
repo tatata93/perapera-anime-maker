@@ -2101,3 +2101,9 @@ Rules recorded for the handoff:
 - Added `perapera_cell_panel_model_selftest` for the CellPanel model helper split.
 - Covered cell order rebuild, z order repair, unique IDs, display labels, duplicate names, and scoped layer-ID repair.
 - Kept the test renderer/ImGui independent so it stays fast during later UI and loading work.
+
+## Phase 2 Step 2-v: CanvasRenderer support split
+
+- Split pure renderer helper logic into `CanvasRendererSupport.h/.cpp`.
+- Kept cache ownership, progressive rebuild state, draw flow, and pruning in `CanvasRenderer.cpp`.
+- Reduced `CanvasRenderer.cpp` to the 800-line limit while keeping the Debug app build green.

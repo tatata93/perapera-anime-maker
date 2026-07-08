@@ -210,3 +210,19 @@ Current state:
 Next recommended task:
 
 - Inspect `CanvasRenderer.cpp` for pure helper logic that can be split safely, or continue adding lightweight selftests around hot-path cache behavior before editing renderer internals.
+
+---
+
+## Latest handoff: Phase 2 Step 2-v CanvasRenderer support split
+
+Current state:
+
+- Added `src/render/CanvasRendererSupport.h/.cpp`.
+- Moved pure helper logic for display opacity, layer rank, cache IDs, lightweight revisions, hash helpers, alpha conversion, and stroke baking.
+- `CanvasRenderer.cpp` still owns renderer state, bitmap caches, progressive rebuild, draw flow, and cache pruning.
+- `CanvasRenderer.cpp` is now within the 800-line limit.
+- Debug app build succeeded after the split.
+
+Next recommended task:
+
+- Add a small focused selftest for renderer support helper invariants, or inspect the next large file `src/ui/AppDrawingMode.cpp` before any split.

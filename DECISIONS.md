@@ -779,3 +779,7 @@ Large UI file reduction should start with low-risk model helpers. `CellPanelMode
 ## Phase 2 Step 2-u decision
 
 `CellPanelModel` should remain small, deterministic, and self-tested before larger UI/render files are split. The selftest protects cell order and layer-ID invariants without starting the app or renderer.
+
+## Phase 2 Step 2-v decision
+
+Renderer file splitting should preserve cache behavior first. `CanvasRendererSupport` owns pure helper functions only; `CanvasRenderer.cpp` remains responsible for cache lifetime, progressive rebuild state, draw order execution, and pruning.
