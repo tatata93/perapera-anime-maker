@@ -763,3 +763,7 @@ Round-trip verification should remain lightweight. `projectSignature()` samples 
 ## Phase 2 Step 2-q decision
 
 Project layout inspection must stay light enough for future project lists and startup checks. Inspect layer schema from a small prefix first and avoid full layer payload parsing on normal files.
+
+## Phase 2 Step 2-r decision
+
+`projectSignature()` is now important enough to have focused coverage. Keep this selftest small and UI-independent so it stays cheap to run during IO work.

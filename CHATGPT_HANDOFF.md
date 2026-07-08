@@ -152,3 +152,18 @@ Current state:
 Next recommended task:
 
 - Inspect remaining large UI/render files and split the least risky helpers, or add app-level save/load selection coverage.
+
+---
+
+## Latest handoff: Phase 2 Step 2-r project signature selftest
+
+Current state:
+
+- Added `tools/app_project_io_support_selftest.cpp`.
+- Added CMake target `perapera_app_project_io_support_selftest`.
+- The selftest verifies `projectSignature()` detects metadata, motion key, Fill bitmap sample, and point pressure changes.
+- It also checks basic selection validation behavior.
+
+Next recommended task:
+
+- Run full Debug build after this commit, then consider a low-risk split of an over-800-line file.

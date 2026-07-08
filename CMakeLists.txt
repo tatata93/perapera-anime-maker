@@ -491,3 +491,20 @@ else()
 endif()
 # PERAPERA_PHASE2_STEP2H_END
 
+add_executable(perapera_app_project_io_support_selftest
+    tools/app_project_io_support_selftest.cpp
+    src/ui/AppProjectIOSupport.cpp
+    src/core/Project.cpp
+    src/core/Cell.cpp
+    src/core/Frame.cpp
+    src/core/Layer.cpp
+    src/core/Stroke.cpp
+)
+target_include_directories(perapera_app_project_io_support_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_app_project_io_support_selftest PRIVATE nlohmann_json::nlohmann_json)
+if (MSVC)
+    target_compile_options(perapera_app_project_io_support_selftest PRIVATE /W4 /permissive- /utf-8)
+else()
+    target_compile_options(perapera_app_project_io_support_selftest PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+

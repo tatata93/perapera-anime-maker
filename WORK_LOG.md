@@ -2079,3 +2079,8 @@ Rules recorded for the handoff:
 
 - Changed `ProjectLayoutReadEntry` so layer inspection usually checks the schema from a small file prefix instead of parsing full stroke/Fill bitmap payloads.
 - Kept full JSON parsing as a fallback for unusual layer files where the schema is not found in the prefix.
+
+## Phase 2 Step 2-r: Project signature selftest
+
+- Added `perapera_app_project_io_support_selftest` for `appio::projectSignature()` and selection helpers.
+- The selftest verifies that metadata, motion keys, Fill bitmap samples, and point pressure affect the signature without running the full UI.
