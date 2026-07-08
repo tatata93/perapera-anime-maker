@@ -747,3 +747,7 @@ AppProjectIO should call the new layout save/load entries directly. Do not resto
 ## Phase 2 Step 2-m closeout decision
 
 The legacy ProjectIO route is no longer an active source or build dependency. Do not restore it. Future work should improve the new layout load path directly.
+
+## Phase 2 Step 2-n decision
+
+New-layout load fidelity is improved in `ProjectLayoutLoadEntry` directly. Do not restore the legacy ProjectIO path for missing fields; add focused round-trip tests for each saved field instead.

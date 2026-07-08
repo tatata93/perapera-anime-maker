@@ -93,3 +93,18 @@ Current state:
 Recommended next task:
 
 - Improve new-layout load fidelity. In particular, inspect what `ProjectLayoutLoadEntry.cpp` restores for strokes, fill strokes, layer metadata, canvas/output settings, and timesheet assignment, then add focused selftests before widening app behavior.
+
+---
+
+## Latest handoff: Phase 2 Step 2-n load fidelity
+
+Current state:
+
+- `ProjectLayoutLoadEntry.cpp` now restores saved brush engine, stroke opacity/style fields, Fill bitmap data, and layer type.
+- Loaded `Project.cells` / `Project.cellOrder` now follow `Cut.cellZOrderKeys`; unlisted cells are appended afterward.
+- Loaded scene/cut metadata now fills minimal `Project` name, timeline total frames, and output FPS.
+- `perapera_project_layout_load_entry_selftest` verifies brush settings, Fill bitmap, layer type, FPS, total frames, and cut cell order.
+
+Next recommended task:
+
+- Continue load-fidelity work by checking fields that still are not saved or loaded, especially `Cell.motionKeys`, canvas/output width and height, camera/audio, and any layer/frame metadata needed by the UI.

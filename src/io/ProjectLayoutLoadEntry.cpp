@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -106,6 +107,29 @@ std::array<float, 4> readColor(const json& value, const std::array<float, 4>& fa
     return color;
 }
 
+bool readByteArray(const json& value, std::vector<std::uint8_t>& bytes, std::string* errorMessage) {
+    if (!value.is_array()) {
+        setError(errorMessage, "bitmap data is not an array");
+        return false;
+    }
+
+    bytes.clear();
+    bytes.reserve(value.size());
+    for (const json& entry : value) {
+        if (!entry.is_number_integer() && !entry.is_number_unsigned()) {
+            setError(errorMessage, "bitmap data contains a non-integer value");
+            return false;
+        }
+        const int byte = entry.get<int>();
+        if (byte < 0 || byte > 255) {
+            setError(errorMessage, "bitmap data value is outside 0..255");
+            return false;
+        }
+        bytes.push_back(static_cast<std::uint8_t>(byte));
+    }
+    return true;
+}
+
 StrokePoint readStrokePoint(const json& value) {
     StrokePoint point;
     if (value.is_object()) {
@@ -122,11 +146,20 @@ Stroke readStroke(const json& value, std::size_t& strokeCount) {
         return stroke;
     }
 
+    stroke.brushEngine = strokeBrushEngineFromString(value.value("brushEngine", std::string{"Simple"}));
     const auto colorIterator = value.find("color");
     if (colorIterator != value.end()) {
         stroke.color = readColor(*colorIterator, stroke.color);
     }
     stroke.radiusPx = jsonFloat(value, "radiusPx", stroke.radiusPx);
+    stroke.opacity = jsonFloat(value, "opacity", stroke.opacity);
+    stroke.hardness = jsonFloat(value, "hardness", stroke.hardness);
+    stroke.spacing = jsonFloat(value, "spacing", stroke.spacing);
+    stroke.pressureToSize = jsonFloat(value, "pressureToSize", stroke.pressureToSize);
+    stroke.pressureToOpacity = jsonFloat(value, "pressureToOpacity", stroke.pressureToOpacity);
+    stroke.watercolorBleed = jsonFloat(value, "watercolorBleed", stroke.watercolorBleed);
+    stroke.colorMix = jsonFloat(value, "colorMix", stroke.colorMix);
+    stroke.dryRate = jsonFloat(value, "dryRate", stroke.dryRate);
 
     const auto pointsIterator = value.find("points");
     if (pointsIterator != value.end() && pointsIterator->is_array()) {
@@ -137,6 +170,39 @@ Stroke readStroke(const json& value, std::size_t& strokeCount) {
 
     ++strokeCount;
     return stroke;
+}
+
+bool readStrokeBitmap(const json& value, Stroke& stroke, const fs::path& layerPath, std::string* errorMessage) {
+    if (stroke.brushEngine != StrokeBrushEngine::Fill) {
+        return true;
+    }
+
+    const auto bitmapIterator = value.find("bitmap");
+    if (bitmapIterator == value.end() || !bitmapIterator->is_object()) {
+        setError(errorMessage, "fill stroke is missing bitmap: " + layerPath.string());
+        return false;
+    }
+
+    const json& bitmapJson = *bitmapIterator;
+    stroke.bitmapX = jsonInt(bitmapJson, "x", stroke.bitmapX);
+    stroke.bitmapY = jsonInt(bitmapJson, "y", stroke.bitmapY);
+    stroke.bitmapWidth = jsonInt(bitmapJson, "width", stroke.bitmapWidth);
+    stroke.bitmapHeight = jsonInt(bitmapJson, "height", stroke.bitmapHeight);
+
+    const auto dataIterator = bitmapJson.find("data");
+    if (dataIterator == bitmapJson.end() || !readByteArray(*dataIterator, stroke.bitmap, errorMessage)) {
+        setError(errorMessage, "failed to read fill bitmap data: " + layerPath.string());
+        return false;
+    }
+
+    const std::size_t expectedSize = static_cast<std::size_t>(std::max(0, stroke.bitmapWidth)) *
+                                     static_cast<std::size_t>(std::max(0, stroke.bitmapHeight));
+    if (expectedSize != stroke.bitmap.size()) {
+        setError(errorMessage, "fill bitmap size mismatch: " + layerPath.string());
+        return false;
+    }
+
+    return true;
 }
 
 bool readLayer(const fs::path& layerPath, Layer& layer, std::size_t& strokeCount, std::string* errorMessage) {
@@ -155,6 +221,7 @@ bool readLayer(const fs::path& layerPath, Layer& layer, std::size_t& strokeCount
     layer.visible = layerJson.value("visible", layer.visible);
     layer.opacity = jsonFloat(layerJson, "opacity", layer.opacity);
     layer.blendMode = layerJson.value("blendMode", layer.blendMode);
+    layer.type = layerTypeFromString(layerJson.value("type", std::string{"Normal"}));
     layer.strokes.clear();
 
     const json strokesJson = layerJson.value("strokes", json::array());
@@ -164,9 +231,42 @@ bool readLayer(const fs::path& layerPath, Layer& layer, std::size_t& strokeCount
     }
 
     for (const json& strokeJson : strokesJson) {
-        layer.strokes.push_back(readStroke(strokeJson, strokeCount));
+        Stroke stroke = readStroke(strokeJson, strokeCount);
+        if (!readStrokeBitmap(strokeJson, stroke, layerPath, errorMessage)) {
+            return false;
+        }
+        layer.strokes.push_back(std::move(stroke));
     }
     return true;
+}
+
+void appendLoadedCell(Project& project, std::vector<Cell>& cells, std::vector<bool>& consumed, const std::string& cellId) {
+    for (std::size_t index = 0; index < cells.size(); ++index) {
+        if (!consumed[index] && cells[index].id == cellId) {
+            project.cellOrder.push_back(cells[index].id);
+            project.cells.push_back(std::move(cells[index]));
+            consumed[index] = true;
+            return;
+        }
+    }
+}
+
+void applyCutCellOrder(Project& project, std::vector<Cell>& loadedCells, const std::vector<std::string>& cutCellOrder) {
+    project.cells.clear();
+    project.cellOrder.clear();
+
+    std::vector<bool> consumed(loadedCells.size(), false);
+    for (const std::string& cellId : cutCellOrder) {
+        appendLoadedCell(project, loadedCells, consumed, cellId);
+    }
+
+    for (std::size_t index = 0; index < loadedCells.size(); ++index) {
+        if (!consumed[index]) {
+            project.cellOrder.push_back(loadedCells[index].id);
+            project.cells.push_back(std::move(loadedCells[index]));
+            consumed[index] = true;
+        }
+    }
 }
 
 bool readFrame(
@@ -323,9 +423,13 @@ bool loadProjectNewLayoutMinimal(
     result.scene.cuts.push_back(result.cut);
 
     result.project = Project{};
+    result.project.name = result.scene.name.empty() ? result.project.name : result.scene.name;
+    result.project.timeline.totalFrames = result.cut.totalFrames > 0 ? result.cut.totalFrames : result.project.timeline.totalFrames;
+    result.project.output.fps = result.cut.frameRate > 0 ? result.cut.frameRate : result.project.output.fps;
     result.project.cells.clear();
     result.project.cellOrder.clear();
 
+    std::vector<Cell> loadedCells;
     const fs::path cellsDir = cellsDirectory(projectRoot, sceneId, cutId);
     for (const fs::path& cellDir : sortedDirectories(cellsDir)) {
         Cell cell;
@@ -339,10 +443,10 @@ bool loadProjectNewLayoutMinimal(
                 errorMessage)) {
             return false;
         }
-        result.project.cellOrder.push_back(cell.id);
-        result.project.cells.push_back(std::move(cell));
+        loadedCells.push_back(std::move(cell));
     }
 
+    applyCutCellOrder(result.project, loadedCells, result.cut.cellZOrderKeys);
     result.cellCount = result.project.cells.size();
     *outResult = std::move(result);
     return true;

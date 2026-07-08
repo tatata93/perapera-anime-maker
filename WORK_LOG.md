@@ -2054,3 +2054,10 @@ Rules recorded for the handoff:
 - Confirmed active app save/load no longer calls `ProjectIO::save` or `ProjectIO::load`.
 - Removed stale `ProjectIO` wording from current source comments.
 - Updated the Step 2-m audit report to reflect the current active source state.
+
+## Phase 2 Step 2-n: New layout load fidelity
+
+- Restored layer type, brush engine, stroke style fields, and Fill bitmap data in `ProjectLayoutLoadEntry`.
+- Rebuilt loaded `Project.cells` / `Project.cellOrder` using `Cut.cellZOrderKeys` before appending unlisted cells.
+- Reflected scene/cut metadata into the minimal loaded `Project` result.
+- Strengthened `perapera_project_layout_load_entry_selftest` to cover brush settings, Fill bitmap, layer type, FPS, total frames, and cut cell order.
