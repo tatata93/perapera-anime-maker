@@ -8,6 +8,23 @@
 
 namespace perapera::app_drawing {
 
+ui::TimesheetPanelViewModel buildTimesheetPanelViewModel(const Project& project)
+{
+    ui::TimesheetPanelViewModel data;
+    data.totalFrames = project.timeline.totalFrames > 0 ? project.timeline.totalFrames : 1;
+    data.fps = 24;
+    data.cells.reserve(project.cells.size());
+
+    for (const Cell& timesheetCell : project.cells) {
+        ui::TimesheetPanelCellColumn column;
+        column.cellId = timesheetCell.id;
+        column.displayName = timesheetCell.name;
+        column.category = timesheetCell.category;
+        data.cells.push_back(column);
+    }
+
+    return data;
+}
 int countTimesheetEntries(const Timesheet& timesheet)
 {
     int count = 0;

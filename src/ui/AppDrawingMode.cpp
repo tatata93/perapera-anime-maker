@@ -59,18 +59,8 @@ void App::drawDrawingMode()
     {
         timesheetPanelState_.showDetachedWindow = true;
 
-        ::perapera::ui::TimesheetPanelViewModel timesheetPanelData;
-        timesheetPanelData.totalFrames = project_.timeline.totalFrames > 0 ? project_.timeline.totalFrames : 1;
-        timesheetPanelData.fps = 24;
-        timesheetPanelData.cells.reserve(project_.cells.size());
-
-        for (const auto& timesheetCell : project_.cells) {
-            ::perapera::ui::TimesheetPanelCellColumn column;
-            column.cellId = timesheetCell.id;
-            column.displayName = timesheetCell.name;
-            column.category = timesheetCell.category;
-            timesheetPanelData.cells.push_back(column);
-        }
+        ::perapera::ui::TimesheetPanelViewModel timesheetPanelData =
+        ::perapera::app_drawing::buildTimesheetPanelViewModel(project_);
 
         // Timesheet Rebuild Step 5.6:
         // 現在のセル列・総フレーム数に合わせて、UI一時入力を先に正規化する。

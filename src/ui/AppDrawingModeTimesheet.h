@@ -28,4 +28,6 @@ int adjacentPlaybackOrderFrameIndex(const std::vector<int>& playbackOrderFrameIn
                                     int activeFrameIndex,
                                     int direction);
 
+ui::TimesheetPanelViewModel buildTimesheetPanelViewModel(const Project& project);
+
 } // namespace perapera::app_drawing

@@ -2143,3 +2143,5 @@ Rules recorded for the handoff:
 - Added `perapera_app_drawing_mode_timesheet_selftest` for `AppDrawingModeTimesheet`.
 - Covered entry counting, selected panel entry lookup, project cell lookup, missing drawing-frame creation, and playback-order navigation.
 - Kept the test independent from ImGui drawing, SDL windows, and app startup.
+
+- Phase 2 Step 2-ad: split TimesheetPanelViewModel builder from AppDrawingMode.cpp.
