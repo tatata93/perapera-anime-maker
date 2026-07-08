@@ -2147,3 +2147,5 @@ Rules recorded for the handoff:
 - Phase 2 Step 2-ad: split TimesheetPanelViewModel builder from AppDrawingMode.cpp.
 
 - Phase 2 Step 2-ae: split DrawingWorkspace layout shell from AppDrawingMode.cpp.
+
+- Phase 2 Step 2-af: cleaned leftover preview helper from AppDrawingMode.cpp.
