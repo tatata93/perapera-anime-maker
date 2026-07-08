@@ -2113,3 +2113,9 @@ Rules recorded for the handoff:
 - Added `perapera_canvas_renderer_support_selftest` for the helper split.
 - Covered display opacity caps, display layer order, cache ID fallback, lightweight revision values, and Paint append-order safety.
 - Kept the check independent from app startup and renderer windows.
+
+## Phase 2 Step 2-x: AppDrawingMode eraser helper split
+
+- Split pure eraser stroke-splitting helpers into `AppDrawingModeEraser.h/.cpp`.
+- Kept onion-skin drawing, lightweight eraser preview drawing, App state updates, and renderer dirty notifications in `AppDrawingMode.cpp`.
+- Reduced `AppDrawingMode.cpp` from 1917 lines to 1730 lines while keeping the Debug app build green.

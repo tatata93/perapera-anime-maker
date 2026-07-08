@@ -241,3 +241,18 @@ Current state:
 Next recommended task:
 
 - Inspect `src/ui/AppDrawingMode.cpp` for a safe split candidate, or add focused tests around app drawing-mode state transitions before editing the large file.
+
+---
+
+## Latest handoff: Phase 2 Step 2-x AppDrawingMode eraser split
+
+Current state:
+
+- Added `src/ui/AppDrawingModeEraser.h/.cpp`.
+- Moved pure eraser stroke-splitting helpers out of `AppDrawingMode.cpp`.
+- `AppDrawingMode.cpp` still owns onion-skin drawing, eraser preview drawing, App state updates, and renderer dirty notifications.
+- Debug app build succeeded after the split.
+
+Next recommended task:
+
+- Add a small selftest for `AppDrawingModeEraser`, then continue splitting AppDrawingMode by similarly closed helper groups.
