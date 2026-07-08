@@ -2131,3 +2131,9 @@ Rules recorded for the handoff:
 - Split direct onion-skin overlay drawing and lightweight eraser preview drawing into `AppDrawingModeOverlay.h/.cpp`.
 - Kept App state, input handling, frame selection, and renderer dirty notifications in `AppDrawingMode.cpp`.
 - Reduced `AppDrawingMode.cpp` from 1730 lines to 1632 lines while keeping the Debug app build green.
+
+## Phase 2 Step 2-aa: AppDrawingMode timesheet helper split
+
+- Split drawing-mode timesheet helpers into `AppDrawingModeTimesheet.h/.cpp`.
+- Moved entry counting, panel entry selection, project cell lookup, missing drawing-frame creation, and playback-order helpers.
+- Reduced `AppDrawingMode.cpp` from 1632 lines to 1490 lines while keeping the Debug app build green.

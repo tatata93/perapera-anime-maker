@@ -286,3 +286,19 @@ Current state:
 Next recommended task:
 
 - Continue reducing `AppDrawingMode.cpp`; inspect timesheet playback/helper logic near the top next, or add a small non-renderer test if a helper group is isolated.
+
+---
+
+## Latest handoff: Phase 2 Step 2-aa AppDrawingMode timesheet split
+
+Current state:
+
+- Added `src/ui/AppDrawingModeTimesheet.h/.cpp`.
+- Moved drawing-mode timesheet helpers out of `AppDrawingMode.cpp`.
+- The helpers cover entry counting, selected panel entry lookup, project cell lookup, missing drawing-frame creation, and playback order navigation.
+- `AppDrawingMode.cpp` still owns App state, UI rendering flow, and mode transitions.
+- Debug app build succeeded after the split.
+
+Next recommended task:
+
+- Add a focused selftest for `AppDrawingModeTimesheet`, especially playback order and missing frame creation, then continue reducing `AppDrawingMode.cpp`.

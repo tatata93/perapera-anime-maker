@@ -799,3 +799,7 @@ Eraser stroke-splitting should stay app-independent and tested. This makes futur
 ## Phase 2 Step 2-z decision
 
 Overlay drawing helpers can leave `AppDrawingMode.cpp` because they do not own App state. Input handling and renderer invalidation stay in AppDrawingMode until their dependencies are split deliberately.
+
+## Phase 2 Step 2-aa decision
+
+Timesheet helper logic can be separated from `AppDrawingMode.cpp` when it only transforms model/panel data. App state ownership and UI flow remain in AppDrawingMode for now.
