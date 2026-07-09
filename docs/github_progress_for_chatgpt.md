@@ -5,7 +5,7 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest pushed step after this update: `Phase 2 Step 3-a: add Cut camera metadata bridge`
+- Latest pushed step after this update: `Phase 2 Step 3-b: verify ProjectLayout Cut camera round-trip`
 - Main purpose of the latest work: reduce large drawing/render files safely and add lightweight selftests without making app startup or project loading heavier.
 
 ## Recent completed steps
@@ -27,6 +27,7 @@ Last updated: 2026-07-09
 - Step 2-ai: split timesheet playback helpers into `AppDrawingModeTimesheetPlayback.cpp`.
 - Step 2-aj: added pure helper coverage for timesheet preview/range playback stepping.
 - Step 3-a: added optional Cut-owned camera metadata and app save/load bridge.
+- Step 3-b: verified Cut camera metadata survives project layout save/load.
 
 ## Important current state
 
@@ -50,7 +51,7 @@ Last updated: 2026-07-09
 ## Recommended next work
 
 1. Continue Phase 2 Step 3 Cut-level Timesheet / Cell / Camera connection.
-2. Add focused project layout save/load coverage for Cut camera metadata.
+2. Check whether Cut-owned Timesheet is fully reflected in app save/load and export paths.
 3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate

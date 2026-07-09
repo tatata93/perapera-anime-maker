@@ -138,6 +138,12 @@ int main() {
     cut.frameRate = 30;
     cut.timesheet.totalFrames = 24;
     cut.cellZOrderKeys = {"cell_BG", "cell_A"};
+    cut.hasCamera = true;
+    cut.camera.centerX = 111.0f;
+    cut.camera.centerY = 222.0f;
+    cut.camera.zoom = 1.75f;
+    cut.camera.animationEnabled = true;
+    cut.camera.keys.push_back({9, 333.0f, 444.0f, 2.0f});
 
     std::vector<perapera::Cell> cells;
     cells.push_back(makeCell("cell_A", "character", 2, 2));
@@ -185,6 +191,13 @@ int main() {
     if (!require(loaded.scene.id == "scene_001", "wrong scene id") ||
         !require(loaded.cut.id == "cut_001", "wrong cut id") ||
         !require(loaded.cut.totalFrames == 24, "wrong cut totalFrames") ||
+        !require(loaded.cut.hasCamera, "wrong cut camera presence") ||
+        !require(nearlyEqual(loaded.cut.camera.centerX, 111.0f), "wrong cut camera centerX") ||
+        !require(nearlyEqual(loaded.cut.camera.centerY, 222.0f), "wrong cut camera centerY") ||
+        !require(nearlyEqual(loaded.cut.camera.zoom, 1.75f), "wrong cut camera zoom") ||
+        !require(loaded.cut.camera.animationEnabled, "wrong cut camera animation flag") ||
+        !require(loaded.cut.camera.keys.size() == 1, "wrong cut camera key count") ||
+        !require(loaded.cut.camera.keys[0].frame == 9, "wrong cut camera key frame") ||
         !require(loaded.project.name == "Project Metadata Name", "wrong project name") ||
         !require(loaded.project.canvas.width == 3200, "wrong canvas width") ||
         !require(loaded.project.canvas.height == 1800, "wrong canvas height") ||

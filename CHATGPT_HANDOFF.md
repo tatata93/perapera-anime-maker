@@ -392,3 +392,17 @@ Current state:
 Next recommended task:
 
 - Add/verify Cut-level camera coverage in project layout save/load tests, then continue Phase 2 Step 3 toward Cut-level Timesheet / Cell / Camera connection.
+
+---
+
+## Latest handoff: Phase 2 Step 3-b Project layout Cut camera round-trip
+
+Current state:
+
+- Extended `perapera_project_layout_load_entry_selftest` so Project-level camera and Cut-level camera are distinct and both survive save/load.
+- This protects the new Cut camera bridge through the actual scene/cut/cell layout path.
+- No UI, startup, or preview warmup behavior was added.
+
+Next recommended task:
+
+- Continue Phase 2 Step 3 by checking whether Cut-owned Timesheet is fully reflected in app save/load and export paths, or add a focused app/project layout test if a gap is found.

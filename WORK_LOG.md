@@ -2179,3 +2179,8 @@ Rules recorded for the handoff:
 - Updated `CutIO` to write/read camera metadata in `cut.json` without forcing old cut files to overwrite Project camera state.
 - Connected app save/load so the active Cut receives Project camera on save and applies Cut camera on load only when present.
 - Extended `perapera_cut_io_selftest` to cover Cut camera metadata round-trip.
+## Phase 2 Step 3-b: Project layout Cut camera round-trip
+
+- Extended `perapera_project_layout_load_entry_selftest` so Project-level camera and Cut-level camera use distinct values.
+- Verified that Cut camera metadata survives the scene/cut/cell layout save/load path.
+- Kept this as lightweight coverage without UI, startup, or preview warmup changes.

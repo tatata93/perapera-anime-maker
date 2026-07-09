@@ -829,3 +829,6 @@ Close the timesheet playback split with pure helper coverage rather than testing
 ## Phase 2 Step 3-a decision
 
 Open Phase 2 Step 3 with Cut-owned camera metadata because the main spec requires Timesheet / Cell / Camera to connect at Cut level. Preserve old project safety with `Cut::hasCamera` so missing camera objects do not overwrite Project-level camera settings.
+## Phase 2 Step 3-b decision
+
+Protect Cut camera metadata at the ProjectLayout save/load layer before adding more Step 3 behavior. Keep Project camera and Cut camera distinct in the selftest so accidental overwrites are caught.
