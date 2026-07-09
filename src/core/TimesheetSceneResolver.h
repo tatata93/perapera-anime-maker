@@ -23,6 +23,7 @@ struct ResolvedTimesheetSceneCell {
     bool visible = false;
     int drawingFrameNumber = 0;                    // 1始まり。visible=falseなら0。
     int drawingFrameIndex = -1;                    // 0始まり。visible=falseなら-1。
+    CellPlacement placement;
     TimesheetEntryType sourceType = TimesheetEntryType::Hold;
 };
 

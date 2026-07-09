@@ -5,8 +5,8 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest local step after this update: `Phase 2 Step 3-e: Cell order resolver`
-- Main purpose of the latest work: make canvas visible-cell display and PNG/MP4 export follow the active Cut cell order represented by `Project.cellOrder`.
+- Latest local step after this update: `Phase 2 Step 3-f: Cell motion resolver`
+- Main purpose of the latest work: connect saved Cell placement/motion keys to the Timesheet resolved preview/export data path.
 
 ## Recent completed steps
 
@@ -31,6 +31,7 @@ Last updated: 2026-07-09
 - Step 3-c: clarified the spec entry point and added the remaining Phase 2 Step 3-c through Step 3-h roadmap.
 - Step 3-d: added Timesheet-aware PNG active-frame, PNG sequence, and MP4 pre-export paths.
 - Step 3-e: added resolved cell order helper and connected display/export visible-cell order to `Project.cellOrder`.
+- Step 3-f: added Cell motion placement resolver and carried resolved placement through Timesheet scene/export data.
 
 ## Important current state
 
@@ -45,12 +46,16 @@ Last updated: 2026-07-09
 - `src/io/PngExporter.cpp` is below the 800-line guideline after splitting export mode labels.
 - `Project.cellOrder` is the current active Cut order during migration; save writes it as `Cut.cellZOrderKeys` and load restores it.
 - True frame-varying z-order keyframes are still a later data-model/UI step.
+- `Cell.placement` / `Cell.motionKeys` now resolve into `ResolvedTimesheetSceneCell::placement`.
+- Pixel-level cell transform rendering is not implemented yet.
 
 ## Verification already performed
 
 - `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded.
 - `perapera_png_timesheet_exporter_selftest` built and passed.
 - `perapera_cell_order_resolver_selftest` built and passed.
+- `perapera_cell_motion_resolver_selftest` built and passed.
+- `perapera_timesheet_scene_resolver_selftest` built and passed after placement coverage was added.
 - Debug app build succeeded.
 - `build\bin\perapera_anime_maker.exe` exists.
 - Lightweight selftests that were run successfully:
@@ -61,13 +66,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Continue with Phase 2 Step 3-f.
-2. Connect Cell motion keys to resolved preview/export data, or first audit current `Cell.motionKeys` usage if needed.
+1. Continue with Phase 2 Step 3-g Timesheet UI usability pass.
+2. Alternative: implement visual Cell placement transform in canvas/export first if motion visibility is higher priority.
 3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate
 
-Phase 2 Step 3-f: Cell motion key preview/export connection.
+Phase 2 Step 3-g: Timesheet UI usability pass, unless visual Cell transform is chosen first.
 
 Useful commands:
 

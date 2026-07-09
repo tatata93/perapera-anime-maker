@@ -3,6 +3,8 @@
 
 #include "core/TimesheetSceneResolver.h"
 
+#include "core/CellMotionResolver.h"
+
 #include <cstddef>
 
 namespace perapera {
@@ -41,6 +43,7 @@ ResolvedTimesheetSceneFrame resolveTimesheetSceneFrame(
         sceneCell.visible = true;
         sceneCell.drawingFrameNumber = resolved.drawingFrameNumber;
         sceneCell.drawingFrameIndex = frameIndex;
+        sceneCell.placement = resolveCellPlacementAtFrame(*cell, scene.timelineFrame);
         sceneCell.sourceType = resolved.sourceType;
         scene.cells.push_back(sceneCell);
     }

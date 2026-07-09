@@ -1,6 +1,7 @@
 #include "core/TimesheetSceneResolver.h"
 
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -26,6 +27,11 @@ Cell makeCell(const std::string& id, int frameCount)
     cell.opacity = 1.0f;
     cell.frames.resize(static_cast<std::size_t>(frameCount));
     return cell;
+}
+
+bool nearlyEqual(float a, float b)
+{
+    return std::fabs(a - b) < 0.001f;
 }
 
 Timesheet makeTimesheet()
@@ -65,6 +71,11 @@ Timesheet makeTimesheet()
 int main()
 {
     Cell cellA = makeCell("A", 3);
+    cellA.placement.x = 5.0f;
+    CellMotionKey motionA;
+    motionA.frame = 2;
+    motionA.placement.x = 40.0f;
+    cellA.motionKeys.push_back(motionA);
     Cell cellB = makeCell("B", 2);
     Cell cellC = makeCell("C", 1);
     Cell hidden = makeCell("A", 3);
@@ -89,6 +100,7 @@ int main()
     ResolvedTimesheetSceneFrame t2 = resolveTimesheetSceneFrame(timesheet, inputs, 2);
     require(t2.cells.size() == 2U, "T2 A and B visible");
     require(t2.cells[0].cell == &cellA && t2.cells[0].drawingFrameIndex == 2, "T2 A F3");
+    require(nearlyEqual(t2.cells[0].placement.x, 40.0f), "T2 A motion placement");
     require(t2.cells[1].cell == &cellB && t2.cells[1].drawingFrameIndex == 1, "T2 B F2");
 
     ResolvedTimesheetSceneFrame t3 = resolveTimesheetSceneFrame(timesheet, inputs, 3);

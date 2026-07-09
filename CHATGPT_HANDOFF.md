@@ -462,3 +462,25 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-f: connect Cell motion keys to resolved preview/export data. If usage is low, first audit where `Cell.motionKeys` and `CellPlacement` are used.
+---
+
+## Latest handoff: Phase 2 Step 3-f Cell motion resolver
+
+Current state:
+
+- Added `CellMotionResolver` with `resolveCellPlacementAtFrame(...)`.
+- `ResolvedTimesheetSceneCell` now includes resolved `CellPlacement`.
+- `TimesheetSceneResolver` fills placement for resolved visible cells.
+- `PngTimesheetExporter` carries resolved placement into per-frame export cell data.
+- Pixel-level canvas/export transform is not implemented yet; do that as a focused renderer/export step if needed before UI work.
+
+Verification:
+
+- `perapera_cell_motion_resolver_selftest` passed.
+- `perapera_timesheet_scene_resolver_selftest` passed.
+- `perapera_png_timesheet_exporter_selftest` passed.
+- Debug app build passed and `build\bin\perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-g: Timesheet UI usability pass. Alternative: implement visual Cell placement transform in canvas/export first if motion visibility is higher priority.

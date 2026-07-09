@@ -841,3 +841,6 @@ When Timesheet entries exist, export should follow the Cut-owned Timesheet timel
 ## Phase 2 Step 3-e decision
 
 Use `Project.cellOrder` as the active Cut display/export order during the migration period. It is already saved as `Cut.cellZOrderKeys` and restored by the layout loader. Resolve missing and duplicate ids defensively instead of mutating the project during draw/export.
+## Phase 2 Step 3-f decision
+
+Resolve `Cell.placement` / `Cell.motionKeys` in the core Timesheet scene data path before changing renderer math. This keeps the save/load and preview/export data contract testable while deferring pixel-level transform rendering to a smaller focused step.

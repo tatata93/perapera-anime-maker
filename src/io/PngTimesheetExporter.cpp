@@ -36,6 +36,7 @@ Cell makeSingleFrameCell(const ResolvedTimesheetSceneCell& resolved)
 {
     Cell cell = *resolved.cell;
     cell.visible = true;
+    cell.placement = resolved.placement;
     cell.frames.clear();
     cell.frames.push_back(resolved.cell->frames[static_cast<std::size_t>(resolved.drawingFrameIndex)]);
     return cell;
