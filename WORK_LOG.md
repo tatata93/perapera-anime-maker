@@ -2211,3 +2211,19 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-e: connect `cellZOrderKeys` to resolved display/export ordering.
+## Phase 2 Step 3-e: Cell order resolver for display/export
+
+- Added `resolvedProjectCellOrderIndices(...)` to resolve active Cut cell order from `Project.cellOrder`.
+- Canvas visible-cell display now follows resolved cell order.
+- PNG/MP4 visible-cell export and Timesheet export input construction now follow the same resolved cell order.
+- Missing or duplicate cell ids in `Project.cellOrder` are ignored, and remaining physical cells are appended safely.
+- This connects the current `Cut.cellZOrderKeys` migration path through `Project.cellOrder`; true frame-varying z-order keyframes remain a later data-model/UI step.
+
+Verification:
+
+- `perapera_cell_order_resolver_selftest` passed.
+- Debug `perapera_anime_maker` build passed and `build/bin/perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-f: connect Cell motion keys to resolved preview/export data.

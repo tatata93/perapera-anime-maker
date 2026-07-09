@@ -838,3 +838,6 @@ Keep `docs/final_spec_v6.md` as the historical canonical spec path, but expose `
 ## Phase 2 Step 3-d decision
 
 When Timesheet entries exist, export should follow the Cut-owned Timesheet timeline rather than direct drawing-frame indices. Keep the old direct export path only as the lightweight fallback for projects without Timesheet entries. Blank Timesheet T frames should export as blank PNGs, not as errors.
+## Phase 2 Step 3-e decision
+
+Use `Project.cellOrder` as the active Cut display/export order during the migration period. It is already saved as `Cut.cellZOrderKeys` and restored by the layout loader. Resolve missing and duplicate ids defensively instead of mutating the project during draw/export.

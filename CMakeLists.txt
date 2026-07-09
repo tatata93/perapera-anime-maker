@@ -309,6 +309,11 @@ add_executable(perapera_cell_timesheet_alignment_selftest
 
 target_include_directories(perapera_cell_timesheet_alignment_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+add_executable(perapera_cell_order_resolver_selftest
+    tools/cell_order_resolver_selftest.cpp
+)
+target_include_directories(perapera_cell_order_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 # final_spec_v6 Phase 2 Step 1-a: Scene / active Cut minimal model selftest.
 add_executable(perapera_scene_cut_model_selftest
     tools/scene_cut_model_selftest.cpp
@@ -334,6 +339,7 @@ if (MSVC)
     target_compile_options(perapera_project_active_cut_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
 
  target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE /W4 /permissive- /utf-8)
+ target_compile_options(perapera_cell_order_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
 else()
     target_compile_options(perapera_anime_maker PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
@@ -347,6 +353,7 @@ else()
     target_compile_options(perapera_project_active_cut_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)
 
  target_compile_options(perapera_cell_timesheet_alignment_selftest PRIVATE -Wall -Wextra -Wpedantic)
+ target_compile_options(perapera_cell_order_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Windows縺ｧSDL3.dll繧弾xe讓ｪ縺ｫ繧ｳ繝斐・縺吶ｋ縲・

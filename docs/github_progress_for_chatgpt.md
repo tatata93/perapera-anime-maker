@@ -5,8 +5,8 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest local step after this update: `Phase 2 Step 3-d: Timesheet export propagation`
-- Main purpose of the latest work: make PNG/MP4 export follow the Cut-owned Timesheet timeline when Timesheet entries exist, while keeping startup and project loading light.
+- Latest local step after this update: `Phase 2 Step 3-e: Cell order resolver`
+- Main purpose of the latest work: make canvas visible-cell display and PNG/MP4 export follow the active Cut cell order represented by `Project.cellOrder`.
 
 ## Recent completed steps
 
@@ -30,6 +30,7 @@ Last updated: 2026-07-09
 - Step 3-b: verified Cut camera metadata survives project layout save/load.
 - Step 3-c: clarified the spec entry point and added the remaining Phase 2 Step 3-c through Step 3-h roadmap.
 - Step 3-d: added Timesheet-aware PNG active-frame, PNG sequence, and MP4 pre-export paths.
+- Step 3-e: added resolved cell order helper and connected display/export visible-cell order to `Project.cellOrder`.
 
 ## Important current state
 
@@ -42,11 +43,14 @@ Last updated: 2026-07-09
 - Historical canonical spec: `docs/final_spec_v6.md`.
 - When Timesheet entries exist, export now uses the Timesheet timeline T values. Projects without Timesheet entries use the previous direct frame-index export path.
 - `src/io/PngExporter.cpp` is below the 800-line guideline after splitting export mode labels.
+- `Project.cellOrder` is the current active Cut order during migration; save writes it as `Cut.cellZOrderKeys` and load restores it.
+- True frame-varying z-order keyframes are still a later data-model/UI step.
 
 ## Verification already performed
 
 - `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded.
 - `perapera_png_timesheet_exporter_selftest` built and passed.
+- `perapera_cell_order_resolver_selftest` built and passed.
 - Debug app build succeeded.
 - `build\bin\perapera_anime_maker.exe` exists.
 - Lightweight selftests that were run successfully:
@@ -57,13 +61,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Continue with Phase 2 Step 3-e.
-2. Connect `cellZOrderKeys` to resolved display/export ordering.
+1. Continue with Phase 2 Step 3-f.
+2. Connect Cell motion keys to resolved preview/export data, or first audit current `Cell.motionKeys` usage if needed.
 3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate
 
-Phase 2 Step 3-e: frame-level cell order / `cellZOrderKeys` resolved display and export ordering.
+Phase 2 Step 3-f: Cell motion key preview/export connection.
 
 Useful commands:
 

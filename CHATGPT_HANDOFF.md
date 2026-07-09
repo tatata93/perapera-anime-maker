@@ -442,3 +442,23 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-e: connect `cellZOrderKeys` to resolved display/export ordering before expanding Timesheet UI.
+---
+
+## Latest handoff: Phase 2 Step 3-e Cell order resolver
+
+Current state:
+
+- Added `CellOrderResolver.h` with `resolvedProjectCellOrderIndices(...)`.
+- Canvas visible-cell display now follows `Project.cellOrder` instead of raw physical vector order.
+- PNG/MP4 visible-cell export and Timesheet export input construction use the same resolved order.
+- Missing/duplicate order ids are ignored safely; remaining cells are appended.
+- This connects the current `Cut.cellZOrderKeys` migration route through `Project.cellOrder`.
+
+Verification:
+
+- `perapera_cell_order_resolver_selftest` passed.
+- Debug app build passed and `build\bin\perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-f: connect Cell motion keys to resolved preview/export data. If usage is low, first audit where `Cell.motionKeys` and `CellPlacement` are used.

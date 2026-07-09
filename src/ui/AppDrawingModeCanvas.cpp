@@ -8,6 +8,7 @@
 
 #include <imgui.h>
 
+#include "core/CellOrderResolver.h"
 #include "core/TimesheetResolver.h"
 #include "core/TimesheetSceneResolver.h"
 #include "ui/AppDrawingModeEraser.h"
@@ -159,8 +160,9 @@ void App::drawCanvasArea(float rightWidth)
             return inputs;
         }
 
-        inputs.reserve(project_.cells.size());
-        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+        const std::vector<int> orderedCellIndices = resolvedProjectCellOrderIndices(project_);
+        inputs.reserve(orderedCellIndices.size());
+        for (const int cellIndex : orderedCellIndices) {
             appendTimesheetSceneInput(inputs,
                                       cellIndex,
                                       &project_.cells[static_cast<std::size_t>(cellIndex)],
@@ -189,7 +191,7 @@ void App::drawCanvasArea(float rightWidth)
             return;
         }
 
-        for (int cellIndex = 0; cellIndex < static_cast<int>(project_.cells.size()); ++cellIndex) {
+        for (const int cellIndex : resolvedProjectCellOrderIndices(project_)) {
             const Cell& drawCell = project_.cells[static_cast<std::size_t>(cellIndex)];
             if (!drawCell.visible || drawCell.opacity <= 0.0f || drawCell.frames.empty()) {
                 continue;

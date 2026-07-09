@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/CellOrderResolver.h"
 #include "core/CutCellTimesheetBridge.h"
 #include "io/FfmpegRunner.h"
 #include "io/PngExporter.h"
@@ -53,8 +54,10 @@ std::vector<const Cell*> exportCellsForCurrentDisplay(const Project& project, in
         return cells;
     }
 
-    cells.reserve(project.cells.size());
-    for (const Cell& cell : project.cells) {
+    const std::vector<int> orderedCellIndices = resolvedProjectCellOrderIndices(project);
+    cells.reserve(orderedCellIndices.size());
+    for (const int cellIndex : orderedCellIndices) {
+        const Cell& cell = project.cells[static_cast<std::size_t>(cellIndex)];
         if (cell.visible && cell.opacity > 0.0f) {
             cells.push_back(&cell);
         }
@@ -104,8 +107,9 @@ std::vector<TimesheetSceneCellInput> exportTimesheetInputsForCurrentDisplay(cons
         return inputs;
     }
 
-    inputs.reserve(project.cells.size());
-    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
+    const std::vector<int> orderedCellIndices = resolvedProjectCellOrderIndices(project);
+    inputs.reserve(orderedCellIndices.size());
+    for (const int cellIndex : orderedCellIndices) {
         inputs.push_back(TimesheetSceneCellInput{
             &project.cells[static_cast<std::size_t>(cellIndex)],
             cellIndex,
