@@ -109,7 +109,7 @@ void App::drawCanvasArea(float rightWidth)
         ? clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1)
         : activeFrameIndex_ + 1;
 
-    auto drawCellFrame = [&](int cellIndex, const Cell& drawCell, const Frame& drawFrame, int drawFrameIndex) {
+    auto drawCellFrame = [&](int cellIndex, const Cell& drawCell, const Frame& drawFrame, int drawFrameIndex, const CellPlacement* placementOverride = nullptr) {
         const bool isActiveCell = cellIndex == activeCellIndex_;
         const bool isActiveEditingFrame = isActiveCell && drawFrameIndex == activeFrameIndex_;
         const int drawActiveLayer = isActiveEditingFrame ? activeLayerIndex_ : -1;
@@ -118,7 +118,7 @@ void App::drawCanvasArea(float rightWidth)
         if (drawOpacity <= 0.0f) {
             return;
         }
-
+        const CellPlacement* drawPlacement = placementOverride != nullptr ? placementOverride : &drawCell.placement;
         canvasRenderer_.draw(drawFrame,
                              drawFrameIndex,
                              drawActiveLayer,
@@ -128,7 +128,8 @@ void App::drawCanvasArea(float rightWidth)
                              canvasDisplayMode,
                              areaMin,
                              areaSize,
-                             drawList);
+                             drawList,
+                             drawPlacement);
     };
 
     auto appendTimesheetSceneInput = [&](std::vector<TimesheetSceneCellInput>& inputs,
@@ -238,7 +239,11 @@ void App::drawCanvasArea(float rightWidth)
                     continue;
                 }
                 const Frame& drawFrame = resolvedCell.cell->frames[static_cast<std::size_t>(resolvedCell.drawingFrameIndex)];
-                drawCellFrame(resolvedCell.cellIndex, *resolvedCell.cell, drawFrame, resolvedCell.drawingFrameIndex);
+                drawCellFrame(resolvedCell.cellIndex,
+                              *resolvedCell.cell,
+                              drawFrame,
+                              resolvedCell.drawingFrameIndex,
+                              &resolvedCell.placement);
             }
 
             if (timesheetPreviewEditMismatch &&

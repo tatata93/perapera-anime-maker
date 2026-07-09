@@ -20,11 +20,14 @@
 #include <SDL3/SDL.h>
 #include <imgui.h>
 
+#include "core/Cell.h"
 #include "core/Frame.h"
 #include "core/Stroke.h"
 #include "render/CanvasBitmap.h"
 
 namespace perapera {
+
+struct CellPlacement;
 
 // キャンバスの表示用途。
 // Drawing は通常作画、Coloring は彩色用の参照表示ルールを使う。
@@ -86,7 +89,7 @@ public:
               CanvasDisplayMode displayMode,
               ImVec2 areaMin,
               ImVec2 areaSize,
-              ImDrawList* drawList);
+              ImDrawList* drawList, const CellPlacement* placement = nullptr);
 
     // 再生時はframeIndexを渡し、ユーザー編集可能なFrame名の重複でキャッシュ衝突しないようにする。
     void draw(const Frame& frame,
@@ -98,7 +101,7 @@ public:
               CanvasDisplayMode displayMode,
               ImVec2 areaMin,
               ImVec2 areaSize,
-              ImDrawList* drawList);
+              ImDrawList* drawList, const CellPlacement* placement = nullptr);
 
     void drawOnionSkin(const Frame& frame,
                        int frameIndex,
@@ -187,7 +190,7 @@ private:
                     ImVec2 areaMin,
                     ImVec2 areaSize,
                     ImDrawList* drawList,
-                    ImU32 tintColor);
+                    ImU32 tintColor, const CellPlacement* placement = nullptr);
 
     void drawCurrentStrokePreview(const Stroke& stroke,
                                   float opacity,

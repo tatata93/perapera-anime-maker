@@ -844,3 +844,8 @@ Use `Project.cellOrder` as the active Cut display/export order during the migrat
 ## Phase 2 Step 3-f decision
 
 Resolve `Cell.placement` / `Cell.motionKeys` in the core Timesheet scene data path before changing renderer math. This keeps the save/load and preview/export data contract testable while deferring pixel-level transform rendering to a smaller focused step.
+- Phase 2 Step 3-g: defer rotation and PNG export; keep preview-only placement small.
+
+## Phase 2 Step 3-g decision
+
+Apply `CellPlacement` x/y/scale to the canvas preview first. Defer rotation and PNG export transform so renderer/export math can be handled as smaller focused steps without expanding startup or project-load work.

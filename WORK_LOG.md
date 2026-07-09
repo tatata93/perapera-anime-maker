@@ -2245,3 +2245,19 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-g: Timesheet UI usability pass, or a focused render transform step if visual Cell motion must be visible before UI work.
+## Phase 2 Step 3-g: CellPlacement visual preview
+
+- Applied `CellPlacement` x/y/scale to canvas bitmap drawing through `CanvasRenderer`.
+- Timesheet scene preview now passes `ResolvedTimesheetSceneCell::placement` into the renderer.
+- Non-timesheet editing display uses each Cell's base placement.
+- Rotation and PNG export transform are intentionally deferred to keep this step small.
+- No startup preview generation or project-load scanning was added.
+
+Verification:
+
+- `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded.
+- Debug `perapera_anime_maker` build passed and `build/bin/perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-h: choose either PNG export placement transform or Timesheet UI usability pass.

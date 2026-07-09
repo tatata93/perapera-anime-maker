@@ -17,6 +17,7 @@
 #include "render/CanvasRenderer.h"
 
 #include "render/CanvasRendererSupport.h"
+#include "core/Cell.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -290,9 +291,9 @@ void CanvasRenderer::draw(const Frame& frame,
                           CanvasDisplayMode displayMode,
                           ImVec2 areaMin,
                           ImVec2 areaSize,
-                          ImDrawList* drawList)
+                          ImDrawList* drawList, const CellPlacement* placement)
 {
-    draw(frame, -1, activeLayerIndex, currentStroke, currentStrokeOpacity, view, displayMode, areaMin, areaSize, drawList);
+    draw(frame, -1, activeLayerIndex, currentStroke, currentStrokeOpacity, view, displayMode, areaMin, areaSize, drawList, placement);
 }
 
 void CanvasRenderer::draw(const Frame& frame,
@@ -304,7 +305,7 @@ void CanvasRenderer::draw(const Frame& frame,
                           CanvasDisplayMode displayMode,
                           ImVec2 areaMin,
                           ImVec2 areaSize,
-                          ImDrawList* drawList)
+                          ImDrawList* drawList, const CellPlacement* placement)
 {
     activeFrameForDirectAccess_ = &frame;
     activeFrameCacheId_ = frameCacheId(frame, frameIndex);
@@ -337,7 +338,7 @@ void CanvasRenderer::draw(const Frame& frame,
                 continue;
             }
 
-            drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, alphaByte(displayOpacity)));
+            drawBitmap(bitmap, view, areaMin, areaSize, drawList, IM_COL32(255, 255, 255, alphaByte(displayOpacity)), placement);
         }
     }
 
@@ -745,24 +746,38 @@ void CanvasRenderer::pruneOnionCache(const OnionCacheKey& protectedKey)
     }
 }
 
-void CanvasRenderer::drawBitmap(CanvasBitmap& bitmap,
-                                const CanvasView& view,
-                                ImVec2 areaMin,
-                                ImVec2 areaSize,
-                                ImDrawList* drawList,
-                                ImU32 tintColor)
+void CanvasRenderer::drawBitmap(
+    CanvasBitmap& bitmap,
+    const CanvasView& view,
+    ImVec2 areaMin,
+    ImVec2 areaSize,
+    ImDrawList* drawList,
+    ImU32 tintColor,
+    const CellPlacement* placement)
 {
     if (!bitmap.hasTexture() || drawList == nullptr) {
         return;
     }
 
-    const ImVec2 imageMin = view.canvasToScreen(0.0f, 0.0f, areaMin, areaSize);
-    const ImVec2 imageMax = view.canvasToScreen(static_cast<float>(bitmap.width()),
-                                                static_cast<float>(bitmap.height()),
-                                                areaMin, areaSize);
-    drawList->AddImage(bitmap.imTextureID(), imageMin, imageMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), tintColor);
-}
+    const float placementX = placement != nullptr ? placement->x : 0.0f;
+    const float placementY = placement != nullptr ? placement->y : 0.0f;
+    const float placementScale = placement != nullptr ? std::max(0.001f, placement->scale) : 1.0f;
 
+    const ImVec2 imageMin = view.canvasToScreen(placementX, placementY, areaMin, areaSize);
+    const ImVec2 imageMax = view.canvasToScreen(
+        placementX + static_cast<float>(bitmap.width()) * placementScale,
+        placementY + static_cast<float>(bitmap.height()) * placementScale,
+        areaMin,
+        areaSize);
+
+    drawList->AddImage(
+        bitmap.imTextureID(),
+        imageMin,
+        imageMax,
+        ImVec2(0.0f, 0.0f),
+        ImVec2(1.0f, 1.0f),
+        tintColor);
+}
 void CanvasRenderer::drawCurrentStrokePreview(const Stroke& stroke,
                                               float opacity,
                                               const CanvasView& view,
