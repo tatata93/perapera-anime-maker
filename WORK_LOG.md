@@ -2184,3 +2184,13 @@ Rules recorded for the handoff:
 - Extended `perapera_project_layout_load_entry_selftest` so Project-level camera and Cut-level camera use distinct values.
 - Verified that Cut camera metadata survives the scene/cut/cell layout save/load path.
 - Kept this as lightweight coverage without UI, startup, or preview warmup changes.
+## Phase 2 Step 3-c: completion roadmap and spec entry
+
+- Clarified that `docs/final_spec_v6.md` is the top-level software specification plus AI work instruction document.
+- Added `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md` as the clear entry point while keeping the historical spec filename valid.
+- Added a Phase 2 completion roadmap covering Step 3-c through Step 3-h.
+- This was documentation/control work only; runtime behavior, startup, save/load, preview generation, and UI behavior were not changed.
+
+Next recommended task:
+
+- Phase 2 Step 3-d: audit and test Cut-owned Timesheet propagation through app save/load, preview selection, and export setup.

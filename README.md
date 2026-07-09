@@ -1,3 +1,8 @@
+# perapera-anime-maker
+
+Primary spec / AI work instruction entry: `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md`.
+
+---
 # ぺらぺらアニメ作り機
 
 個人制作向けの本格手描き2Dアニメ制作ソフトです。

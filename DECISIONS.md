@@ -832,3 +832,6 @@ Open Phase 2 Step 3 with Cut-owned camera metadata because the main spec require
 ## Phase 2 Step 3-b decision
 
 Protect Cut camera metadata at the ProjectLayout save/load layer before adding more Step 3 behavior. Keep Project camera and Cut camera distinct in the selftest so accidental overwrites are caught.
+## Phase 2 Step 3-c decision
+
+Keep `docs/final_spec_v6.md` as the historical canonical spec path, but expose `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md` as the clear human/AI entry point. Phase 2 is now organized into remaining Step 3-c through Step 3-h work before closeout.

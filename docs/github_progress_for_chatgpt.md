@@ -5,8 +5,8 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest pushed step after this update: `Phase 2 Step 3-b: verify ProjectLayout Cut camera round-trip`
-- Main purpose of the latest work: reduce large drawing/render files safely and add lightweight selftests without making app startup or project loading heavier.
+- Latest local step after this update: `Phase 2 Step 3-c: completion roadmap and spec entry`
+- Main purpose of the latest work: clarify the top-level spec as a software specification plus AI work instruction document, and make Phase 2 closeout steps explicit.
 
 ## Recent completed steps
 
@@ -28,6 +28,7 @@ Last updated: 2026-07-09
 - Step 2-aj: added pure helper coverage for timesheet preview/range playback stepping.
 - Step 3-a: added optional Cut-owned camera metadata and app save/load bridge.
 - Step 3-b: verified Cut camera metadata survives project layout save/load.
+- Step 3-c: clarified the spec entry point and added the remaining Phase 2 Step 3-c through Step 3-h roadmap.
 
 ## Important current state
 
@@ -36,12 +37,15 @@ Last updated: 2026-07-09
 - `src/ui/AppDrawingMode.cpp` is under the 800-line guideline, reduced from about 1917 lines to about 760 lines.
 - The app save/load path is already on the new layout IO route, not legacy `ProjectIO::save/load`.
 - `DrawingNewLayoutIO` should not be restored.
+- Primary spec / AI instruction entry: `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md`.
+- Historical canonical spec: `docs/final_spec_v6.md`.
 
 ## Verification already performed
 
-- `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded.
-- Debug app build succeeded after the latest split work.
-- `build\bin\perapera_anime_maker.exe` existed after build.
+- `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded during the latest code-bearing step.
+- Debug app build succeeded during the latest code-bearing step.
+- `build\bin\perapera_anime_maker.exe` existed after that build.
+- Step 3-c is documentation/control only, so no app build is required by the change itself.
 - Lightweight selftests that were run successfully:
   - `perapera_canvas_renderer_support_selftest`
   - `perapera_app_drawing_mode_eraser_selftest`
@@ -50,13 +54,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Continue Phase 2 Step 3 Cut-level Timesheet / Cell / Camera connection.
-2. Check whether Cut-owned Timesheet is fully reflected in app save/load and export paths.
+1. Continue with Phase 2 Step 3-d.
+2. Audit and test whether Cut-owned Timesheet is fully reflected in app save/load, preview selection, and export setup.
 3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate
 
-Phase 2 Step 2 large-file cleanup and lightweight helper coverage are likely sufficient. Phase 2 Step 3 is now open, starting with Cut-level camera metadata.
+Phase 2 Step 3-d: Cut-owned Timesheet propagation audit and focused coverage.
 
 Useful commands:
 

@@ -1,3 +1,10 @@
+# perapera-anime-maker software specification and AI work instruction v6.0
+
+This document is the top-level specification plus implementation instruction document for perapera-anime-maker. The historical filename is `final_spec_v6.md`, but the intended role is: spec, work order, and handoff guide for humans and AI agents.
+
+See also: `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md`.
+
+---
 # ぺらぺらアニメ作り機 最終仕様書 v6.0
 # 完全新規作成版 — ChatGPT向け実装指示書
 # 現在の実装: Phase 1.5 進行中
@@ -1105,3 +1112,46 @@ exe:        C:\Users\tak01\github\perapera-anime-maker\build\bin\perapera_anime_
 次:         Step 16（format_version追加）→ Step 17（彩色モード）→
             Step 18（ColorTrace出力）→ Phase 2（ファイル構成改定+セル）
 ```
+---
+
+## Appendix: Phase 2 completion roadmap and AI instructions
+
+This section makes Phase 2 finishable as numbered implementation work. It is part of the spec and should be updated when later agents change scope.
+
+### Phase 2 current target
+
+Phase 2 finishes when the normal project path is `Project -> Scene -> Cut -> Cell`, and the active Cut owns the Timesheet, Cells, frame/layer data, and Cut camera metadata needed by save, load, preview, and export.
+
+Phase 2 must not reintroduce Scene Plate / separate background panel behavior. Layout, background, BOOK, effect, and reference material remain normal Cells/categories controlled through the Timesheet path until a later explicit phase changes that decision.
+
+### Completed Phase 2 structure checkpoints
+
+- Phase 2-pre: Scene Plate path was removed from the plan; background/layout/BOOK/effect/reference are normal Cells.
+- Phase 2 Step 1: minimal Project -> Scene -> Cut -> Cell model and active-Cut bridge were introduced.
+- Phase 2 Step 2: new scene/cut/cell layout save/load path replaced direct AppProjectIO use of legacy ProjectIO save/load, and major large files were split back toward the 800-line guideline.
+- Phase 2 Step 3-a: Cut-owned camera metadata bridge was added.
+- Phase 2 Step 3-b: ProjectLayout save/load round-trip now covers Cut camera metadata.
+
+### Required remaining Phase 2 steps
+
+- Phase 2 Step 3-c: clarify this roadmap and provide a clear spec/instruction entry document. This is a documentation/control step and should not change runtime behavior.
+- Phase 2 Step 3-d: audit and test Cut-owned Timesheet propagation through app save/load, preview selection, and export setup. Fix only concrete gaps; avoid startup scans or preview-file warmup.
+- Phase 2 Step 3-e: connect frame-level cell order / `cellZOrderKeys` to resolved display and export order, with a focused test before UI expansion.
+- Phase 2 Step 3-f: connect Cell motion keys to Cut/Timesheet resolved preview/export data. Keep interpolation and cache invalidation lightweight.
+- Phase 2 Step 3-g: improve the vertical Timesheet UI for production use after the data path is protected. UI work must keep startup and project loading light.
+- Phase 2 Step 3-h: Phase 2 closeout audit. Confirm no active app path depends on old ProjectIO save/load, no DrawingNewLayoutIO revival exists, key files follow the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.
+
+### Ongoing Phase 2 rules for all agents
+
+- Keep compatibility with older in-development save formats only when it is cheap; new layout correctness has priority.
+- Do not generate or scan preview files during startup or project load. Heavy preview artifacts may be created only after explicit user action or during export/playback work that needs them.
+- Prefer small selftests for data resolver, save/load, and ordering behavior before adding more UI.
+- Add a short policy doc for each numbered step under `docs/`.
+- Update `WORK_LOG.md`, `DECISIONS.md`, `CHATGPT_HANDOFF.md`, and `docs/github_progress_for_chatgpt.md` before pushing.
+- If a source file grows beyond roughly 800 lines, split model/helper logic before adding more feature bulk unless the step is an emergency build fix.
+
+### User decisions that may be needed later
+
+- Whether Cell motion key interpolation should initially be hold-only, linear, or selectable per key.
+- Whether Timesheet editing should prioritize keyboard entry first or drag-and-drop first for the first production UI pass.
+- Whether camera columns should live inside the Timesheet grid or in a side panel synchronized to the selected frame.

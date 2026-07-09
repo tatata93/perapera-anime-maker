@@ -406,3 +406,18 @@ Current state:
 Next recommended task:
 
 - Continue Phase 2 Step 3 by checking whether Cut-owned Timesheet is fully reflected in app save/load and export paths, or add a focused app/project layout test if a gap is found.
+
+---
+
+## Latest handoff: Phase 2 Step 3-c completion roadmap and spec entry
+
+Current state:
+
+- `docs/final_spec_v6.md` now explicitly identifies itself as the top-level software specification plus AI work instruction document.
+- `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md` is the recommended entry point for humans and AI agents.
+- The spec now lists Phase 2 remaining work as Step 3-c through Step 3-h.
+- This step did not change runtime behavior, save/load, startup, preview generation, or UI behavior.
+
+Next recommended task:
+
+- Phase 2 Step 3-d: audit and test whether Cut-owned Timesheet is fully reflected in app save/load, preview selection, and export setup. Fix concrete gaps only, and keep project loading light.
