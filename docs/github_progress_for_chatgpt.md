@@ -5,8 +5,8 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest local step after this update: `Phase 2 Step 3-c: completion roadmap and spec entry`
-- Main purpose of the latest work: clarify the top-level spec as a software specification plus AI work instruction document, and make Phase 2 closeout steps explicit.
+- Latest local step after this update: `Phase 2 Step 3-d: Timesheet export propagation`
+- Main purpose of the latest work: make PNG/MP4 export follow the Cut-owned Timesheet timeline when Timesheet entries exist, while keeping startup and project loading light.
 
 ## Recent completed steps
 
@@ -29,6 +29,7 @@ Last updated: 2026-07-09
 - Step 3-a: added optional Cut-owned camera metadata and app save/load bridge.
 - Step 3-b: verified Cut camera metadata survives project layout save/load.
 - Step 3-c: clarified the spec entry point and added the remaining Phase 2 Step 3-c through Step 3-h roadmap.
+- Step 3-d: added Timesheet-aware PNG active-frame, PNG sequence, and MP4 pre-export paths.
 
 ## Important current state
 
@@ -39,13 +40,15 @@ Last updated: 2026-07-09
 - `DrawingNewLayoutIO` should not be restored.
 - Primary spec / AI instruction entry: `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md`.
 - Historical canonical spec: `docs/final_spec_v6.md`.
+- When Timesheet entries exist, export now uses the Timesheet timeline T values. Projects without Timesheet entries use the previous direct frame-index export path.
+- `src/io/PngExporter.cpp` is below the 800-line guideline after splitting export mode labels.
 
 ## Verification already performed
 
-- `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded during the latest code-bearing step.
-- Debug app build succeeded during the latest code-bearing step.
-- `build\bin\perapera_anime_maker.exe` existed after that build.
-- Step 3-c is documentation/control only, so no app build is required by the change itself.
+- `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded.
+- `perapera_png_timesheet_exporter_selftest` built and passed.
+- Debug app build succeeded.
+- `build\bin\perapera_anime_maker.exe` exists.
 - Lightweight selftests that were run successfully:
   - `perapera_canvas_renderer_support_selftest`
   - `perapera_app_drawing_mode_eraser_selftest`
@@ -54,13 +57,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Continue with Phase 2 Step 3-d.
-2. Audit and test whether Cut-owned Timesheet is fully reflected in app save/load, preview selection, and export setup.
+1. Continue with Phase 2 Step 3-e.
+2. Connect `cellZOrderKeys` to resolved display/export ordering.
 3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate
 
-Phase 2 Step 3-d: Cut-owned Timesheet propagation audit and focused coverage.
+Phase 2 Step 3-e: frame-level cell order / `cellZOrderKeys` resolved display and export ordering.
 
 Useful commands:
 

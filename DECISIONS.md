@@ -835,3 +835,6 @@ Protect Cut camera metadata at the ProjectLayout save/load layer before adding m
 ## Phase 2 Step 3-c decision
 
 Keep `docs/final_spec_v6.md` as the historical canonical spec path, but expose `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md` as the clear human/AI entry point. Phase 2 is now organized into remaining Step 3-c through Step 3-h work before closeout.
+## Phase 2 Step 3-d decision
+
+When Timesheet entries exist, export should follow the Cut-owned Timesheet timeline rather than direct drawing-frame indices. Keep the old direct export path only as the lightweight fallback for projects without Timesheet entries. Blank Timesheet T frames should export as blank PNGs, not as errors.

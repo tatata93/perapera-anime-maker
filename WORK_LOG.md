@@ -2194,3 +2194,20 @@ Rules recorded for the handoff:
 Next recommended task:
 
 - Phase 2 Step 3-d: audit and test Cut-owned Timesheet propagation through app save/load, preview selection, and export setup.
+## Phase 2 Step 3-d: Timesheet export propagation
+
+- Added `PngTimesheetExporter` to resolve Timesheet timeline T into per-cell drawing frames before PNG output.
+- App PNG active-frame export now uses selected Timesheet T when Timesheet entries exist.
+- App PNG sequence and MP4 pre-export now use Timesheet totalFrames and export one PNG per timeline T when Timesheet entries exist.
+- Projects without Timesheet entries keep the previous direct frame-index export path.
+- Split PNG export mode labels into `PngExporterModes.cpp`; `PngExporter.cpp` is now below the 800-line guideline.
+- Added `perapera_png_timesheet_exporter_selftest`.
+
+Verification:
+
+- `perapera_png_timesheet_exporter_selftest` passed.
+- Debug `perapera_anime_maker` build passed and `build/bin/perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-e: connect `cellZOrderKeys` to resolved display/export ordering.

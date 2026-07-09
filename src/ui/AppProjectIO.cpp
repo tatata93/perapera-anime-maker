@@ -14,6 +14,7 @@
 #include "core/CutCellTimesheetBridge.h"
 #include "io/FfmpegRunner.h"
 #include "io/PngExporter.h"
+#include "io/PngTimesheetExporter.h"
 #include "io/ProjectLayoutLoadEntry.h"
 #include "io/ProjectLayoutSaveEntry.h"
 #include "ui/AppProjectIOSupport.h"
@@ -59,6 +60,59 @@ std::vector<const Cell*> exportCellsForCurrentDisplay(const Project& project, in
         }
     }
     return cells;
+}
+
+bool hasTimesheetEntries(const Timesheet& timesheet)
+{
+    for (const TimesheetCellTrack& track : timesheet.tracks) {
+        if (!track.entries.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<TimesheetSceneCellInput> exportTimesheetInputsForCurrentDisplay(const Project& project, int activeCellIndex)
+{
+    std::vector<TimesheetSceneCellInput> inputs;
+    if (project.cells.empty()) {
+        return inputs;
+    }
+
+    const ui::CellDisplayMode displayMode = ui::currentCellDisplayMode();
+    if (displayMode == ui::CellDisplayMode::ActiveOnly) {
+        if (activeCellIndex >= 0 && activeCellIndex < static_cast<int>(project.cells.size())) {
+            inputs.push_back(TimesheetSceneCellInput{
+                &project.cells[static_cast<std::size_t>(activeCellIndex)],
+                activeCellIndex,
+                false,
+            });
+        }
+        return inputs;
+    }
+
+    if (displayMode == ui::CellDisplayMode::SoloSelected) {
+        const int soloIndex = ui::currentSoloCellIndex();
+        const int safeIndex = std::clamp(soloIndex >= 0 ? soloIndex : activeCellIndex,
+                                         0,
+                                         static_cast<int>(project.cells.size()) - 1);
+        inputs.push_back(TimesheetSceneCellInput{
+            &project.cells[static_cast<std::size_t>(safeIndex)],
+            safeIndex,
+            false,
+        });
+        return inputs;
+    }
+
+    inputs.reserve(project.cells.size());
+    for (int cellIndex = 0; cellIndex < static_cast<int>(project.cells.size()); ++cellIndex) {
+        inputs.push_back(TimesheetSceneCellInput{
+            &project.cells[static_cast<std::size_t>(cellIndex)],
+            cellIndex,
+            true,
+        });
+    }
+    return inputs;
 }
 
 std::string exportCellScopeText(const std::vector<const Cell*>& cells)
@@ -284,6 +338,34 @@ void App::saveLoadRoundTripCheck()
 
 void App::exportActivePng()
 {
+    const bool useTimesheetExport = hasTimesheetEntries(workingTimesheet_);
+    if (useTimesheetExport) {
+        const std::vector<TimesheetSceneCellInput> inputs =
+            exportTimesheetInputsForCurrentDisplay(project_, activeCellIndex_);
+        if (inputs.empty()) {
+            lastMessage_ = "export failed: no export cells";
+            return;
+        }
+
+        const std::filesystem::path output = appio::absolutePath(exportState_.exportFolder) / "active_frame.png";
+        const int timelineFrame = clampTimesheetFrame(workingTimesheet_, timesheetPanelState_.selectedTimelineFrame + 1);
+        std::string error;
+        if (PngTimesheetExporter::exportFrame(workingTimesheet_,
+                                              inputs,
+                                              timelineFrame,
+                                              output,
+                                              project_.canvas.width,
+                                              project_.canvas.height,
+                                              exportState_.exportMode,
+                                              &error)) {
+            lastMessage_ = "PNG exported [timesheet T" + std::to_string(timelineFrame) + ", " +
+                std::string(exportModeToString(exportState_.exportMode)) + "]: " + output.string();
+        } else {
+            lastMessage_ = "PNG export failed: " + error;
+        }
+        return;
+    }
+
     const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
     if (cells.empty()) {
         lastMessage_ = "export failed: no export cells";
@@ -303,6 +385,32 @@ void App::exportActivePng()
 
 void App::exportPngSequence()
 {
+    const bool useTimesheetExport = hasTimesheetEntries(workingTimesheet_);
+    if (useTimesheetExport) {
+        const std::vector<TimesheetSceneCellInput> inputs =
+            exportTimesheetInputsForCurrentDisplay(project_, activeCellIndex_);
+        if (inputs.empty()) {
+            lastMessage_ = "export failed: no export cells";
+            return;
+        }
+
+        const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
+        std::string error;
+        if (PngTimesheetExporter::exportFrameSequence(workingTimesheet_,
+                                                      inputs,
+                                                      pngFolder,
+                                                      project_.canvas.width,
+                                                      project_.canvas.height,
+                                                      exportState_.exportMode,
+                                                      &error)) {
+            lastMessage_ = "PNG sequence exported [timesheet, " +
+                std::string(exportModeToString(exportState_.exportMode)) + "]: " + pngFolder.string();
+        } else {
+            lastMessage_ = "PNG sequence failed: " + error;
+        }
+        return;
+    }
+
     const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
     if (cells.empty()) {
         lastMessage_ = "export failed: no export cells";
@@ -322,6 +430,50 @@ void App::exportPngSequence()
 
 void App::exportMp4()
 {
+    const bool useTimesheetExport = hasTimesheetEntries(workingTimesheet_);
+    if (useTimesheetExport) {
+        const std::vector<TimesheetSceneCellInput> inputs =
+            exportTimesheetInputsForCurrentDisplay(project_, activeCellIndex_);
+        if (inputs.empty()) {
+            lastMessage_ = "MP4 failed: no export cells";
+            return;
+        }
+
+        const std::filesystem::path pngFolder = appio::absolutePath(exportState_.exportFolder);
+        const std::filesystem::path mp4Output = appio::absolutePath(exportState_.mp4Path);
+        const std::filesystem::path logPath = appio::mp4LogPathForOutput(mp4Output);
+        appio::resetMp4PreflightLog(logPath, exportState_.ffmpegPath, pngFolder, mp4Output, project_.output.fps);
+        appio::appendTextLog(logPath, "Step3-d: exporting timesheet PNG sequence before FFmpeg.\nmode=");
+        appio::appendTextLog(logPath, exportModeToString(exportState_.exportMode));
+        appio::appendTextLog(logPath, "\nscope=timesheet\n");
+
+        std::string error;
+        if (!PngTimesheetExporter::exportFrameSequence(workingTimesheet_,
+                                                       inputs,
+                                                       pngFolder,
+                                                       project_.canvas.width,
+                                                       project_.canvas.height,
+                                                       exportState_.exportMode,
+                                                       &error)) {
+            appio::appendTextLog(logPath, "ERROR: timesheet PNG sequence export failed before FFmpeg.\n");
+            appio::appendTextLog(logPath, "Reason: " + error + "\n");
+            lastMessage_ = "MP4 failed before ffmpeg: " + error + " log: " + logPath.string();
+            return;
+        }
+
+        const std::filesystem::path firstFrame = pngFolder / "frame_001.png";
+        appio::appendTextLog(logPath, "Timesheet PNG sequence exported.\nExpected first frame: " + firstFrame.string() + "\n");
+        const std::filesystem::path inputPattern = pngFolder / "frame_%03d.png";
+        if (FfmpegRunner::pngSequenceToMp4(exportState_.ffmpegPath, inputPattern, project_.output.fps, mp4Output, &error)) {
+            lastMessage_ = "MP4 exported [timesheet, " +
+                std::string(exportModeToString(exportState_.exportMode)) + "]: " + mp4Output.string();
+        } else {
+            const std::string logText = appio::readLogForStatus(logPath);
+            lastMessage_ = logText.empty() ? "MP4 failed: " + error : "MP4 failed: " + error + " | log: " + logText;
+        }
+        return;
+    }
+
     const std::vector<const Cell*> cells = exportCellsForCurrentDisplay(project_, activeCellIndex_);
     if (cells.empty()) {
         lastMessage_ = "MP4 failed: no export cells";

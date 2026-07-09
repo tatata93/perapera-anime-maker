@@ -154,6 +154,8 @@ add_executable(perapera_anime_maker
     src/io/ProjectLayoutSaveEntry.cpp
     src/io/ProjectLayoutReadEntry.cpp
     src/io/PngExporter.cpp
+    src/io/PngExporterModes.cpp
+    src/io/PngTimesheetExporter.cpp
     src/io/FfmpegRunner.cpp
     src/render/CanvasBitmap.cpp
     src/render/CanvasRenderer.cpp
@@ -257,6 +259,22 @@ add_executable(perapera_timesheet_scene_resolver_selftest
 )
 target_include_directories(perapera_timesheet_scene_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+add_executable(perapera_png_timesheet_exporter_selftest
+    tools/png_timesheet_exporter_selftest.cpp
+    src/io/PngTimesheetExporter.cpp
+    src/io/PngExporter.cpp
+    src/io/PngExporterModes.cpp
+    src/core/Timesheet.cpp
+    src/core/TimesheetResolver.cpp
+    src/core/TimesheetSceneResolver.cpp
+    src/render/CanvasBitmap.cpp
+    src/brush/MyPaintBrushEngine.cpp
+    src/core/Stroke.cpp
+    src/core/Layer.cpp
+)
+target_include_directories(perapera_png_timesheet_exporter_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(perapera_png_timesheet_exporter_selftest PRIVATE SDL3::SDL3 imgui_sdl3_renderer)
+
 add_executable(perapera_timesheet_inbetween_planner_selftest
     tools/timesheet_inbetween_planner_selftest.cpp
     src/core/Timesheet.cpp
@@ -309,6 +327,7 @@ if (MSVC)
     target_compile_options(perapera_timesheet_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_cut_io_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
+    target_compile_options(perapera_png_timesheet_exporter_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE /W4 /permissive- /utf-8)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE /W4 /permissive- /utf-8)
@@ -321,6 +340,7 @@ else()
     target_compile_options(perapera_timesheet_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_cut_io_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_scene_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(perapera_png_timesheet_exporter_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_inbetween_planner_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_inbetween_resolver_selftest PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(perapera_timesheet_panel_bridge_selftest PRIVATE -Wall -Wextra -Wpedantic)

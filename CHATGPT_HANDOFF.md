@@ -421,3 +421,24 @@ Current state:
 Next recommended task:
 
 - Phase 2 Step 3-d: audit and test whether Cut-owned Timesheet is fully reflected in app save/load, preview selection, and export setup. Fix concrete gaps only, and keep project loading light.
+---
+
+## Latest handoff: Phase 2 Step 3-d Timesheet export propagation
+
+Current state:
+
+- Added `PngTimesheetExporter` for Timesheet-aware PNG output.
+- Active PNG export uses selected Timesheet T when Timesheet entries exist.
+- PNG sequence and MP4 pre-export use `workingTimesheet_.totalFrames` and one PNG per timeline T when Timesheet entries exist.
+- The previous direct frame-index export remains for projects without Timesheet entries.
+- Blank Timesheet frames export as blank PNGs instead of failing.
+- `PngExporter.cpp` was reduced below the 800-line guideline by moving export mode labels to `PngExporterModes.cpp`.
+
+Verification:
+
+- `perapera_png_timesheet_exporter_selftest` passed.
+- Debug app build passed and `build\bin\perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-e: connect `cellZOrderKeys` to resolved display/export ordering before expanding Timesheet UI.

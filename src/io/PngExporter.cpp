@@ -692,36 +692,6 @@ int maxFrameCount(const std::vector<const Cell*>& cells)
 
 } // namespace
 
-const char* exportModeToString(ExportMode mode)
-{
-    switch (mode) {
-    case ExportMode::Composite:
-        return "Composite";
-    case ExportMode::LineTest:
-        return "LineTest";
-    case ExportMode::ColorTrace:
-        return "ColorTrace";
-    case ExportMode::LineOnly:
-        return "LineOnly";
-    }
-    return "Composite";
-}
-
-const char* exportModeDisplayName(ExportMode mode)
-{
-    switch (mode) {
-    case ExportMode::Composite:
-        return "通常（全レイヤー合成）";
-    case ExportMode::LineTest:
-        return "ラインテスト（線画のみ・白背景）";
-    case ExportMode::ColorTrace:
-        return "色トレスアニメ（線画＋色トレス線・白背景）";
-    case ExportMode::LineOnly:
-        return "線画素材（線画のみ・背景透明）";
-    }
-    return "通常（全レイヤー合成）";
-}
-
 bool PngExporter::exportFrame(const Frame& frame,
                               const std::filesystem::path& outputPath,
                               int width,
