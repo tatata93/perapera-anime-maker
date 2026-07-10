@@ -87,3 +87,15 @@ git log --oneline -12
 cmake -S . -B .\build -G "Visual Studio 18 2026"
 cmake --build .\build --config Debug --target perapera_anime_maker --parallel 1 -- /m:1 /nodeReuse:false
 ```
+
+## Phase 2 Step 3-i: Timesheet UI usability
+- Status: implemented locally; build verification pending in this Codex turn.
+- Files changed: `src/ui/panels/TimesheetPanel.h`, `src/ui/panels/TimesheetPanel.cpp`, `docs/final_spec_v6.md`, `docs/final_spec_v6_phase2_step3i_timesheet_ui_usability_policy.md`, `WORK_LOG.md`, `DECISIONS.md`, `CHATGPT_HANDOFF.md`, `docs/github_progress_for_chatgpt.md`.
+- Summary: vertical Timesheet UI gained lightweight T/cell navigation, direct T jump, focus-to-selected-row, row-height control, and centralized selection handling.
+- Startup/load policy: unchanged; no preview generation or project-load scanning was added.
+- Next recommended: Phase 2 Step 3-j closeout audit.
+Verification for Phase 2 Step 3-i:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- `perapera_timesheet_panel_bridge_selftest`: built and passed.
+- `build/bin/perapera_anime_maker.exe`: exists.

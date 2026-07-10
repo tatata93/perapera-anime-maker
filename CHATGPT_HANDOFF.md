@@ -525,3 +525,19 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-i: vertical Timesheet UI usability pass. Keep startup/load light and avoid preview-file generation.
+## Latest handoff: Phase 2 Step 3-i Timesheet UI usability
+
+Completed:
+- `TimesheetPanel` now uses centralized frame/cell selection helpers.
+- T navigation updates timeline change state consistently and can focus the selected row.
+- Added direct T jump, Cell previous/next, Focus, and row-height controls.
+- Added UI-only lazy scroll-to-selected-frame state.
+- Updated the Phase 2 roadmap so Step 3-j is the remaining closeout audit.
+
+Verification to run/keep:
+- Configure CMake.
+- Build Debug `perapera_anime_maker`.
+- Optionally run Timesheet bridge selftest if bridge code changes later.
+
+Recommended next step:
+- Phase 2 Step 3-j: closeout audit. Confirm no active app path uses old ProjectIO save/load, no DrawingNewLayoutIO revival exists, important source files satisfy the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.

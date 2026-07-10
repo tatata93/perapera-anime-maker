@@ -185,6 +185,65 @@ void normalizeSelection(const TimesheetPanelViewModel& data, TimesheetPanelState
     state.editDrawingFrameNumber = std::max(1, state.editDrawingFrameNumber);
 }
 
+const TimesheetPanelEditableEntry* selectedEntry(
+    const TimesheetPanelViewModel& data,
+    const TimesheetPanelState& state)
+{
+    if (data.cells.empty()) {
+        return nullptr;
+    }
+
+    const int cellColumn = std::clamp(state.selectedCellColumn, 0, static_cast<int>(data.cells.size()) - 1);
+    return findEntry(state, state.selectedTimelineFrame, cellIdForColumn(data, cellColumn));
+}
+
+void syncEditNumberFromSelectedEntry(
+    const TimesheetPanelViewModel& data,
+    TimesheetPanelState& state)
+{
+    const TimesheetPanelEditableEntry* entry = selectedEntry(data, state);
+    if (entry != nullptr && kindUsesDrawingNumber(entry->kind)) {
+        state.editDrawingFrameNumber = std::max(1, entry->drawingFrameNumber);
+    }
+}
+
+void selectTimelineFrame(
+    const TimesheetPanelViewModel& data,
+    TimesheetPanelState& state,
+    TimesheetPanelResult& result,
+    int nextFrame)
+{
+    const int clampedFrame = std::clamp(nextFrame, 0, safeTotalFrames(data) - 1);
+    if (state.selectedTimelineFrame == clampedFrame) {
+        return;
+    }
+
+    state.selectedTimelineFrame = clampedFrame;
+    state.scrollToSelectedFrame = true;
+    result.timelineFrameChanged = true;
+    syncEditNumberFromSelectedEntry(data, state);
+}
+
+void selectCellColumn(
+    const TimesheetPanelViewModel& data,
+    TimesheetPanelState& state,
+    TimesheetPanelResult& result,
+    int nextColumn)
+{
+    if (data.cells.empty()) {
+        return;
+    }
+
+    const int clampedColumn = std::clamp(nextColumn, 0, static_cast<int>(data.cells.size()) - 1);
+    if (state.selectedCellColumn == clampedColumn) {
+        return;
+    }
+
+    state.selectedCellColumn = clampedColumn;
+    result.cellSelectionChanged = true;
+    syncEditNumberFromSelectedEntry(data, state);
+}
+
 void drawSelectedCellEditor(
     const TimesheetPanelViewModel& data,
     TimesheetPanelState& state,
@@ -271,34 +330,19 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
     ImGui::Text(u8c(u8"現在T: %d / %d"), state.selectedTimelineFrame + 1, totalFrames);
     ImGui::SameLine();
     if (ImGui::SmallButton(u8c(u8"先頭"))) {
-        if (state.selectedTimelineFrame != 0) {
-            state.selectedTimelineFrame = 0;
-            result.timelineFrameChanged = true;
-        }
+        selectTimelineFrame(data, state, result, 0);
     }
     ImGui::SameLine();
     if (ImGui::SmallButton(u8c(u8"前"))) {
-        const int nextFrame = std::max(0, state.selectedTimelineFrame - 1);
-        if (nextFrame != state.selectedTimelineFrame) {
-            state.selectedTimelineFrame = nextFrame;
-            result.timelineFrameChanged = true;
-        }
+        selectTimelineFrame(data, state, result, state.selectedTimelineFrame - 1);
     }
     ImGui::SameLine();
     if (ImGui::SmallButton(u8c(u8"次"))) {
-        const int nextFrame = std::min(totalFrames - 1, state.selectedTimelineFrame + 1);
-        if (nextFrame != state.selectedTimelineFrame) {
-            state.selectedTimelineFrame = nextFrame;
-            result.timelineFrameChanged = true;
-        }
+        selectTimelineFrame(data, state, result, state.selectedTimelineFrame + 1);
     }
     ImGui::SameLine();
     if (ImGui::SmallButton(u8c(u8"最後"))) {
-        const int nextFrame = totalFrames - 1;
-        if (nextFrame != state.selectedTimelineFrame) {
-            state.selectedTimelineFrame = nextFrame;
-            result.timelineFrameChanged = true;
-        }
+        selectTimelineFrame(data, state, result, totalFrames - 1);
     }
 
     ImGui::SameLine();
@@ -306,6 +350,30 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
 
     ImGui::Text(u8c(u8"FPS: %d / セル列: %d / 一時入力マス: %d"), data.fps, static_cast<int>(data.cells.size()), static_cast<int>(state.entries.size()));
     drawSelectedCellEditor(data, state, result);
+
+    int selectedFrameNumber = state.selectedTimelineFrame + 1;
+    ImGui::SetNextItemWidth(72.0f);
+    if (ImGui::InputInt("T##TimesheetJumpFrame", &selectedFrameNumber, 1, 12)) {
+        selectTimelineFrame(data, state, result, selectedFrameNumber - 1);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Cell <")) {
+        selectCellColumn(data, state, result, state.selectedCellColumn - 1);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Cell >")) {
+        selectCellColumn(data, state, result, state.selectedCellColumn + 1);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Focus")) {
+        state.scrollToSelectedFrame = true;
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120.0f);
+    if (ImGui::SliderFloat("Rows", &state.rowHeight, 18.0f, 36.0f, "%.0f")) {
+        state.rowHeight = std::clamp(state.rowHeight, 18.0f, 36.0f);
+    }
+
     ImGui::Separator();
 
     const int baseColumns = 1 + std::max(1, static_cast<int>(data.cells.size()));
@@ -338,6 +406,11 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
         ImGui::TableSetupScrollFreeze(1, 1);
         ImGui::TableHeadersRow();
 
+        if (state.scrollToSelectedFrame) {
+            ImGui::SetScrollY(static_cast<float>(state.selectedTimelineFrame) * state.rowHeight);
+            state.scrollToSelectedFrame = false;
+        }
+
         ImGuiListClipper clipper;
         clipper.Begin(totalFrames, state.rowHeight);
         while (clipper.Step()) {
@@ -348,10 +421,7 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
                 ImGui::TableSetColumnIndex(0);
                 ImGui::PushID(frame);
                 if (ImGui::Selectable(std::to_string(frame + 1).c_str(), rowSelected)) {
-                    if (state.selectedTimelineFrame != frame) {
-                        state.selectedTimelineFrame = frame;
-                        result.timelineFrameChanged = true;
-                    }
+                    selectTimelineFrame(data, state, result, frame);
                 }
                 ImGui::PopID();
 
@@ -378,17 +448,8 @@ TimesheetPanelResult drawTimesheetPanel(const TimesheetPanelViewModel& data, Tim
                     ImGui::PushID(frame);
                     ImGui::PushID(cellColumn);
                     if (ImGui::Selectable(label.c_str(), selectedCell)) {
-                        if (state.selectedTimelineFrame != frame) {
-                            state.selectedTimelineFrame = frame;
-                            result.timelineFrameChanged = true;
-                        }
-                        if (state.selectedCellColumn != cellColumn) {
-                            state.selectedCellColumn = cellColumn;
-                            result.cellSelectionChanged = true;
-                        }
-                        if (entry != nullptr && kindUsesDrawingNumber(entry->kind)) {
-                            state.editDrawingFrameNumber = std::max(1, entry->drawingFrameNumber);
-                        }
+                        selectTimelineFrame(data, state, result, frame);
+                        selectCellColumn(data, state, result, cellColumn);
                     }
                     if (ImGui::IsItemHovered()) {
                         if (entry == nullptr) {

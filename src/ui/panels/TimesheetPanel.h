@@ -44,6 +44,7 @@ struct TimesheetPanelState {
     int selectedCellColumn = 0;    // 0-based
     int editDrawingFrameNumber = 1;
     float rowHeight = 22.0f;
+    bool scrollToSelectedFrame = true;
 
     // Step 4の一時編集データ。
     // まだProject/Cut/Timesheet保存には接続しない。

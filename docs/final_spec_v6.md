@@ -1131,16 +1131,16 @@ Phase 2 must not reintroduce Scene Plate / separate background panel behavior. L
 - Phase 2 Step 2: new scene/cut/cell layout save/load path replaced direct AppProjectIO use of legacy ProjectIO save/load, and major large files were split back toward the 800-line guideline.
 - Phase 2 Step 3-a: Cut-owned camera metadata bridge was added.
 - Phase 2 Step 3-b: ProjectLayout save/load round-trip now covers Cut camera metadata.
+- Phase 2 Step 3-c: Phase 2 completion roadmap and handoff policy were clarified.
+- Phase 2 Step 3-d: Cut-owned Timesheet propagation through preview/export paths was connected and tested.
+- Phase 2 Step 3-e: frame-level cell order / `cellZOrderKeys` now feeds display/export ordering.
+- Phase 2 Step 3-f: Cell motion placement data now resolves through the Timesheet scene path.
+- Phase 2 Step 3-g: CellPlacement x/y/scale now affects canvas preview.
+- Phase 2 Step 3-h: CellPlacement x/y/scale now affects PNG sequence / MP4 pre-export frames.
+- Phase 2 Step 3-i: the vertical Timesheet UI gained lightweight navigation and usability controls without startup/load preview work.
 
 ### Required remaining Phase 2 steps
 
-- Phase 2 Step 3-c: clarify this roadmap and provide a clear spec/instruction entry document. This is a documentation/control step and should not change runtime behavior.
-- Phase 2 Step 3-d: audit and test Cut-owned Timesheet propagation through app save/load, preview selection, and export setup. Fix only concrete gaps; avoid startup scans or preview-file warmup.
-- Phase 2 Step 3-e: connect frame-level cell order / `cellZOrderKeys` to resolved display and export order, with a focused test before UI expansion.
-- Phase 2 Step 3-f: connect Cell motion keys to Cut/Timesheet resolved preview/export data. Keep interpolation and cache invalidation lightweight.
-- Phase 2 Step 3-g: apply CellPlacement x/y/scale to canvas preview after the data path is protected. Rotation can remain deferred.
-- Phase 2 Step 3-h: apply CellPlacement x/y/scale to PNG sequence / MP4 pre-export frames so export matches preview. Rotation can remain deferred.
-- Phase 2 Step 3-i: improve the vertical Timesheet UI for production use. UI work must keep startup and project loading light.
 - Phase 2 Step 3-j: Phase 2 closeout audit. Confirm no active app path depends on old ProjectIO save/load, no DrawingNewLayoutIO revival exists, key files follow the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.
 
 ### Ongoing Phase 2 rules for all agents

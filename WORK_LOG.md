@@ -2278,3 +2278,14 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-i: vertical Timesheet UI usability pass.
+## Phase 2 Step 3-i: vertical Timesheet UI usability pass
+- Added lightweight Timesheet navigation helpers so frame/cell selection updates are consistent.
+- Added direct T jump, selected-row focus, Cell previous/next, and row-height controls to the vertical Timesheet window.
+- Added lazy scroll-to-selected-frame state inside `TimesheetPanelState`; this is UI-only and does not touch startup/project loading or preview files.
+- Updated `docs/final_spec_v6.md` so Phase 2 Step 3-i is marked complete and Step 3-j remains the closeout audit.
+- Added `docs/final_spec_v6_phase2_step3i_timesheet_ui_usability_policy.md`.
+Verification for Phase 2 Step 3-i:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- `perapera_timesheet_panel_bridge_selftest`: built and passed.
+- `build/bin/perapera_anime_maker.exe`: exists.

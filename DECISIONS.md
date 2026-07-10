@@ -852,3 +852,5 @@ Apply `CellPlacement` x/y/scale to the canvas preview first. Defer rotation and 
 ## Phase 2 Step 3-h decision
 
 Apply `CellPlacement` x/y/scale to PNG sequence / MP4 pre-export now that preview uses the same placement data. Keep rotation deferred so transform math remains a smaller later step.
+## Phase 2 Step 3-i decision
+Keep the first production Timesheet UI pass lightweight: improve navigation and readability inside `TimesheetPanel` only, without changing save/load format, generating preview files, or moving Timesheet editing into `CellPanel`. Keyboard-first bulk entry, drag editing, and camera columns remain deferred.
