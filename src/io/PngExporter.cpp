@@ -163,9 +163,9 @@ void blendLayerBitmap(ImageRgba& image, const CanvasBitmap& bitmap, float layerO
     }
 }
 
-void blendImage(ImageRgba& image, const ImageRgba& source, float opacity)
+void blendImage(ImageRgba& image, const ImageRgba& source, float opacity, const CellPlacement* placement = nullptr)
 {
-    if (source.width != image.width || source.height != image.height || source.pixels.empty()) {
+    if (source.width <= 0 || source.height <= 0 || source.pixels.empty()) {
         return;
     }
 
@@ -174,19 +174,36 @@ void blendImage(ImageRgba& image, const ImageRgba& source, float opacity)
         return;
     }
 
+    const float scale = placement != nullptr ? std::max(0.001f, placement->scale) : 1.0f;
+    const int originX = placement != nullptr ? static_cast<int>(std::lround(placement->x)) : 0;
+    const int originY = placement != nullptr ? static_cast<int>(std::lround(placement->y)) : 0;
+    const int drawWidth = std::max(1, static_cast<int>(std::lround(static_cast<float>(source.width) * scale)));
+    const int drawHeight = std::max(1, static_cast<int>(std::lround(static_cast<float>(source.height) * scale)));
+    const int startX = std::max(0, originX);
+    const int startY = std::max(0, originY);
+    const int endX = std::min(image.width, originX + drawWidth);
+    const int endY = std::min(image.height, originY + drawHeight);
+
     const std::array<std::uint8_t, 256U> opacityTable = buildOpacityTable(safeOpacity);
-    for (std::size_t offset = 0; offset + 3U < source.pixels.size(); offset += 4U) {
-        const std::uint8_t sourceA = source.pixels[offset + 3U];
-        if (sourceA == 0U) {
-            continue;
+    for (int y = startY; y < endY; ++y) {
+        const int sourceY = std::clamp(static_cast<int>((static_cast<float>(y - originY) / scale)), 0, source.height - 1);
+        for (int x = startX; x < endX; ++x) {
+            const int sourceX = std::clamp(static_cast<int>((static_cast<float>(x - originX) / scale)), 0, source.width - 1);
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(sourceY) * static_cast<std::size_t>(source.width) + static_cast<std::size_t>(sourceX)) * 4U;
+            const std::uint8_t sourceA = source.pixels[sourceOffset + 3U];
+            if (sourceA == 0U) {
+                continue;
+            }
+            const std::size_t targetOffset =
+                (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) + static_cast<std::size_t>(x)) * 4U;
+            blendPixelAtOffset(image,
+                               targetOffset,
+                               source.pixels[sourceOffset + 0U],
+                               source.pixels[sourceOffset + 1U],
+                               source.pixels[sourceOffset + 2U],
+                               opacityTable[sourceA]);
         }
-        const std::uint8_t blendedA = opacityTable[sourceA];
-        blendPixelAtOffset(image,
-                           offset,
-                           source.pixels[offset + 0U],
-                           source.pixels[offset + 1U],
-                           source.pixels[offset + 2U],
-                           blendedA);
     }
 }
 
@@ -672,7 +689,7 @@ ImageRgba rasterizeCellsFrame(const std::vector<const Cell*>& cells,
             continue;
         }
         ImageRgba cellImage = rasterizeFrame(*frame, width, height, mode, false);
-        blendImage(image, cellImage, cell->opacity);
+        blendImage(image, cellImage, cell->opacity, &cell->placement);
     }
 
     return image;

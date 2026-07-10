@@ -849,3 +849,6 @@ Resolve `Cell.placement` / `Cell.motionKeys` in the core Timesheet scene data pa
 ## Phase 2 Step 3-g decision
 
 Apply `CellPlacement` x/y/scale to the canvas preview first. Defer rotation and PNG export transform so renderer/export math can be handled as smaller focused steps without expanding startup or project-load work.
+## Phase 2 Step 3-h decision
+
+Apply `CellPlacement` x/y/scale to PNG sequence / MP4 pre-export now that preview uses the same placement data. Keep rotation deferred so transform math remains a smaller later step.

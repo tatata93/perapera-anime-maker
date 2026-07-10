@@ -504,3 +504,24 @@ Verification:
 Next recommended task:
 
 - Phase 2 Step 3-h: choose either PNG export placement transform or Timesheet UI usability pass. If export matching preview is important now, do PNG placement next; otherwise move to Timesheet UI usability.
+---
+
+## Latest handoff: Phase 2 Step 3-h PNG placement export
+
+Current state:
+
+- `PngExporter` blends Cell images using `CellPlacement` x/y/scale.
+- Timesheet PNG sequence and MP4 pre-export inherit resolved placement through `PngTimesheetExporter` temporary Cells.
+- Canvas preview and PNG export now match for x/y/scale placement.
+- Rotation remains deferred.
+- `src/io/PngExporter.cpp` remains under 800 lines.
+
+Verification:
+
+- `cmake -S . -B .\build -G "Visual Studio 18 2026"` succeeded.
+- `perapera_png_timesheet_exporter_selftest` passed.
+- Debug app build passed and `build\bin\perapera_anime_maker.exe` exists.
+
+Next recommended task:
+
+- Phase 2 Step 3-i: vertical Timesheet UI usability pass. Keep startup/load light and avoid preview-file generation.

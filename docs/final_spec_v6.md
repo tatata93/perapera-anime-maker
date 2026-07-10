@@ -1138,8 +1138,10 @@ Phase 2 must not reintroduce Scene Plate / separate background panel behavior. L
 - Phase 2 Step 3-d: audit and test Cut-owned Timesheet propagation through app save/load, preview selection, and export setup. Fix only concrete gaps; avoid startup scans or preview-file warmup.
 - Phase 2 Step 3-e: connect frame-level cell order / `cellZOrderKeys` to resolved display and export order, with a focused test before UI expansion.
 - Phase 2 Step 3-f: connect Cell motion keys to Cut/Timesheet resolved preview/export data. Keep interpolation and cache invalidation lightweight.
-- Phase 2 Step 3-g: improve the vertical Timesheet UI for production use after the data path is protected. UI work must keep startup and project loading light.
-- Phase 2 Step 3-h: Phase 2 closeout audit. Confirm no active app path depends on old ProjectIO save/load, no DrawingNewLayoutIO revival exists, key files follow the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.
+- Phase 2 Step 3-g: apply CellPlacement x/y/scale to canvas preview after the data path is protected. Rotation can remain deferred.
+- Phase 2 Step 3-h: apply CellPlacement x/y/scale to PNG sequence / MP4 pre-export frames so export matches preview. Rotation can remain deferred.
+- Phase 2 Step 3-i: improve the vertical Timesheet UI for production use. UI work must keep startup and project loading light.
+- Phase 2 Step 3-j: Phase 2 closeout audit. Confirm no active app path depends on old ProjectIO save/load, no DrawingNewLayoutIO revival exists, key files follow the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.
 
 ### Ongoing Phase 2 rules for all agents
 

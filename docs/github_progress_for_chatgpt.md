@@ -5,8 +5,8 @@ Last updated: 2026-07-09
 ## Current branch
 
 - Branch: `main`
-- Latest local step after this update: `Phase 2 Step 3-g: CellPlacement visual preview`
-- Main purpose of the latest work: apply resolved CellPlacement x/y/scale to the canvas preview without adding startup or project-load work.
+- Latest local step after this update: `Phase 2 Step 3-h: PNG placement export`
+- Main purpose of the latest work: apply CellPlacement x/y/scale to PNG sequence / MP4 pre-export frames so export matches canvas preview.
 
 ## Recent completed steps
 
@@ -33,6 +33,7 @@ Last updated: 2026-07-09
 - Step 3-e: added resolved cell order helper and connected display/export visible-cell order to `Project.cellOrder`.
 - Step 3-f: added Cell motion placement resolver and carried resolved placement through Timesheet scene/export data.
 - Step 3-g: applied CellPlacement x/y/scale to canvas preview drawing.
+- Step 3-h: applied CellPlacement x/y/scale to PNG export blending.
 
 ## Important current state
 
@@ -49,7 +50,8 @@ Last updated: 2026-07-09
 - True frame-varying z-order keyframes are still a later data-model/UI step.
 - `Cell.placement` / `Cell.motionKeys` now resolve into `ResolvedTimesheetSceneCell::placement`.
 - Canvas preview now applies placement x/y/scale.
-- Rotation and PNG export transform are still deferred.
+- PNG sequence and MP4 pre-export now apply placement x/y/scale.
+- Rotation is still deferred.
 
 ## Verification already performed
 
@@ -58,6 +60,7 @@ Last updated: 2026-07-09
 - `perapera_cell_order_resolver_selftest` built and passed.
 - `perapera_cell_motion_resolver_selftest` built and passed.
 - `perapera_timesheet_scene_resolver_selftest` built and passed after placement coverage was added.
+- `perapera_png_timesheet_exporter_selftest` was rerun after PNG placement export and passed.
 - Debug app build succeeded.
 - `build\bin\perapera_anime_maker.exe` exists.
 - Lightweight selftests that were run successfully:
@@ -68,13 +71,13 @@ Last updated: 2026-07-09
 
 ## Recommended next work
 
-1. Continue with Phase 2 Step 3-h.
-2. Choose between PNG export placement transform or Timesheet UI usability pass.
+1. Continue with Phase 2 Step 3-i.
+2. Improve vertical Timesheet UI usability after the data/display/export path is protected.
 3. Avoid adding startup/project-load scanning or preview-file generation.
 
 ## Suggested next candidate
 
-Phase 2 Step 3-h: either PNG export placement transform or Timesheet UI usability pass.
+Phase 2 Step 3-i: Timesheet UI usability pass.
 
 Useful commands:
 
