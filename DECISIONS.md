@@ -854,3 +854,5 @@ Apply `CellPlacement` x/y/scale to the canvas preview first. Defer rotation and 
 Apply `CellPlacement` x/y/scale to PNG sequence / MP4 pre-export now that preview uses the same placement data. Keep rotation deferred so transform math remains a smaller later step.
 ## Phase 2 Step 3-i decision
 Keep the first production Timesheet UI pass lightweight: improve navigation and readability inside `TimesheetPanel` only, without changing save/load format, generating preview files, or moving Timesheet editing into `CellPanel`. Keyboard-first bulk entry, drag editing, and camera columns remain deferred.
+## Phase 2 Step 3-j decision
+Phase 2 is closed after the Step 3-j audit. Future feature work should start from Phase 3 preparation for shooting/compositing unless the user explicitly chooses Phase 2.5 previz/3D first. Near-limit files remain under 800 lines now, but `PngExporter.cpp`, `CanvasRenderer.cpp`, `CellPanel.cpp`, and `AppDrawingMode.cpp` should be split before adding future bulk.

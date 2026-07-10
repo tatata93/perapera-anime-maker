@@ -1138,10 +1138,16 @@ Phase 2 must not reintroduce Scene Plate / separate background panel behavior. L
 - Phase 2 Step 3-g: CellPlacement x/y/scale now affects canvas preview.
 - Phase 2 Step 3-h: CellPlacement x/y/scale now affects PNG sequence / MP4 pre-export frames.
 - Phase 2 Step 3-i: the vertical Timesheet UI gained lightweight navigation and usability controls without startup/load preview work.
+- Phase 2 Step 3-j: closeout audit confirmed active save/load, Scene Plate removal, source line limits, and relevant Debug builds/selftests.
 
 ### Required remaining Phase 2 steps
 
-- Phase 2 Step 3-j: Phase 2 closeout audit. Confirm no active app path depends on old ProjectIO save/load, no DrawingNewLayoutIO revival exists, key files follow the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.
+- None. Phase 2 is closed after Step 3-j.
+
+### Recommended next work
+
+- Start Phase 3 preparation for the shooting/compositing path, because it follows the current 2D Cell / Timesheet / Cut camera foundation and directly affects final output.
+- Phase 2.5 previz/3D remains available, but should begin only after deciding whether OpenGL/GLAD/GLM setup should precede or follow Phase 3 compositing foundations.
 
 ### Ongoing Phase 2 rules for all agents
 

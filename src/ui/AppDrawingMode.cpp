@@ -738,7 +738,7 @@ ImGui::TextUnformatted(u8c(u8"Step 7.11.5: タイムシート補助"));
                     ImGui::TextDisabled(u8c(u8"前後原画が両方あると、中割作成候補として扱えます。"));
                 }
             }
-            ImGui::TextDisabled(u8c(u8"絵コンテ・レイアウト・背景参照はセル列に混ぜず、Scene Plateとして別管理します。"));
+            ImGui::TextDisabled(u8c(u8"絵コンテ・レイアウト・背景参照は通常セルとして追加し、タイムシート列で管理します。"));
         }
         ImGui::End();
     }

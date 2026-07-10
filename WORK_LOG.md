@@ -2289,3 +2289,14 @@ Verification for Phase 2 Step 3-i:
 - Debug app build target `perapera_anime_maker`: passed.
 - `perapera_timesheet_panel_bridge_selftest`: built and passed.
 - `build/bin/perapera_anime_maker.exe`: exists.
+## Phase 2 Step 3-j: closeout audit
+- Audited active source and CMake targets for legacy `ProjectIO::save/load`, `DrawingNewLayoutIO`, and Scene Plate revival.
+- Confirmed `AppProjectIO.cpp` uses `ProjectLayoutSaveEntry` / `ProjectLayoutLoadEntry` instead of direct legacy `ProjectIO::save/load` calls.
+- Corrected one stale App UI message that still described references/backgrounds as separate Scene Plate management; it now points to normal Cell + Timesheet management.
+- Confirmed all `src/` files are under the 800-line guideline at closeout. Near-limit files are recorded in the Step 3-j audit doc for future split-before-bulk work.
+- Added `docs/final_spec_v6_phase2_step3j_closeout_audit.md` and marked Phase 2 closed in the spec entry docs.
+Verification for Phase 2 Step 3-j:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- Selftests passed: `perapera_project_layout_load_entry_selftest`, `perapera_project_layout_save_entry_selftest`, `perapera_project_layout_read_entry_selftest`, `perapera_app_project_io_support_selftest`, `perapera_cut_cell_timesheet_bridge_selftest`, `perapera_timesheet_panel_bridge_selftest`, `perapera_timesheet_scene_resolver_selftest`, `perapera_cell_order_resolver_selftest`, `perapera_cell_motion_resolver_selftest`, `perapera_png_timesheet_exporter_selftest`.
+- `build/bin/perapera_anime_maker.exe`: exists.

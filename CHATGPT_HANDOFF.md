@@ -541,3 +541,25 @@ Verification to run/keep:
 
 Recommended next step:
 - Phase 2 Step 3-j: closeout audit. Confirm no active app path uses old ProjectIO save/load, no DrawingNewLayoutIO revival exists, important source files satisfy the 800-line guideline or have a split plan, and Debug app build plus relevant selftests pass.
+## Latest handoff: Phase 2 Step 3-j closeout audit
+
+Completed:
+- Active source/CMake audit found no direct `AppProjectIO.cpp` legacy `ProjectIO::save/load` usage.
+- Active source/CMake audit found no `DrawingNewLayoutIO` revival.
+- Active source/CMake audit found no Scene Plate implementation revival.
+- Fixed one stale UI message in `AppDrawingMode.cpp` that incorrectly said storyboard/layout/background references are managed as Scene Plate. It now says they are normal Cells managed by Timesheet columns.
+- All `src/` files are currently under the 800-line guideline.
+- `docs/final_spec_v6.md` and `docs/perapera_anime_maker_spec_and_ai_work_instruction_v6.md` now mark Phase 2 closed and recommend Phase 3 preparation next.
+
+Verification planned in this Codex turn:
+- CMake configure.
+- Debug `perapera_anime_maker` build.
+- Relevant Phase 2 selftests listed in `docs/final_spec_v6_phase2_step3j_closeout_audit.md`.
+
+Recommended next step:
+- Start Phase 3 preparation audit for the shooting/compositing path. Keep startup and project loading light; do not add preview-file scans.
+Verification for Phase 2 Step 3-j:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- Selftests passed: `perapera_project_layout_load_entry_selftest`, `perapera_project_layout_save_entry_selftest`, `perapera_project_layout_read_entry_selftest`, `perapera_app_project_io_support_selftest`, `perapera_cut_cell_timesheet_bridge_selftest`, `perapera_timesheet_panel_bridge_selftest`, `perapera_timesheet_scene_resolver_selftest`, `perapera_cell_order_resolver_selftest`, `perapera_cell_motion_resolver_selftest`, `perapera_png_timesheet_exporter_selftest`.
+- `build/bin/perapera_anime_maker.exe`: exists.
