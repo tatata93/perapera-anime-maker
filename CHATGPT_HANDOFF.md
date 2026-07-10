@@ -563,3 +563,25 @@ Verification for Phase 2 Step 3-j:
 - Debug app build target `perapera_anime_maker`: passed.
 - Selftests passed: `perapera_project_layout_load_entry_selftest`, `perapera_project_layout_save_entry_selftest`, `perapera_project_layout_read_entry_selftest`, `perapera_app_project_io_support_selftest`, `perapera_cut_cell_timesheet_bridge_selftest`, `perapera_timesheet_panel_bridge_selftest`, `perapera_timesheet_scene_resolver_selftest`, `perapera_cell_order_resolver_selftest`, `perapera_cell_motion_resolver_selftest`, `perapera_png_timesheet_exporter_selftest`.
 - `build/bin/perapera_anime_maker.exe`: exists.
+## Latest handoff: Phase 3 Step 3-a camera resolver
+
+Completed:
+- Added `src/core/CameraResolver.h/.cpp`.
+- Added `tools/camera_resolver_selftest.cpp` and CMake target `perapera_camera_resolver_selftest`.
+- Main app target now includes `src/core/CameraResolver.cpp`.
+- `resolveCameraAtFrame()` returns a lightweight `ResolvedCamera2D` from `CameraSettings`.
+- Rules: disabled animation uses base camera; enabled animation holds before/after keys; between keys interpolates linearly; duplicate exact-frame keys use the last matching key; zoom is clamped positive.
+- Phase 3 roadmap was added to `docs/final_spec_v6.md`.
+
+Verification to run:
+- CMake configure.
+- Build Debug `perapera_anime_maker`.
+- Build/run `perapera_camera_resolver_selftest`.
+
+Recommended next step:
+- Phase 3 Step 3-b: create a small shooting-frame data contract that combines `TimesheetSceneResolver` output and `CameraResolver` output, still without changing pixels.
+Verification for Phase 3 Step 3-a:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- `perapera_camera_resolver_selftest`: built and passed.
+- `build/bin/perapera_anime_maker.exe`: exists.

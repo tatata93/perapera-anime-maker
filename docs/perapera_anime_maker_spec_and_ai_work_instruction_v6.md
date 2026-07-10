@@ -11,7 +11,8 @@ The historical filename `final_spec_v6.md` remains in place because many work lo
 Current focus:
 
 - Phase 2: closed after Step 3-j.
-- Next recommended focus: Phase 3 preparation for the shooting/compositing path.
+- Current focus: Phase 3 shooting/compositing path.
+- Current step: Phase 3 Step 3-a camera resolver.
 
 Before making changes, agents should read the Phase 2 appendix in `docs/final_spec_v6.md`, then check:
 

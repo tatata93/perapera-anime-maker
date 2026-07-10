@@ -1149,6 +1149,31 @@ Phase 2 must not reintroduce Scene Plate / separate background panel behavior. L
 - Start Phase 3 preparation for the shooting/compositing path, because it follows the current 2D Cell / Timesheet / Cut camera foundation and directly affects final output.
 - Phase 2.5 previz/3D remains available, but should begin only after deciding whether OpenGL/GLAD/GLM setup should precede or follow Phase 3 compositing foundations.
 
+## Appendix: Phase 3 shooting/compositing roadmap and AI instructions
+
+This section makes Phase 3 executable as numbered implementation work. It should be updated whenever later agents change the shooting/compositing scope.
+
+### Phase 3 current target
+
+Phase 3 connects the existing 2D Cell / Timesheet / Cut camera foundation to a shooting/compositing path used by preview and export. Startup and project loading must remain lightweight; no preview files should be generated or scanned during load.
+
+### Required Phase 3 steps
+
+- Phase 3 Step 3-a: add a pure camera resolver for `CameraSettings` so preview/export/UI can ask for the same camera at timeline T without touching project loading.
+- Phase 3 Step 3-b: connect the resolved camera data to a small selftestable shooting-frame data contract. Do not change pixels yet.
+- Phase 3 Step 3-c: apply camera pan/zoom to canvas shooting preview using the shared data contract.
+- Phase 3 Step 3-d: apply camera pan/zoom to PNG sequence / MP4 pre-export frames so output matches preview.
+- Phase 3 Step 3-e: add minimal shooting-mode UI controls for Cut camera keys only after preview/export behavior is protected by tests.
+- Phase 3 Step 3-f: plan multiplane depth and effects as separate steps after the 2D camera path is stable.
+
+### Ongoing Phase 3 rules for all agents
+
+- Keep camera/compositing resolver logic in core or small IO/render boundaries, not directly inside large UI functions.
+- Reuse `TimesheetSceneResolver` and `PngTimesheetExporter` instead of adding a second display/export ordering path.
+- Keep startup and project loading free of preview-file generation.
+- If `PngExporter.cpp`, `CanvasRenderer.cpp`, `CellPanel.cpp`, or `AppDrawingMode.cpp` would grow further, split helper logic before adding feature bulk.
+- Add focused selftests for resolver/data-contract behavior before connecting UI.
+
 ### Ongoing Phase 2 rules for all agents
 
 - Keep compatibility with older in-development save formats only when it is cheap; new layout correctness has priority.

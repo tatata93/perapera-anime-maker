@@ -145,6 +145,7 @@ add_executable(perapera_anime_maker
     src/core/Timesheet.cpp
     src/core/TimesheetResolver.cpp
     src/core/CellMotionResolver.cpp
+    src/core/CameraResolver.cpp
     src/core/TimesheetSceneResolver.cpp
     src/core/TimesheetInbetweenResolver.cpp
     src/core/TimesheetInbetweenPlanner.cpp
@@ -266,6 +267,12 @@ add_executable(perapera_cell_motion_resolver_selftest
     src/core/CellMotionResolver.cpp
 )
 target_include_directories(perapera_cell_motion_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(perapera_camera_resolver_selftest
+    tools/camera_resolver_selftest.cpp
+    src/core/CameraResolver.cpp
+)
+target_include_directories(perapera_camera_resolver_selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_executable(perapera_png_timesheet_exporter_selftest
     tools/png_timesheet_exporter_selftest.cpp

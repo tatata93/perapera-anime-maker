@@ -2300,3 +2300,14 @@ Verification for Phase 2 Step 3-j:
 - Debug app build target `perapera_anime_maker`: passed.
 - Selftests passed: `perapera_project_layout_load_entry_selftest`, `perapera_project_layout_save_entry_selftest`, `perapera_project_layout_read_entry_selftest`, `perapera_app_project_io_support_selftest`, `perapera_cut_cell_timesheet_bridge_selftest`, `perapera_timesheet_panel_bridge_selftest`, `perapera_timesheet_scene_resolver_selftest`, `perapera_cell_order_resolver_selftest`, `perapera_cell_motion_resolver_selftest`, `perapera_png_timesheet_exporter_selftest`.
 - `build/bin/perapera_anime_maker.exe`: exists.
+## Phase 3 Step 3-a: Camera resolver foundation
+- Started Phase 3 shooting/compositing work after Phase 2 closeout.
+- Added `src/core/CameraResolver.h/.cpp` to resolve `CameraSettings` into a timeline-frame camera snapshot without touching UI, PNG writing, or project loading.
+- Added `tools/camera_resolver_selftest.cpp` for disabled animation, key holds, linear interpolation, duplicate exact-frame keys, and zoom clamping.
+- Added `perapera_camera_resolver_selftest` to CMake and included `CameraResolver.cpp` in the main app target.
+- Added the Phase 3 roadmap to `docs/final_spec_v6.md` and documented Step 3-a policy.
+Verification for Phase 3 Step 3-a:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- `perapera_camera_resolver_selftest`: built and passed.
+- `build/bin/perapera_anime_maker.exe`: exists.

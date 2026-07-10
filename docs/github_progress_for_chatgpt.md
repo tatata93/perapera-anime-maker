@@ -110,3 +110,13 @@ Verification for Phase 2 Step 3-j:
 - Debug app build target `perapera_anime_maker`: passed.
 - Selftests passed: `perapera_project_layout_load_entry_selftest`, `perapera_project_layout_save_entry_selftest`, `perapera_project_layout_read_entry_selftest`, `perapera_app_project_io_support_selftest`, `perapera_cut_cell_timesheet_bridge_selftest`, `perapera_timesheet_panel_bridge_selftest`, `perapera_timesheet_scene_resolver_selftest`, `perapera_cell_order_resolver_selftest`, `perapera_cell_motion_resolver_selftest`, `perapera_png_timesheet_exporter_selftest`.
 - `build/bin/perapera_anime_maker.exe`: exists.
+## Phase 3 Step 3-a: Camera resolver foundation
+- Status: implemented locally; build/selftest verification pending in this Codex turn.
+- Summary: added a pure camera resolver so shooting preview/export/UI can share one timeline-T camera result.
+- Startup/load policy: unchanged; no preview generation or project-load scanning was added.
+- Next recommended: Phase 3 Step 3-b shooting-frame data contract combining Timesheet scene output with resolved camera output.
+Verification for Phase 3 Step 3-a:
+- CMake configure: passed.
+- Debug app build target `perapera_anime_maker`: passed.
+- `perapera_camera_resolver_selftest`: built and passed.
+- `build/bin/perapera_anime_maker.exe`: exists.

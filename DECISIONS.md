@@ -856,3 +856,5 @@ Apply `CellPlacement` x/y/scale to PNG sequence / MP4 pre-export now that previe
 Keep the first production Timesheet UI pass lightweight: improve navigation and readability inside `TimesheetPanel` only, without changing save/load format, generating preview files, or moving Timesheet editing into `CellPanel`. Keyboard-first bulk entry, drag editing, and camera columns remain deferred.
 ## Phase 2 Step 3-j decision
 Phase 2 is closed after the Step 3-j audit. Future feature work should start from Phase 3 preparation for shooting/compositing unless the user explicitly chooses Phase 2.5 previz/3D first. Near-limit files remain under 800 lines now, but `PngExporter.cpp`, `CanvasRenderer.cpp`, `CellPanel.cpp`, and `AppDrawingMode.cpp` should be split before adding future bulk.
+## Phase 3 Step 3-a decision
+Start Phase 3 with a pure `CameraResolver` rather than shooting UI or pixel effects. This keeps startup/project loading lightweight and gives preview/export/UI one shared timeline-T camera result before any rendering path changes.
